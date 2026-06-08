@@ -1,1 +1,3 @@
 ESP32/SECRETS.h
+arduino-output
+.vscode/c_cpp_properties.json
