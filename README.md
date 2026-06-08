@@ -13,9 +13,11 @@
 ## ESP32 SDK version used in this project: 
 
 ## Arduino/ESP32 libraries used in this project:
-* XXXX - version XXXXX
-* XXXX - version XXXXX
-* XXXX - version XXXXX
+* Adafruit BusIO - version 1.17.4
+* Adafruit GFX Library - version 1.12.6
+* Adafruit SH110X - version 2.1.14
+* Adafruit SSD1306 - version 2.5.17
+* Adafruit_VL6180X - version 1.4.4
 
 ## Connection diagram:
 
