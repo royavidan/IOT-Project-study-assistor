@@ -1,3 +1,9 @@
+#include <Adafruit_VL53L1X.h>
+#include <ComponentObject.h>
+#include <RangeSensor.h>
+#include <vl53l1x_class.h>
+#include <vl53l1x_error_codes.h>
+
 #include <Adafruit_VL6180X.h>
 
 #include <Adafruit_SSD1306.h>
