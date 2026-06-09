@@ -9,14 +9,25 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SimulatorRouteImport } from './routes/simulator'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReviewersRouteImport } from './routes/reviewers'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
+import { Route as InsightsRouteImport } from './routes/insights'
 import { Route as HistoryRouteImport } from './routes/history'
+import { Route as FriendsRouteImport } from './routes/friends'
 import { Route as ExportsRouteImport } from './routes/exports'
 import { Route as DeviceRouteImport } from './routes/device'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SessionIdRouteImport } from './routes/session.$id'
+import { Route as ReviewerAcceptRouteImport } from './routes/reviewer/accept'
 
+const SimulatorRoute = SimulatorRouteImport.update({
+  id: '/simulator',
+  path: '/simulator',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -27,14 +38,29 @@ const ReviewersRoute = ReviewersRouteImport.update({
   path: '/reviewers',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LeaderboardRoute = LeaderboardRouteImport.update({
   id: '/leaderboard',
   path: '/leaderboard',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InsightsRoute = InsightsRouteImport.update({
+  id: '/insights',
+  path: '/insights',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HistoryRoute = HistoryRouteImport.update({
   id: '/history',
   path: '/history',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FriendsRoute = FriendsRouteImport.update({
+  id: '/friends',
+  path: '/friends',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ExportsRoute = ExportsRouteImport.update({
@@ -52,34 +78,62 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SessionIdRoute = SessionIdRouteImport.update({
+  id: '/session/$id',
+  path: '/session/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReviewerAcceptRoute = ReviewerAcceptRouteImport.update({
+  id: '/reviewer/accept',
+  path: '/reviewer/accept',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/device': typeof DeviceRoute
   '/exports': typeof ExportsRoute
+  '/friends': typeof FriendsRoute
   '/history': typeof HistoryRoute
+  '/insights': typeof InsightsRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/login': typeof LoginRoute
   '/reviewers': typeof ReviewersRoute
   '/settings': typeof SettingsRoute
+  '/simulator': typeof SimulatorRoute
+  '/reviewer/accept': typeof ReviewerAcceptRoute
+  '/session/$id': typeof SessionIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/device': typeof DeviceRoute
   '/exports': typeof ExportsRoute
+  '/friends': typeof FriendsRoute
   '/history': typeof HistoryRoute
+  '/insights': typeof InsightsRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/login': typeof LoginRoute
   '/reviewers': typeof ReviewersRoute
   '/settings': typeof SettingsRoute
+  '/simulator': typeof SimulatorRoute
+  '/reviewer/accept': typeof ReviewerAcceptRoute
+  '/session/$id': typeof SessionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/device': typeof DeviceRoute
   '/exports': typeof ExportsRoute
+  '/friends': typeof FriendsRoute
   '/history': typeof HistoryRoute
+  '/insights': typeof InsightsRoute
   '/leaderboard': typeof LeaderboardRoute
+  '/login': typeof LoginRoute
   '/reviewers': typeof ReviewersRoute
   '/settings': typeof SettingsRoute
+  '/simulator': typeof SimulatorRoute
+  '/reviewer/accept': typeof ReviewerAcceptRoute
+  '/session/$id': typeof SessionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -87,42 +141,73 @@ export interface FileRouteTypes {
     | '/'
     | '/device'
     | '/exports'
+    | '/friends'
     | '/history'
+    | '/insights'
     | '/leaderboard'
+    | '/login'
     | '/reviewers'
     | '/settings'
+    | '/simulator'
+    | '/reviewer/accept'
+    | '/session/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/device'
     | '/exports'
+    | '/friends'
     | '/history'
+    | '/insights'
     | '/leaderboard'
+    | '/login'
     | '/reviewers'
     | '/settings'
+    | '/simulator'
+    | '/reviewer/accept'
+    | '/session/$id'
   id:
     | '__root__'
     | '/'
     | '/device'
     | '/exports'
+    | '/friends'
     | '/history'
+    | '/insights'
     | '/leaderboard'
+    | '/login'
     | '/reviewers'
     | '/settings'
+    | '/simulator'
+    | '/reviewer/accept'
+    | '/session/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DeviceRoute: typeof DeviceRoute
   ExportsRoute: typeof ExportsRoute
+  FriendsRoute: typeof FriendsRoute
   HistoryRoute: typeof HistoryRoute
+  InsightsRoute: typeof InsightsRoute
   LeaderboardRoute: typeof LeaderboardRoute
+  LoginRoute: typeof LoginRoute
   ReviewersRoute: typeof ReviewersRoute
   SettingsRoute: typeof SettingsRoute
+  SimulatorRoute: typeof SimulatorRoute
+  ReviewerAcceptRoute: typeof ReviewerAcceptRoute
+  SessionIdRoute: typeof SessionIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/simulator': {
+      id: '/simulator'
+      path: '/simulator'
+      fullPath: '/simulator'
+      preLoaderRoute: typeof SimulatorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -137,6 +222,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReviewersRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/leaderboard': {
       id: '/leaderboard'
       path: '/leaderboard'
@@ -144,11 +236,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LeaderboardRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/insights': {
+      id: '/insights'
+      path: '/insights'
+      fullPath: '/insights'
+      preLoaderRoute: typeof InsightsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/history': {
       id: '/history'
       path: '/history'
       fullPath: '/history'
       preLoaderRoute: typeof HistoryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/friends': {
+      id: '/friends'
+      path: '/friends'
+      fullPath: '/friends'
+      preLoaderRoute: typeof FriendsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/exports': {
@@ -172,6 +278,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/session/$id': {
+      id: '/session/$id'
+      path: '/session/$id'
+      fullPath: '/session/$id'
+      preLoaderRoute: typeof SessionIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reviewer/accept': {
+      id: '/reviewer/accept'
+      path: '/reviewer/accept'
+      fullPath: '/reviewer/accept'
+      preLoaderRoute: typeof ReviewerAcceptRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -179,11 +299,27 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DeviceRoute: DeviceRoute,
   ExportsRoute: ExportsRoute,
+  FriendsRoute: FriendsRoute,
   HistoryRoute: HistoryRoute,
+  InsightsRoute: InsightsRoute,
   LeaderboardRoute: LeaderboardRoute,
+  LoginRoute: LoginRoute,
   ReviewersRoute: ReviewersRoute,
   SettingsRoute: SettingsRoute,
+  SimulatorRoute: SimulatorRoute,
+  ReviewerAcceptRoute: ReviewerAcceptRoute,
+  SessionIdRoute: SessionIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

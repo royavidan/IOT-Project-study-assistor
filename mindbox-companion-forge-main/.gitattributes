@@ -1,0 +1,4 @@
+# Normalize line endings: store text files with LF in the repo, check out
+# native. New files committed from any OS land as LF. Existing files are left
+# as-is until renormalized (`git add --renormalize .`) to avoid a mass diff.
+* text=auto eol=lf

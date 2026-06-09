@@ -96,23 +96,23 @@
   --ring: oklch(0.62 0.08 240);
 
   /* Device states — accessible, calm hues */
-  --work: oklch(0.58 0.14 150);            /* focused green */
+  --work: oklch(0.58 0.14 150); /* focused green */
   --work-foreground: oklch(0.99 0.01 150);
   --work-muted: oklch(0.95 0.04 150);
 
-  --break: oklch(0.62 0.12 235);           /* calm blue */
+  --break: oklch(0.62 0.12 235); /* calm blue */
   --break-foreground: oklch(0.99 0.01 235);
   --break-muted: oklch(0.95 0.03 235);
 
-  --sync: oklch(0.65 0.16 250);            /* vivid blue for boot/sync */
+  --sync: oklch(0.65 0.16 250); /* vivid blue for boot/sync */
   --sync-foreground: oklch(0.99 0.01 250);
   --sync-muted: oklch(0.95 0.04 250);
 
-  --warning: oklch(0.78 0.15 75);          /* amber */
+  --warning: oklch(0.78 0.15 75); /* amber */
   --warning-foreground: oklch(0.2 0.04 75);
   --warning-muted: oklch(0.96 0.05 85);
 
-  --danger: oklch(0.6 0.21 27);            /* red */
+  --danger: oklch(0.6 0.21 27); /* red */
   --danger-foreground: oklch(0.99 0.01 27);
   --danger-muted: oklch(0.95 0.04 27);
 
@@ -182,7 +182,8 @@
     border-color: var(--color-border);
   }
 
-  html, body {
+  html,
+  body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
@@ -196,7 +197,10 @@
     border-radius: 4px;
   }
 
-  h1, h2, h3, h4 {
+  h1,
+  h2,
+  h3,
+  h4 {
     font-family: var(--font-display);
     letter-spacing: -0.01em;
   }
@@ -207,7 +211,8 @@
 }
 
 @keyframes pulse-sync {
-  0%, 100% {
+  0%,
+  100% {
     box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-sync) 50%, transparent);
     opacity: 1;
   }
@@ -215,4 +220,13 @@
     box-shadow: 0 0 0 10px color-mix(in oklab, var(--color-sync) 0%, transparent);
     opacity: 0.85;
   }
+}
+
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }

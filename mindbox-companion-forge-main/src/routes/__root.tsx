@@ -4,6 +4,8 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useNavigate,
+  useRouterState,
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
@@ -12,6 +14,15 @@ import { useEffect, type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AppShell } from "../components/AppShell";
+import { AuthProvider, useAuth } from "../lib/auth/auth-context";
+import { LoadingState } from "../components/EmptyState";
+
+// Routes a guest (signed-out user) is allowed to see.
+const PUBLIC_PATHS = ["/login", "/reviewer/accept"];
+
+function isPublicPath(pathname: string) {
+  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
 
 function NotFoundComponent() {
   return (
@@ -78,14 +89,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "MindBox Companion" },
+      {
+        name: "description",
+        content: "Companion app for the MindBox focus device — sessions, streaks, and reports.",
+      },
+      { name: "author", content: "MindBox" },
+      { property: "og:title", content: "MindBox Companion" },
+      {
+        property: "og:description",
+        content: "Companion app for the MindBox focus device — sessions, streaks, and reports.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
     ],
     links: [
       {
@@ -119,9 +135,77 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AppShell>
-        <Outlet />
-      </AppShell>
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
     </QueryClientProvider>
+  );
+}
+
+function FullScreenStatus({ label }: { label: string }) {
+  return (
+    <div className="grid min-h-dvh place-items-center bg-background">
+      <LoadingState label={label} />
+    </div>
+  );
+}
+
+/** Centered, chrome-free layout for guests (login / accept-invite). */
+function GuestShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="grid min-h-dvh place-items-center bg-background px-4 py-10">
+      <div className="w-full max-w-md">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * Decides what a request can see:
+ * - while the session resolves -> loading screen
+ * - guest on a public route   -> standalone page (no app nav)
+ * - guest on a private route  -> redirect to /login
+ * - signed-in user            -> full app shell
+ */
+function AuthGate() {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const publicRoute = isPublicPath(pathname);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user && !publicRoute) {
+      navigate({ to: "/login", search: { redirect: pathname }, replace: true });
+    }
+  }, [loading, user, publicRoute, pathname, navigate]);
+
+  if (loading) {
+    return <FullScreenStatus label="Loading…" />;
+  }
+
+  if (!user) {
+    if (publicRoute) {
+      return (
+        <GuestShell>
+          <Outlet />
+        </GuestShell>
+      );
+    }
+    return <FullScreenStatus label="Redirecting to sign in…" />;
+  }
+
+  // Signed in. The login page redirects itself once a user is present.
+  if (pathname === "/login") {
+    return (
+      <GuestShell>
+        <Outlet />
+      </GuestShell>
+    );
+  }
+
+  return (
+    <AppShell>
+      <Outlet />
+    </AppShell>
   );
 }

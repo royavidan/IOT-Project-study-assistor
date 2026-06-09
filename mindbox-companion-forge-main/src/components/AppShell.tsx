@@ -1,19 +1,71 @@
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
-import { LayoutDashboard, History, Trophy, ShieldCheck, Download, Settings, Cpu, Menu, X } from "lucide-react";
+import {
+  LayoutDashboard,
+  History,
+  Trophy,
+  Users,
+  ShieldCheck,
+  Download,
+  Settings,
+  Cpu,
+  FlaskConical,
+  Menu,
+  X,
+  LogOut,
+  LineChart,
+} from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth/auth-context";
+import { useMotivationNudge } from "@/hooks/use-motivation-nudge";
+import { useDeviceStatus } from "@/lib/queries/sessions";
+import { MotivationNudgeBanner } from "@/components/MotivationNudgeBanner";
+import { LowBatteryBanner } from "@/components/LowBatteryBanner";
+import { ReduceMotionRoot } from "@/components/ReduceMotionRoot";
 
-const nav = [
+const baseNav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { to: "/history", label: "Sessions", icon: History },
+  { to: "/insights", label: "Insights", icon: LineChart },
   { to: "/leaderboard", label: "Leaderboard", icon: Trophy },
+  { to: "/friends", label: "Friends", icon: Users },
   { to: "/reviewers", label: "Reviewers", icon: ShieldCheck },
   { to: "/exports", label: "Exports", icon: Download },
   { to: "/device", label: "Device", icon: Cpu },
+  { to: "/simulator", label: "Simulator", icon: FlaskConical },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
-function NavItem({ to, label, Icon, active, onClick }: { to: string; label: string; Icon: typeof LayoutDashboard; active: boolean; onClick?: () => void }) {
+function UserMenu({ email, onSignOut }: { email: string; onSignOut: () => void }) {
+  return (
+    <div className="mt-4 border-t border-border pt-3">
+      <p className="truncate px-3 text-xs text-muted-foreground" title={email}>
+        {email}
+      </p>
+      <button
+        onClick={onSignOut}
+        className="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent/60 hover:text-foreground"
+      >
+        <LogOut className="h-4 w-4" aria-hidden />
+        Sign out
+      </button>
+    </div>
+  );
+}
+
+function NavItem({
+  to,
+  label,
+  Icon,
+  active,
+  onClick,
+}: {
+  to: string;
+  label: string;
+  Icon: typeof LayoutDashboard;
+  active: boolean;
+  onClick?: () => void;
+}) {
   return (
     <Link
       to={to}
@@ -34,12 +86,17 @@ function NavItem({ to, label, Icon, active, onClick }: { to: string; label: stri
 export function AppShell({ children }: { children?: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [open, setOpen] = useState(false);
+  const { user, signOut } = useAuth();
+  const nudge = useMotivationNudge();
+  const deviceQuery = useDeviceStatus();
+  const nav = baseNav;
 
   const isActive = (to: string, exact?: boolean) =>
     exact ? pathname === to : pathname === to || pathname.startsWith(to + "/");
 
   return (
     <div className="min-h-dvh bg-background text-foreground">
+      <ReduceMotionRoot />
       {/* Mobile top bar */}
       <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/80 px-4 py-3 backdrop-blur lg:hidden">
         <Link to="/" className="flex items-center gap-2">
@@ -88,6 +145,15 @@ export function AppShell({ children }: { children?: ReactNode }) {
                 />
               ))}
             </div>
+            {user && (
+              <UserMenu
+                email={user.email ?? "Signed in"}
+                onSignOut={() => {
+                  setOpen(false);
+                  void signOut();
+                }}
+              />
+            )}
           </nav>
         </div>
       )}
@@ -115,10 +181,26 @@ export function AppShell({ children }: { children?: ReactNode }) {
               />
             ))}
           </nav>
+          {user && <UserMenu email={user.email ?? "Signed in"} onSignOut={() => void signOut()} />}
         </aside>
 
         <main className="flex-1 px-4 pb-24 pt-4 sm:px-6 lg:pb-10 lg:pt-8">
-          <div className="mx-auto max-w-5xl">{children ?? <Outlet />}</div>
+          <div className="mx-auto max-w-5xl">
+            {nudge.show && (
+              <MotivationNudgeBanner
+                message={nudge.message}
+                onDismiss={nudge.dismiss}
+                onEnableNotifications={() => void nudge.requestBrowserNotification()}
+                notificationsEnabled={nudge.browserNotificationsEnabled}
+              />
+            )}
+            {deviceQuery.data &&
+              deviceQuery.data.battery > 0 &&
+              deviceQuery.data.battery < 15 &&
+              pathname !== "/" &&
+              pathname !== "/device" && <LowBatteryBanner battery={deviceQuery.data.battery} />}
+            {children ?? <Outlet />}
+          </div>
         </main>
       </div>
 

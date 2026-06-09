@@ -19,8 +19,16 @@ import process from "node:process";
 export function getServerConfig() {
   return {
     nodeEnv: process.env.NODE_ENV,
-    // Add server-only values here, e.g.:
-    //   databaseUrl: process.env.DATABASE_URL,
-    //   stripeSecretKey: process.env.STRIPE_SECRET_KEY,
+    // Supabase. Falls back to the VITE_-prefixed values so the server still
+    // works if only the public vars are set. The service-role key bypasses
+    // Row-Level Security and must NEVER reach the browser — keep it without a
+    // VITE_ prefix and only read it here (server-only).
+    supabaseUrl: process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL,
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY ?? process.env.VITE_SUPABASE_ANON_KEY,
+    supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+    appBaseUrl: process.env.APP_BASE_URL ?? process.env.VITE_APP_BASE_URL,
+    // Shared secret the device/simulator sends as the `x-device-secret` header
+    // when POSTing to the ingestion endpoints. Server-only.
+    deviceIngestSecret: process.env.DEVICE_INGEST_SECRET,
   };
 }

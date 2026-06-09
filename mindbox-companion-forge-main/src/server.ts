@@ -40,6 +40,14 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      // Device ingestion endpoints (ESP32 / simulator). These are plain HTTP
+      // POST routes that bypass the app router and use the service-role client.
+      const url = new URL(request.url);
+      if (url.pathname === "/ingest/sessions" || url.pathname === "/ingest/telemetry") {
+        const { handleIngestRequest } = await import("./lib/ingest/ingest.server");
+        return await handleIngestRequest(request, url);
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
