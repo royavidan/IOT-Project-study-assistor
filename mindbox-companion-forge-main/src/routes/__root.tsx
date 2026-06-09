@@ -18,7 +18,7 @@ import { AuthProvider, useAuth } from "../lib/auth/auth-context";
 import { LoadingState } from "../components/EmptyState";
 
 // Routes a guest (signed-out user) is allowed to see.
-const PUBLIC_PATHS = ["/login", "/reviewer/accept"];
+const PUBLIC_PATHS = ["/login", "/reviewer/accept", "/auth/callback"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));

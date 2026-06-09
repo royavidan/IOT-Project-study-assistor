@@ -11,10 +11,15 @@ Web companion app for the MindBox focus device (TanStack Start + React + Supabas
    - `supabase/migrations/0002_app_features.sql` (adaptive-coaching column + friend RPCs)
    - `supabase/migrations/0003_app_gaps.sql` (streak RPC, reviewer students, weekly share)
    - `supabase/migrations/0004_streak_access.sql` (secure streak RPC for reviewers)
+   - `supabase/migrations/0005_google_oauth_profile.sql` (Google sign-in display names)
 
    Then reload the API cache by running `NOTIFY pgrst, 'reload schema';` once.
    The **Settings**, **Friends**, **Insights**, reviewer picker, and weekly email require `0002`–`0004`.
-4. Start the dev server: `npm run dev` (serves `http://localhost:8080`).
+4. **Google sign-in:** In Supabase → **Authentication → Providers → Google**, enable Google and paste your Google Cloud **Client ID** and **Client Secret**. In Google Cloud Console, add this authorized redirect URI:
+   `https://<your-project-ref>.supabase.co/auth/v1/callback`
+   Also add **Redirect URLs** in Supabase → **Authentication → URL Configuration**:
+   `http://localhost:8080/auth/callback` (and your production URL when deployed).
+5. Start the dev server: `npm run dev` (serves `http://localhost:8080`).
 
 ## Tests
 

@@ -22,6 +22,7 @@ import { Route as DeviceRouteImport } from './routes/device'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SessionIdRouteImport } from './routes/session.$id'
 import { Route as ReviewerAcceptRouteImport } from './routes/reviewer/accept'
+import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 
 const SimulatorRoute = SimulatorRouteImport.update({
   id: '/simulator',
@@ -88,6 +89,11 @@ const ReviewerAcceptRoute = ReviewerAcceptRouteImport.update({
   path: '/reviewer/accept',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -101,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/reviewers': typeof ReviewersRoute
   '/settings': typeof SettingsRoute
   '/simulator': typeof SimulatorRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/reviewer/accept': typeof ReviewerAcceptRoute
   '/session/$id': typeof SessionIdRoute
 }
@@ -116,6 +123,7 @@ export interface FileRoutesByTo {
   '/reviewers': typeof ReviewersRoute
   '/settings': typeof SettingsRoute
   '/simulator': typeof SimulatorRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/reviewer/accept': typeof ReviewerAcceptRoute
   '/session/$id': typeof SessionIdRoute
 }
@@ -132,6 +140,7 @@ export interface FileRoutesById {
   '/reviewers': typeof ReviewersRoute
   '/settings': typeof SettingsRoute
   '/simulator': typeof SimulatorRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/reviewer/accept': typeof ReviewerAcceptRoute
   '/session/$id': typeof SessionIdRoute
 }
@@ -149,6 +158,7 @@ export interface FileRouteTypes {
     | '/reviewers'
     | '/settings'
     | '/simulator'
+    | '/auth/callback'
     | '/reviewer/accept'
     | '/session/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -164,6 +174,7 @@ export interface FileRouteTypes {
     | '/reviewers'
     | '/settings'
     | '/simulator'
+    | '/auth/callback'
     | '/reviewer/accept'
     | '/session/$id'
   id:
@@ -179,6 +190,7 @@ export interface FileRouteTypes {
     | '/reviewers'
     | '/settings'
     | '/simulator'
+    | '/auth/callback'
     | '/reviewer/accept'
     | '/session/$id'
   fileRoutesById: FileRoutesById
@@ -195,6 +207,7 @@ export interface RootRouteChildren {
   ReviewersRoute: typeof ReviewersRoute
   SettingsRoute: typeof SettingsRoute
   SimulatorRoute: typeof SimulatorRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
   ReviewerAcceptRoute: typeof ReviewerAcceptRoute
   SessionIdRoute: typeof SessionIdRoute
 }
@@ -292,6 +305,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReviewerAcceptRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -307,6 +327,7 @@ const rootRouteChildren: RootRouteChildren = {
   ReviewersRoute: ReviewersRoute,
   SettingsRoute: SettingsRoute,
   SimulatorRoute: SimulatorRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
   ReviewerAcceptRoute: ReviewerAcceptRoute,
   SessionIdRoute: SessionIdRoute,
 }
