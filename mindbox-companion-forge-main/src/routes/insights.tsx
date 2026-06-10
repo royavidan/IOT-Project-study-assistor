@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StudentScopePicker } from "@/components/StudentScopePicker";
 import { WellbeingPanel } from "@/components/WellbeingPanel";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { InfoHint } from "@/components/InfoHint";
 import { useSessionScope } from "@/hooks/use-session-scope";
 import { dateKeyDaysAgo } from "@/lib/dates";
 import {
@@ -24,8 +24,9 @@ import {
   countSessionsWithEnv,
 } from "@/lib/insights";
 import { computeWellbeing } from "@/lib/wellbeing";
+import { useExternalLoads } from "@/lib/queries/external-load";
 import { dailyAggregates } from "@/lib/queries/sessions";
-import { Info, Lightbulb } from "lucide-react";
+import { Lightbulb } from "lucide-react";
 
 export const Route = createFileRoute("/insights")({
   validateSearch: z.object({
@@ -68,7 +69,13 @@ function Insights() {
   const hourlyHeat = useMemo(() => computeHourlyHeatmap(filtered), [filtered]);
   const weeklyTrend = useMemo(() => dailyAggregates(filtered, from, to), [filtered, from, to]);
   const envCount = useMemo(() => countSessionsWithEnv(filtered), [filtered]);
-  const wellbeing = useMemo(() => computeWellbeing(filtered), [filtered]);
+  const externalLoads = useExternalLoads();
+  // External commitments are the viewer's own config, so only apply them when
+  // looking at your own data (not a student you're reviewing).
+  const wellbeing = useMemo(
+    () => computeWellbeing(filtered, isReviewerView ? [] : (externalLoads.data ?? [])),
+    [filtered, isReviewerView, externalLoads.data],
+  );
 
   const onStudentChange = (value: string) => {
     if (value === "mine") {
@@ -103,7 +110,7 @@ function Insights() {
   const hasEnoughForCharts = filtered.length >= 3 && envCount >= 3;
 
   return (
-    <TooltipProvider delayDuration={200}>
+    <>
       <PageHeader
         title={isReviewerView ? "Student insights" : "Insights"}
         description={
@@ -132,7 +139,7 @@ function Insights() {
 
       <Card className="mb-4">
         <CardContent className="flex flex-wrap items-end gap-3 p-4">
-          <div className="grid gap-1.5">
+          <div className="grid w-full gap-1.5 sm:w-auto">
             <Label htmlFor="ins-from">From</Label>
             <Input
               id="ins-from"
@@ -142,10 +149,10 @@ function Insights() {
                 setFrom(e.target.value);
                 syncDatesToUrl(e.target.value, to);
               }}
-              className="w-[160px]"
+              className="w-full sm:w-[160px]"
             />
           </div>
-          <div className="grid gap-1.5">
+          <div className="grid w-full gap-1.5 sm:w-auto">
             <Label htmlFor="ins-to">To</Label>
             <Input
               id="ins-to"
@@ -155,10 +162,10 @@ function Insights() {
                 setTo(e.target.value);
                 syncDatesToUrl(from, e.target.value);
               }}
-              className="w-[160px]"
+              className="w-full sm:w-[160px]"
             />
           </div>
-          <p className="ml-auto text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground sm:ml-auto">
             {filtered.length} session{filtered.length === 1 ? "" : "s"} · {envCount} with env data
           </p>
         </CardContent>
@@ -257,17 +264,10 @@ function Insights() {
             <Card>
               <CardHeader className="flex-row items-center gap-2">
                 <CardTitle className="text-base">Environment ↔ focus</CardTitle>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button aria-label="About correlations" className="text-muted-foreground">
-                      <Info className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-xs text-left">
-                    Pearson correlation between each environment metric and your Focus Load Estimate
-                    (heuristic, not clinical). Values near +1 / −1 suggest a stronger pattern.
-                  </TooltipContent>
-                </Tooltip>
+                <InfoHint label="About correlations">
+                  Pearson correlation between each environment metric and your Focus Load Estimate
+                  (heuristic, not clinical). Values near +1 / −1 suggest a stronger pattern.
+                </InfoHint>
               </CardHeader>
               <CardContent className="space-y-3">
                 {insights.envCorrelations.map((c) => (
@@ -328,6 +328,6 @@ function Insights() {
           </p>
         </>
       )}
-    </TooltipProvider>
+    </>
   );
 }

@@ -1,9 +1,10 @@
 import { Battery } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { BATTERY_TRACKING_ENABLED } from "@/lib/feature-flags";
 
 export function LowBatteryBanner({ battery, className }: { battery: number; className?: string }) {
-  if (battery <= 0 || battery >= 15) return null;
+  if (!BATTERY_TRACKING_ENABLED || battery <= 0 || battery >= 15) return null;
 
   return (
     <div

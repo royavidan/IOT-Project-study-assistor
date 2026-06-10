@@ -240,7 +240,8 @@ function Exports() {
               <p className="text-sm font-medium">Email PDF report</p>
               <p className="text-xs text-muted-foreground">
                 Sends the PDF to your account email and every active reviewer on your list. Requires{" "}
-                <code className="rounded bg-muted px-1">RESEND_API_KEY</code> in{" "}
+                Gmail SMTP (<code className="rounded bg-muted px-1">SMTP_USER</code> +{" "}
+                <code className="rounded bg-muted px-1">SMTP_PASS</code>) in{" "}
                 <code className="rounded bg-muted px-1">.env</code>.
               </p>
             </div>

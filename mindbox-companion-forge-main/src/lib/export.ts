@@ -6,6 +6,7 @@
 // without a DOM or network.
 
 import type { Session } from "@/lib/types";
+import { computeWellbeing } from "@/lib/wellbeing";
 
 export interface ReportMeta {
   /** Who the report is for — display name or email. */
@@ -116,6 +117,43 @@ function escapeHtml(value: unknown): string {
     .replace(/"/g, "&quot;");
 }
 
+/** Wellbeing patterns block (recovery / circadian / routine) for the report. */
+function wellbeingReportHtml(sessions: Session[]): string {
+  const wb = computeWellbeing(sessions);
+  if (!wb.ready) {
+    return `<p class="muted">Not enough sessions in this range to estimate wellbeing patterns.</p>`;
+  }
+  const signals = [
+    { title: "Recovery balance", s: wb.recovery },
+    { title: "Circadian alignment", s: wb.circadian },
+    { title: "Routine consistency", s: wb.consistency },
+  ];
+  const cards = signals
+    .filter(({ s }) => s.ready)
+    .map(
+      ({ title, s }) => `<div class="card">
+        <div class="k">${title}</div>
+        <div class="v">${s.score}<span class="suffix"> / 100 · ${escapeHtml(s.status)}</span></div>
+        <div class="muted">${escapeHtml(s.headline)}</div>
+      </div>`,
+    )
+    .join("\n");
+  return `<div class="cards">${cards}</div>
+  <p class="muted">Behavioral pattern estimates from session timing and load — not a clinical or diagnostic measure of fatigue, burnout, or mental health.</p>`;
+}
+
+/** Plain-language list of what the report contains, for transparency. */
+function dataCollectedHtml(): string {
+  return `<ul class="datalist">
+    <li>Session date, start time, duration, mode and completion status</li>
+    <li>Focus Load Estimate (0–100 heuristic) per session, plus per-minute samples when the device provides them</li>
+    <li>Breaks taken and presence interruptions</li>
+    <li>Environment readings — ambient noise, temperature and light — when your MindBox or the simulator logs them</li>
+    <li>Wellbeing patterns (recovery, circadian, routine) are derived from the data above</li>
+    <li>No health, clinical, or battery/device-telemetry data is included in this report</li>
+  </ul>`;
+}
+
 /**
  * Self-contained printable HTML report. Opened in a new window where the user
  * invokes Print -> "Save as PDF". Inline styles keep it dependency-free.
@@ -160,6 +198,10 @@ export function buildReportHtml(sessions: Session[], meta: ReportMeta): string {
   th { background: #f7f7f7; font-weight: 600; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .disclaimer { margin-top: 18px; font-size: 11px; color: #777; }
+  h2 { font-size: 14px; margin: 22px 0 8px; }
+  .suffix { font-size: 12px; color: #666; font-weight: 400; }
+  .datalist { margin: 0; padding-left: 18px; font-size: 12px; color: #555; }
+  .datalist li { margin: 2px 0; }
   @media print { body { margin: 12mm; } .noprint { display: none; } }
 </style>
 </head>
@@ -188,6 +230,12 @@ export function buildReportHtml(sessions: Session[], meta: ReportMeta): string {
       ${rows || `<tr><td colspan="10" class="muted">No sessions in this range.</td></tr>`}
     </tbody>
   </table>
+
+  <h2>Wellbeing patterns</h2>
+  ${wellbeingReportHtml(sessions)}
+
+  <h2>What data is in this report</h2>
+  ${dataCollectedHtml()}
 
   <p class="disclaimer">
     Focus Load Estimate is a transparent heuristic on a 0–100 scale, derived from session length and

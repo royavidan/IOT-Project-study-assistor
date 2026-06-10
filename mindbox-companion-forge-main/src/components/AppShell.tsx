@@ -13,6 +13,7 @@ import {
   X,
   LogOut,
   LineChart,
+  CalendarDays,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ import { ReduceMotionRoot } from "@/components/ReduceMotionRoot";
 
 const baseNav = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { to: "/calendar", label: "Calendar", icon: CalendarDays },
   { to: "/history", label: "Sessions", icon: History },
   { to: "/insights", label: "Insights", icon: LineChart },
   { to: "/leaderboard", label: "Leaderboard", icon: Trophy },

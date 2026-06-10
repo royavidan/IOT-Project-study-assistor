@@ -3,10 +3,10 @@ import { PageHeader } from "@/components/PageHeader";
 import { ErrorState, LoadingState } from "@/components/EmptyState";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { InfoHint } from "@/components/InfoHint";
 import { useSessionDetail } from "@/lib/queries/session-detail";
 import { useAuth } from "@/lib/auth/auth-context";
-import { ArrowLeft, Info, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
 import {
   CartesianGrid,
   Line,
@@ -63,7 +63,7 @@ function SessionDetail() {
   const hasEnv = series.some((p) => p.noise != null || p.tempC != null || p.lightLux != null);
 
   return (
-    <TooltipProvider delayDuration={200}>
+    <>
       <PageHeader
         title={`${meta.mode} session`}
         description={`${fmtTime(meta.startedAt)} · ${meta.status}`}
@@ -95,21 +95,11 @@ function SessionDetail() {
       <Card className="mb-6">
         <CardHeader className="flex-row items-center gap-2">
           <CardTitle className="text-base">Focus Load Estimate over time</CardTitle>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                aria-label="About Focus Load Estimate"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <Info className="h-4 w-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs text-left">
-              A transparent 0–100 heuristic from session length, noise, light and presence
-              interruptions. Not a validated scientific measurement. Ambient noise (0–1) is overlaid
-              to show how the environment tracked your estimated load.
-            </TooltipContent>
-          </Tooltip>
+          <InfoHint label="About Focus Load Estimate">
+            A transparent 0–100 heuristic from session length, noise, light and presence
+            interruptions. Not a validated scientific measurement. Ambient noise (0–1) is overlaid
+            to show how the environment tracked your estimated load.
+          </InfoHint>
         </CardHeader>
         <CardContent>
           {hasSeries ? (
@@ -253,6 +243,6 @@ function SessionDetail() {
           </CardContent>
         </Card>
       )}
-    </TooltipProvider>
+    </>
   );
 }

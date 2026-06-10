@@ -13,6 +13,7 @@ import {
   useSettings,
   type AppSettings,
 } from "@/lib/queries/settings";
+import { ExternalLoadCard } from "@/components/ExternalLoadCard";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Settings — MindBox" }] }),
@@ -234,8 +235,9 @@ function Settings() {
       {form.shareWithReviewers && (
         <p className="mb-6 text-xs text-muted-foreground">
           Weekly PDF reports are emailed to you and your active reviewers at most once every 7 days
-          when <code className="rounded bg-muted px-1">RESEND_API_KEY</code> is configured in{" "}
-          <code className="rounded bg-muted px-1">.env</code>.
+          when <code className="rounded bg-muted px-1">SMTP_USER</code> /{" "}
+          <code className="rounded bg-muted px-1">SMTP_PASS</code> (Gmail App Password) is
+          configured in <code className="rounded bg-muted px-1">.env</code>.
         </p>
       )}
 
@@ -244,6 +246,8 @@ function Settings() {
           {saveMutation.isPending ? "Saving…" : "Save changes"}
         </Button>
       </div>
+
+      <ExternalLoadCard />
     </>
   );
 }

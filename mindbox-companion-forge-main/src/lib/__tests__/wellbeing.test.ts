@@ -186,3 +186,32 @@ describe("routine consistency", () => {
     expect(report.consistency.ready).toBe(false);
   });
 });
+
+describe("external load", () => {
+  it("surfaces an external-load factor in hours", () => {
+    const sessions = [0, 1, 2, 4, 5, 6, 8, 9, 11, 13].map((d) =>
+      session({ date: key(d), start: "09:00" }),
+    );
+    const report = computeWellbeing(sessions, [{ label: "Lectures", kind: "weekly", hours: 10 }]);
+    const ext = report.recovery.factors.find((f) => f.label.startsWith("External"));
+    expect(ext).toBeDefined();
+    expect(ext!.value).toContain("h");
+  });
+
+  it("dated commitments fill rest days and lower the recovery score", () => {
+    const sessions = [0, 2, 4, 6, 8, 10, 12].map((d) => session({ date: key(d), start: "09:00" }));
+    const without = computeWellbeing(sessions);
+    const withLoad = computeWellbeing(
+      sessions,
+      [1, 3, 5, 7, 9, 11].map((d) => ({
+        label: "Lecture",
+        kind: "dated" as const,
+        hours: 2,
+        date: key(d),
+      })),
+    );
+    expect(without.recovery.status).toBe("balanced");
+    expect(without.recovery.score).toBeGreaterThan(withLoad.recovery.score);
+    expect(withLoad.recovery.factors.some((f) => f.label.startsWith("External"))).toBe(true);
+  });
+});

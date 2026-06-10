@@ -28,6 +28,17 @@ import { parseDateKey, toDateKey } from "@/lib/dates";
 
 export type Confidence = "low" | "medium" | "high";
 
+/** An external commitment that adds to overall load (factored into Recovery balance). */
+export interface ExternalLoadEntry {
+  id?: string;
+  label: string;
+  kind: "weekly" | "dated";
+  /** Hours of load. Weekly = hours per week; dated = hours on that date. */
+  hours: number;
+  /** YYYY-MM-DD — required when kind is "dated". */
+  date?: string | null;
+}
+
 interface WellbeingBase {
   /** False when there isn't enough data to say anything responsibly. */
   ready: boolean;
@@ -180,17 +191,38 @@ function recoveryNotReady(): RecoveryBalance {
   };
 }
 
-function computeRecoveryBalance(sessions: Session[], anchorKey: string): RecoveryBalance {
+function computeRecoveryBalance(
+  sessions: Session[],
+  anchorKey: string,
+  externalLoad: ExternalLoadEntry[],
+): RecoveryBalance {
   const recentStart = shiftKey(anchorKey, -(RECOVERY_WINDOW_DAYS - 1));
   const recent = sessions.filter((s) => s.date >= recentStart && s.date <= anchorKey);
 
-  const activeDaysRecent = distinctDays(recent);
-  if (recent.length < 4 || activeDaysRecent < 3) return recoveryNotReady();
+  // Readiness is gated on session data — external load alone can't power it.
+  const sessionActiveDays = distinctDays(recent);
+  if (recent.length < 4 || sessionActiveDays < 3) return recoveryNotReady();
 
   // Window span is capped to the data we actually have, so a user with 5 days
   // of history isn't credited 9 phantom "rest" days.
   const firstRecent = earliestDateKey(recent)!;
   const windowSpanDays = Math.max(1, daysBetween(firstRecent, anchorKey) + 1);
+
+  // External commitments (lectures, labs, etc.): weekly recurring + dated.
+  const weeklyHours = externalLoad
+    .filter((e) => e.kind === "weekly")
+    .reduce((sum, e) => sum + Math.max(0, e.hours), 0);
+  const datedInWindow = externalLoad.filter(
+    (e) => e.kind === "dated" && e.date && e.date >= recentStart && e.date <= anchorKey,
+  );
+  const externalRecentMin =
+    weeklyHours * 60 * (windowSpanDays / 7) +
+    datedInWindow.reduce((sum, e) => sum + Math.max(0, e.hours), 0) * 60;
+
+  // A day with a dated commitment isn't a "rest" day.
+  const activeDayKeys = new Set(recent.map((s) => s.date));
+  for (const e of datedInWindow) if (e.date) activeDayKeys.add(e.date);
+  const activeDaysRecent = activeDayKeys.size;
   const restDays = Math.max(0, windowSpanDays - activeDaysRecent);
   const restDayRatio = restDays / windowSpanDays;
 
@@ -200,14 +232,20 @@ function computeRecoveryBalance(sessions: Session[], anchorKey: string): Recover
     .reduce((sum, s) => sum + s.durationMin, 0);
   const lateShare = recentMinutes > 0 ? lateMinutes / recentMinutes : 0;
 
-  // Compare per-day load against the prior 14-day window (if it has data).
+  // Compare per-day total load (study + commitments) against the prior 14 days.
   const priorEnd = shiftKey(recentStart, -1);
   const priorStart = shiftKey(priorEnd, -(RECOVERY_WINDOW_DAYS - 1));
   const prior = sessions.filter((s) => s.date >= priorStart && s.date <= priorEnd);
   let loadChangePct: number | null = null;
   if (prior.length >= 3) {
-    const priorRate = prior.reduce((sum, s) => sum + s.durationMin, 0) / RECOVERY_WINDOW_DAYS;
-    const recentRate = recentMinutes / windowSpanDays;
+    const datedPriorMin =
+      externalLoad
+        .filter((e) => e.kind === "dated" && e.date && e.date >= priorStart && e.date <= priorEnd)
+        .reduce((sum, e) => sum + Math.max(0, e.hours), 0) * 60;
+    const externalPriorMin = weeklyHours * 60 * (RECOVERY_WINDOW_DAYS / 7) + datedPriorMin;
+    const priorRate =
+      (prior.reduce((sum, s) => sum + s.durationMin, 0) + externalPriorMin) / RECOVERY_WINDOW_DAYS;
+    const recentRate = (recentMinutes + externalRecentMin) / windowSpanDays;
     if (priorRate > 0) loadChangePct = (recentRate - priorRate) / priorRate;
   }
 
@@ -238,6 +276,12 @@ function computeRecoveryBalance(sessions: Session[], anchorKey: string): Recover
           : `${loadChangePct >= 0 ? "+" : ""}${round(loadChangePct * 100)}%`,
     },
   ];
+  if (externalRecentMin > 0) {
+    factors.push({
+      label: "External load (in window)",
+      value: `${round(externalRecentMin / 60)}h`,
+    });
+  }
 
   if (status === "balanced") {
     return {
@@ -259,7 +303,7 @@ function computeRecoveryBalance(sessions: Session[], anchorKey: string): Recover
   let suggestion: string;
   if (weakest === recoveryScore) {
     headline = restDays === 0 ? "No rest days recently" : "Little recovery time";
-    detail = `You studied ${activeDaysRecent} of the last ${windowSpanDays} days with ${restDays} full rest day${restDays === 1 ? "" : "s"}.`;
+    detail = `You had activity on ${activeDaysRecent} of the last ${windowSpanDays} days with ${restDays} full rest day${restDays === 1 ? "" : "s"}.`;
     suggestion =
       "Schedule a lighter or off day this week — recovery is when learning consolidates.";
   } else if (weakest === hoursScore) {
@@ -268,8 +312,8 @@ function computeRecoveryBalance(sessions: Session[], anchorKey: string): Recover
     suggestion =
       "Move some of that work earlier — late-night sessions trade away the sleep that fuels focus.";
   } else {
-    headline = "Your study load jumped recently";
-    detail = `Your daily load is up ~${round((loadChangePct ?? 0) * 100)}% versus the prior two weeks.`;
+    headline = "Your overall load jumped recently";
+    detail = `Your daily load${externalRecentMin > 0 ? " (study + commitments)" : ""} is up ~${round((loadChangePct ?? 0) * 100)}% versus the prior two weeks.`;
     suggestion = "Ramp up gradually rather than all at once to keep the pace sustainable.";
   }
 
@@ -499,7 +543,10 @@ function computeRoutineConsistency(sessions: Session[], anchorKey: string): Rout
  * to the most recent session in the input, so it adapts to whatever date range
  * the page is showing (and is deterministic for tests).
  */
-export function computeWellbeing(sessions: Session[]): WellbeingReport {
+export function computeWellbeing(
+  sessions: Session[],
+  externalLoad: ExternalLoadEntry[] = [],
+): WellbeingReport {
   const anchor = latestDateKey(sessions);
   if (!anchor) {
     return {
@@ -511,7 +558,7 @@ export function computeWellbeing(sessions: Session[]): WellbeingReport {
     };
   }
 
-  const recovery = computeRecoveryBalance(sessions, anchor);
+  const recovery = computeRecoveryBalance(sessions, anchor, externalLoad);
   const circadian = computeCircadianAlignment(sessions);
   const consistency = computeRoutineConsistency(sessions, anchor);
 

@@ -12,6 +12,8 @@ import { useDeviceStatus } from "@/lib/queries/sessions";
 import { claimDeviceByCode, createTestPairingCode } from "@/lib/api/pairing.functions";
 import { summarizeSensorHealth } from "@/lib/sensor-health";
 import { LowBatteryBanner } from "@/components/LowBatteryBanner";
+import { BluetoothConnectCard } from "@/components/BluetoothConnectCard";
+import { BATTERY_TRACKING_ENABLED } from "@/lib/feature-flags";
 import { Battery, Wifi, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 export const Route = createFileRoute("/device")({
@@ -120,10 +122,12 @@ function Device() {
             <div className="space-y-4">
               <div className="flex flex-wrap items-center gap-4">
                 <StateBadge state={status.state} battery={status.battery} />
-                <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <Battery className="h-4 w-4" aria-hidden />
-                  {status.battery > 0 ? `${status.battery}%` : "No reading"}
-                </span>
+                {BATTERY_TRACKING_ENABLED && (
+                  <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Battery className="h-4 w-4" aria-hidden />
+                    {status.battery > 0 ? `${status.battery}%` : "No reading"}
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
                   <Wifi className="h-4 w-4" aria-hidden />
                   {status.wifi}
@@ -261,6 +265,8 @@ function Device() {
           </div>
         </CardContent>
       </Card>
+
+      <BluetoothConnectCard onPairingCode={setCode} />
     </>
   );
 }

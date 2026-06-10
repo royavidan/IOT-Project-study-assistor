@@ -47,9 +47,15 @@ function Friends() {
     event.preventDefault();
     setMessage(null);
     send.mutate(email, {
-      onSuccess: (name) => {
-        setMessageKind("success");
-        setMessage(`Friend request sent to ${name}.`);
+      onSuccess: ({ displayName, emailSent, emailReason }) => {
+        setMessageKind(emailSent ? "success" : "error");
+        setMessage(
+          emailSent
+            ? `Friend request sent to ${displayName} — we emailed them a heads-up too.`
+            : `Friend request sent to ${displayName}, but the email didn't go out${
+                emailReason ? `: ${emailReason}` : ""
+              }.`,
+        );
         setEmail("");
       },
       onError: (err) => {
@@ -103,7 +109,9 @@ function Friends() {
             </p>
           )}
           <p className="mt-2 text-xs text-muted-foreground">
-            Your friend needs a MindBox account with that email before you can add them.
+            Enter the email address your friend used to sign up for MindBox. They need an account
+            before you can add them — if they haven&apos;t joined yet, ask them to register first,
+            then try again. We&apos;ll email them a heads-up when you send a request.
           </p>
         </CardContent>
       </Card>

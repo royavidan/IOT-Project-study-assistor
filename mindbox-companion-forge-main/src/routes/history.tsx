@@ -7,11 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StudentScopePicker } from "@/components/StudentScopePicker";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { InfoHint } from "@/components/InfoHint";
 import { useSessionScope } from "@/hooks/use-session-scope";
 import { dateKeyDaysAgo } from "@/lib/dates";
 import { useDailyAggregates } from "@/lib/queries/sessions";
-import { Info } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -111,7 +110,7 @@ function History() {
   }
 
   return (
-    <TooltipProvider delayDuration={200}>
+    <>
       <PageHeader
         title={isReviewerView ? "Student sessions" : "Session history"}
         description={
@@ -140,7 +139,7 @@ function History() {
 
       <Card className="mb-4">
         <CardContent className="flex flex-wrap items-end gap-3 p-4">
-          <div className="grid gap-1.5">
+          <div className="grid w-full gap-1.5 sm:w-auto">
             <Label htmlFor="from">From</Label>
             <Input
               id="from"
@@ -150,10 +149,10 @@ function History() {
                 setFrom(e.target.value);
                 syncDatesToUrl(e.target.value, to);
               }}
-              className="w-[160px]"
+              className="w-full sm:w-[160px]"
             />
           </div>
-          <div className="grid gap-1.5">
+          <div className="grid w-full gap-1.5 sm:w-auto">
             <Label htmlFor="to">To</Label>
             <Input
               id="to"
@@ -163,7 +162,7 @@ function History() {
                 setTo(e.target.value);
                 syncDatesToUrl(from, e.target.value);
               }}
-              className="w-[160px]"
+              className="w-full sm:w-[160px]"
             />
           </div>
           <div className="ml-auto text-right">
@@ -223,21 +222,11 @@ function History() {
       <Card className="mb-6">
         <CardHeader className="flex-row items-center gap-2">
           <CardTitle className="text-base">Focus Load Estimate (heuristic)</CardTitle>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                aria-label="About Focus Load Estimate"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                <Info className="h-4 w-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-xs text-left">
-              This is a heuristic estimate based on session length and observed attention patterns.
-              It is not a validated scientific measurement and should not be used as a clinical or
-              cognitive assessment.
-            </TooltipContent>
-          </Tooltip>
+          <InfoHint label="About Focus Load Estimate">
+            This is a heuristic estimate based on session length and observed attention patterns. It
+            is not a validated scientific measurement and should not be used as a clinical or
+            cognitive assessment.
+          </InfoHint>
         </CardHeader>
         <CardContent>
           <div className="h-48 w-full">
@@ -331,6 +320,6 @@ function History() {
           ))}
         </CardContent>
       </Card>
-    </TooltipProvider>
+    </>
   );
 }

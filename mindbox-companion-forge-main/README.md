@@ -12,6 +12,10 @@ Web companion app for the MindBox focus device (TanStack Start + React + Supabas
    - `supabase/migrations/0003_app_gaps.sql` (streak RPC, reviewer students, weekly share)
    - `supabase/migrations/0004_streak_access.sql` (secure streak RPC for reviewers)
    - `supabase/migrations/0005_google_oauth_profile.sql` (Google sign-in display names)
+   - `supabase/migrations/0006_external_load.sql` (external load: lectures/labs → Recovery balance)
+   - `supabase/migrations/0007_schedule_events.sql` (calendar: weekly classes + one-off events)
+   - `supabase/migrations/0008_schedule_exams_semester.sql` (exam category + semester term)
+   - `supabase/migrations/0009_schedule_subtype.sql` (lecture/tutorial/lab meeting type)
 
    Then reload the API cache by running `NOTIFY pgrst, 'reload schema';` once.
    The **Settings**, **Friends**, **Insights**, reviewer picker, and weekly email require `0002`–`0004`.

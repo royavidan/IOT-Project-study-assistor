@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import PDFDocument from "pdfkit";
 
 import { buildReportHtml, summarize, type ReportMeta } from "@/lib/export";
+import { computeWellbeing } from "@/lib/wellbeing";
 import type { Session } from "@/lib/types";
 
 function fmtNum(value: number | null, suffix = ""): string {
@@ -142,6 +143,29 @@ function buildReportPdfWithPdfkit(sessions: Session[], meta: ReportMeta): Promis
         "Focus Load Estimate is a transparent heuristic on a 0–100 scale, derived from session length and observed attention/environment patterns. It is not a validated scientific or clinical measurement.",
         { width: contentWidth },
       );
+
+    const wb = computeWellbeing(sessions);
+    if (wb.ready) {
+      doc.moveDown(0.8);
+      doc.fontSize(11).fillColor("#1a1a1a").text("Wellbeing patterns");
+      doc.fontSize(8).fillColor("#444444");
+      const signals = [
+        { title: "Recovery balance", s: wb.recovery },
+        { title: "Circadian alignment", s: wb.circadian },
+        { title: "Routine consistency", s: wb.consistency },
+      ];
+      for (const { title, s } of signals) {
+        if (!s.ready) continue;
+        doc.text(`${title}: ${s.score}/100 (${s.status}) — ${s.headline}`, { width: contentWidth });
+      }
+      doc
+        .moveDown(0.5)
+        .fillColor("#777777")
+        .text(
+          "Report data: sessions, Focus Load Estimate, environment readings and derived wellbeing patterns. No health, clinical, or battery data is included.",
+          { width: contentWidth },
+        );
+    }
 
     doc.end();
   });

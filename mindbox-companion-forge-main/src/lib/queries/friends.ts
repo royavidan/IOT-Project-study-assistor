@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/lib/auth/auth-context";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { respondToFriendRequestFn, sendFriendRequestFn } from "@/lib/api/friends.functions";
 
 export interface Friend {
   friendId: string;
@@ -45,64 +46,25 @@ export function useFriends() {
   });
 }
 
-async function sendFriendRequest(email: string): Promise<string> {
-  const supabase = getSupabaseBrowserClient();
-  const me = await currentUserId();
+async function sendFriendRequest(
+  email: string,
+): Promise<{ displayName: string; emailSent: boolean; emailReason: string | null }> {
   const normalized = email.trim().toLowerCase();
   if (!normalized) throw new Error("Enter an email address.");
-
-  const { data: match, error: lookupError } = await supabase.rpc("find_profile_by_email", {
-    p_email: normalized,
-  });
-  if (lookupError) throw new Error(lookupError.message);
-
-  const profile = ((match ?? []) as Record<string, unknown>[])[0];
-  if (!profile?.id) {
-    throw new Error("No MindBox user found with that email. They need an account first.");
-  }
-  const friendId = String(profile.id);
-  if (friendId === me) throw new Error("You can't add yourself.");
-
-  // If a relationship already exists (either direction), surface it instead of
-  // inserting a duplicate.
-  const existing = (await fetchFriends()).find((f) => f.friendId === friendId);
-  if (existing) {
-    if (existing.status === "accepted") throw new Error("You're already friends.");
-    if (existing.direction === "incoming") {
-      throw new Error("They already sent you a request — accept it below instead.");
-    }
-    throw new Error("Request already sent and pending.");
-  }
-
-  const { error } = await supabase
-    .from("friendships")
-    .insert({ user_id: me, friend_id: friendId, status: "pending" });
-  if (error) throw new Error(error.message);
-
-  return String(profile.display_name ?? normalized);
+  // Lookup, duplicate-check, insert, and the recipient's notification email all
+  // run server-side (resolving the friend's email + sending mail need the
+  // service role). See src/lib/api/friends.functions.ts.
+  const result = await sendFriendRequestFn({ data: { email: normalized } });
+  return {
+    displayName: result.displayName,
+    emailSent: result.emailSent,
+    emailReason: result.emailReason ?? null,
+  };
 }
 
 async function respondToRequest(input: { friendId: string; accept: boolean }): Promise<void> {
-  const supabase = getSupabaseBrowserClient();
-  const me = await currentUserId();
-
-  if (input.accept) {
-    const { error } = await supabase
-      .from("friendships")
-      .update({ status: "accepted" })
-      .eq("user_id", input.friendId)
-      .eq("friend_id", me);
-    if (error) throw new Error(error.message);
-    return;
-  }
-
-  // Decline = remove the incoming request row.
-  const { error } = await supabase
-    .from("friendships")
-    .delete()
-    .eq("user_id", input.friendId)
-    .eq("friend_id", me);
-  if (error) throw new Error(error.message);
+  // Accept/decline + the "accepted" notification email run server-side.
+  await respondToFriendRequestFn({ data: input });
 }
 
 async function removeFriend(friendId: string): Promise<void> {

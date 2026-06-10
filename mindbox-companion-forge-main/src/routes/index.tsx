@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/auth/auth-context";
 import { dateKeyDaysAgo } from "@/lib/dates";
 import { computeDashboardInsightTeaser } from "@/lib/insights";
 import { filterSessionsByUser } from "@/lib/session-scope";
+import { BATTERY_TRACKING_ENABLED } from "@/lib/feature-flags";
 import { useReviewerStudents } from "@/lib/queries/reviewer";
 import { maybeSendWeeklySummaries } from "@/lib/api/report-email.functions";
 import { useSessions, useTodayStats } from "@/lib/queries/sessions";
@@ -20,6 +21,7 @@ import {
   Clock,
   Flame,
   Calendar,
+  CalendarDays,
   FlaskConical,
   ShieldCheck,
   LineChart,
@@ -138,7 +140,7 @@ function Dashboard() {
         </Card>
       )}
 
-      {todayStats.battery > 0 && todayStats.battery < 15 && (
+      {BATTERY_TRACKING_ENABLED && todayStats.battery > 0 && todayStats.battery < 15 && (
         <LowBatteryBanner battery={todayStats.battery} />
       )}
 
@@ -166,12 +168,38 @@ function Dashboard() {
         </CardContent>
       </Card>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div
+        className={`mb-6 grid grid-cols-2 gap-3 ${
+          BATTERY_TRACKING_ENABLED ? "sm:grid-cols-4" : "sm:grid-cols-3"
+        }`}
+      >
         <Stat icon={Clock} label="Sessions" value={String(todayStats.sessions)} />
         <Stat icon={Flame} label="Streak" value={`${todayStats.streak}d`} />
-        <Stat icon={Battery} label="Battery" value={`${todayStats.battery}%`} />
+        {BATTERY_TRACKING_ENABLED && (
+          <Stat icon={Battery} label="Battery" value={`${todayStats.battery}%`} />
+        )}
         <Stat icon={Wifi} label="Wi-Fi" value={todayStats.wifi} />
       </div>
+
+      <Card className="mb-6 border-primary/15 bg-primary/5">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div className="flex items-start gap-3">
+            <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
+              <CalendarDays className="h-4 w-4" aria-hidden />
+            </div>
+            <div>
+              <p className="text-sm font-semibold">Plan your week</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Add lectures and labs to your calendar and see them alongside MindBox focus
+                sessions.
+              </p>
+            </div>
+          </div>
+          <Button size="sm" variant="outline" asChild>
+            <Link to="/calendar">Open calendar</Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       <Card className="mb-6 border-sync/20 bg-sync-muted/20">
         <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">

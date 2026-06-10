@@ -1,7 +1,7 @@
-import { BatteryCharging, CalendarClock, Info, Lightbulb, Sun } from "lucide-react";
+import { BatteryCharging, CalendarClock, Lightbulb, Sun } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { InfoHint } from "@/components/InfoHint";
 import { cn } from "@/lib/utils";
 import type { WellbeingReport } from "@/lib/wellbeing";
 
@@ -115,19 +115,12 @@ export function WellbeingPanel({ report }: { report: WellbeingReport }) {
     <section className="mb-6" aria-label="Wellbeing patterns">
       <div className="mb-3 flex items-center gap-2">
         <h2 className="text-base font-semibold">Wellbeing patterns</h2>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button aria-label="About wellbeing patterns" className="text-muted-foreground">
-              <Info className="h-4 w-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-sm text-left">
-            Behavioral pattern estimates from your session timing and load — grounded in published
-            research on recovery, circadian rhythms, and routine regularity. These are heuristics to
-            help you reflect, <strong>not</strong> a clinical or diagnostic measure of fatigue,
-            burnout, or mental health. Confidence grows as you log more sessions.
-          </TooltipContent>
-        </Tooltip>
+        <InfoHint label="About wellbeing patterns" side="bottom">
+          Behavioral pattern estimates from your session timing and load — grounded in published
+          research on recovery, circadian rhythms, and routine regularity. These are heuristics to
+          help you reflect, <strong>not</strong> a clinical or diagnostic measure of fatigue,
+          burnout, or mental health. Confidence grows as you log more sessions.
+        </InfoHint>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

@@ -14,6 +14,10 @@ export interface AppSettings {
   quietHoursStart: string | null;
   quietHoursEnd: string | null;
   dailyGoalMin: number;
+  /** Semester term — bounds weekly classes on the calendar. "YYYY-MM-DD" or null. */
+  semesterLabel: string | null;
+  semesterStart: string | null;
+  semesterEnd: string | null;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -26,6 +30,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   quietHoursStart: null,
   quietHoursEnd: null,
   dailyGoalMin: 180,
+  semesterLabel: null,
+  semesterStart: null,
+  semesterEnd: null,
 };
 
 /** Postgres `time` comes back as "HH:MM:SS"; the <input type="time"> wants "HH:MM". */
@@ -45,7 +52,7 @@ async function fetchSettings(): Promise<AppSettings> {
     supabase
       .from("user_settings")
       .select(
-        "notifications_enabled, haptics_enabled, share_with_reviewers, reduce_motion, adaptive_coaching_enabled, quiet_hours_start, quiet_hours_end",
+        "notifications_enabled, haptics_enabled, share_with_reviewers, reduce_motion, adaptive_coaching_enabled, quiet_hours_start, quiet_hours_end, semester_label, semester_start, semester_end",
       )
       .eq("user_id", user.id)
       .maybeSingle(),
@@ -74,6 +81,9 @@ async function fetchSettings(): Promise<AppSettings> {
     quietHoursStart: toInputTime(s.quiet_hours_start),
     quietHoursEnd: toInputTime(s.quiet_hours_end),
     dailyGoalMin: Number(p.daily_goal_min ?? DEFAULT_SETTINGS.dailyGoalMin),
+    semesterLabel: typeof s.semester_label === "string" ? s.semester_label : null,
+    semesterStart: typeof s.semester_start === "string" ? s.semester_start.slice(0, 10) : null,
+    semesterEnd: typeof s.semester_end === "string" ? s.semester_end.slice(0, 10) : null,
   };
 }
 
@@ -99,6 +109,9 @@ async function saveSettings(next: AppSettings): Promise<void> {
       adaptive_coaching_enabled: next.adaptiveCoachingEnabled,
       quiet_hours_start: next.quietHoursStart || null,
       quiet_hours_end: next.quietHoursEnd || null,
+      semester_label: next.semesterLabel?.trim() || null,
+      semester_start: next.semesterStart || null,
+      semester_end: next.semesterEnd || null,
     },
     { onConflict: "user_id" },
   );

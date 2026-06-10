@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { BATTERY_TRACKING_ENABLED } from "@/lib/feature-flags";
 import type { DeviceState } from "@/lib/types";
 
 const map: Record<DeviceState, { label: string; cls: string; dot: string; pulse?: boolean }> = {
@@ -26,7 +27,13 @@ export function StateBadge({
 }) {
   const s = map[state];
   const label =
-    state === "warning" && battery != null && battery > 0 && battery < 15 ? "Low Battery" : s.label;
+    BATTERY_TRACKING_ENABLED &&
+    state === "warning" &&
+    battery != null &&
+    battery > 0 &&
+    battery < 15
+      ? "Low Battery"
+      : s.label;
 
   return (
     <span
