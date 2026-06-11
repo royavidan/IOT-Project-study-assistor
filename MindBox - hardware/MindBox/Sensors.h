@@ -23,6 +23,7 @@ namespace Sensors {
   int   batteryPct();          // -1 if unknown
 
   bool  faulted();             // a hard sensor fault (Story 15 ERROR state)
+  void  clearFault();          // reset fault + attempt I2C/ToF recovery (ERROR exit)
   SensorHealth health();
   String healthJson();         // for /ingest/telemetry sensor_health
 

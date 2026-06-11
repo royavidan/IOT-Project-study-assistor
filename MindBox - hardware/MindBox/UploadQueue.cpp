@@ -14,6 +14,15 @@ static int  s_pending = -1;
 
 static const char* UPLOAD_DIR = "/upload";
 
+// LittleFS is accessed by the loop (enqueue) and the core-0 net task (drain), so
+// every public op brackets its FS work with this recursive mutex (HTTP happens
+// in Cloud between read/remove, outside the lock).
+static SemaphoreHandle_t s_mux = nullptr;
+struct QLock {
+  QLock()  { if (s_mux) xSemaphoreTakeRecursive(s_mux, portMAX_DELAY); }
+  ~QLock() { if (s_mux) xSemaphoreGiveRecursive(s_mux); }
+};
+
 static int scanPendingCount() {
   if (!s_mounted) return 0;
   if (!LittleFS.exists(UPLOAD_DIR)) return 0;
@@ -136,6 +145,7 @@ namespace UploadQueue {
 
 void begin() {
 #if ENABLE_CLOUD
+  if (!s_mux) s_mux = xSemaphoreCreateRecursiveMutex();
   s_mounted = LittleFS.begin(false);
   if (!s_mounted) {
     Serial.println("[queue] LittleFS formatting (first boot)...");
@@ -157,6 +167,7 @@ void begin() {
 
 bool enqueueJson(uint32_t clientSeq, const String& json) {
 #if ENABLE_CLOUD
+  QLock _g;
   if (json.length() == 0 || json[0] != '{') return false;
   if (!s_mounted) {
     s_mounted = LittleFS.begin(false);
@@ -194,6 +205,7 @@ bool enqueue(const SessionRecord& r, const Sample* samples, int n) {
 
 int pendingCount() {
 #if ENABLE_CLOUD
+  QLock _g;
   if (!s_mounted) return 0;
   if (s_pending < 0) s_pending = scanPendingCount();
   return s_pending;
@@ -218,6 +230,7 @@ void clearDroppedFlag() {
 
 uint32_t peekOldestSeq() {
 #if ENABLE_CLOUD
+  QLock _g;
   uint32_t seq = 0;
   bool found = false;
   scanOldest(seq, found);
@@ -229,6 +242,7 @@ uint32_t peekOldestSeq() {
 
 bool readOldest(String& jsonOut) {
 #if ENABLE_CLOUD
+  QLock _g;
   jsonOut = "";
   uint32_t seq = 0;
   bool found = false;
@@ -250,6 +264,7 @@ bool readOldest(String& jsonOut) {
 
 bool removeOldest() {
 #if ENABLE_CLOUD
+  QLock _g;
   uint32_t seq = peekOldestSeq();
   if (seq == 0) return false;
   char path[40];

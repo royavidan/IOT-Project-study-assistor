@@ -133,6 +133,35 @@ struct TelemetryModel {
   int         wifiRssi;
 };
 
+// Live device snapshot the loop hands to the core-0 net task (live mirror).
+struct TelemetrySnap {
+  uint8_t state;        // SysState
+  uint8_t mode;         // Mode
+  int     remainingSec;
+  int     fle;
+  uint8_t setIndex;     // focus blocks done in the current set
+  uint8_t setTotal;
+  bool    setActive;
+  uint8_t pauseReason;  // PauseReason
+  int     batteryPct;
+  char    health[96];   // Sensors::healthJson()
+};
+
+// App-managed settings pulled from the downlink, overlaid onto DeviceConfig.
+struct CloudSettings {
+  bool     paired;
+  bool     showTimer, hapticsEnabled, adaptiveCoaching, nudgesEnabled;
+  uint16_t quietStartMin, quietEndMin, dailyGoalMin;
+};
+
+// Remote command from the app (Part 3), delivered loop<-task via a queue.
+enum CmdType { CMD_NONE, CMD_START, CMD_PAUSE, CMD_RESUME, CMD_END };
+struct RemoteCmd {
+  uint8_t  type;        // CmdType
+  uint8_t  mode;        // Mode (for CMD_START)
+  uint16_t durationMin; // for CMD_START
+};
+
 // Pointer-menu row for Display::renderMenu (cursor + scroll lists).
 #define MENU_VISIBLE_ROWS 4
 struct MenuRow {

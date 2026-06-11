@@ -20,6 +20,7 @@
    or open Device -> Diagnostics in the pointer menu.
    ========================================================================== */
 #include <Wire.h>
+#include "esp_task_wdt.h"
 #include "config.h"
 #include "Display.h"
 #include "Haptics.h"
@@ -33,14 +34,21 @@
 #include "StateMachine.h"
 #include "Diagnostics.h"
 
-static uint32_t s_lastTele = 0;
-
 void setup() {
   Serial.begin(115200);
   delay(200);
 
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
-  Wire.setClock(400000);   // 400 kHz fast-mode: ~4x faster OLED redraw (was 100 kHz)
+  Wire.setClock(400000);            // 400 kHz fast-mode: ~4x faster OLED redraw
+  Wire.setTimeOut(I2C_TIMEOUT_MS);  // never block forever on a wedged I2C bus
+
+  // Task watchdog: reboot if the main loop stalls (e.g. a hung peripheral).
+  esp_task_wdt_config_t wdtCfg = {};
+  wdtCfg.timeout_ms     = WDT_TIMEOUT_MS;
+  wdtCfg.idle_core_mask = 0;        // watch the loop task, not the idle tasks
+  wdtCfg.trigger_panic  = true;
+  esp_task_wdt_reconfigure(&wdtCfg);
+  esp_task_wdt_add(NULL);
 
   Storage::begin();
   Display::init();
@@ -56,22 +64,10 @@ void setup() {
 }
 
 void loop() {
+  esp_task_wdt_reset();      // feed the watchdog
   Haptics::tick();           // advance any active vibration pattern
   Sensors::tick();           // sample mic + refresh presence
-  Cloud::tick(StateMachine::state());      // Wi-Fi reconnect + upload queue drain
-  StateMachine::tick();      // read inputs, run FSM, render
+  StateMachine::tick();      // inputs, FSM, render + publish live state to the net task
   Diagnostics::tick();       // serial monitor commands + stream
-
-  // Telemetry heartbeat — skip during active sessions (HTTP blocks the main loop).
-  SysState st = StateMachine::state();
-  if (st != ST_RUNNING && st != ST_PAUSED &&
-      millis() - s_lastTele > TELEMETRY_PERIOD_MS) {
-    s_lastTele = millis();
-    const char* ts = "idle";
-    int batt = Sensors::batteryPct();
-    TelemetryModel t = { ts, batt < 0 ? 100 : batt, Cloud::wifiRssi() };
-    Cloud::sendTelemetry(t, Sensors::healthJson());
-  }
-
-  delay(5);
+  delay(5);                  // Wi-Fi/HTTP/telemetry/upload all run on the core-0 net task
 }

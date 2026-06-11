@@ -21,7 +21,7 @@ static int          s_cycleCount = CYCLE_DEFAULT;
 static DeviceConfig s_cfg   = defaultConfig();
 static uint32_t     s_stateAt = 0, s_lastRender = 0, s_bootAt = 0;
 static uint32_t     s_lastCheckpoint = 0;
-static uint32_t     s_lastCfgFetch = 0;
+static uint32_t     s_lastSnap = 0;
 static bool         s_uiDirty = true;
 static String       s_devShort;
 static char         s_pairCode[7] = {0};
@@ -40,6 +40,8 @@ static PauseReason  s_pauseReason = PAUSE_MANUAL;
 static uint32_t     s_lastCoachAt = 0;
 static int          s_lastDispSec = -1;
 static bool         s_lastCoachUi = false;
+
+static void publishTelemetry();   // forward decl (defined after buildModel)
 
 static bool runningScreenChanged() {
   int sec = Session::remainingSec();
@@ -73,6 +75,8 @@ static void enter(SysState s) {
   s_uiDirty = true;
   if (s == ST_IDLE) Menu::resetToRoot();
   if (s == ST_PAUSED) Menu::pausedReset(s_pauseReason);
+  publishTelemetry();       // refresh the live snapshot...
+  Cloud::flagTransition();  // ...and push it immediately (state changed)
 }
 
 static void enterPaused(PauseReason reason) {
@@ -114,6 +118,24 @@ static UiModel buildModel() {
   return m;
 }
 
+// Hand the current live state to the core-0 net task (live mirror → app).
+static void publishTelemetry() {
+  TelemetrySnap t = {};
+  t.state        = (uint8_t)s_state;
+  t.mode         = (uint8_t)s_mode;
+  t.remainingSec = Session::remainingSec();
+  t.fle          = Session::lastFle();
+  t.setActive    = s_setActive;
+  t.setIndex     = (uint8_t)s_setFocusDone;
+  t.setTotal     = (uint8_t)s_setCycleTotal;
+  t.pauseReason  = (uint8_t)s_pauseReason;
+  int b = Sensors::batteryPct();
+  t.batteryPct   = b < 0 ? 100 : b;
+  String h = Sensors::healthJson();
+  strncpy(t.health, h.c_str(), sizeof(t.health) - 1);
+  Cloud::publishState(t);
+}
+
 static void saveCheckpointNow() {
   if (s_state != ST_RUNNING && s_state != ST_PAUSED) return;
   SessionCheckpoint cp = Session::snapshot(s_state);
@@ -134,6 +156,7 @@ static bool persistSession(const char* status) {
                                        Storage::deviceId().c_str());
   UploadQueue::enqueueJson(seq, json);
   json = String();   // release heap before NVS writes
+  Cloud::kickUpload();
   bool goalHit = Storage::bufferSession(r);
   Storage::setLiveFocusSec(0);
   Storage::setWorkDuration(s_workDur);
@@ -352,26 +375,24 @@ static void renderDiag() {
   float lux = 0, lvar = 0, tempC = NAN;
   Sensors::readLight(lux, lvar);
   Sensors::readTemp(tempC);
+  SensorHealth h = Sensors::health();
   Display::clear();
   Display::center("DIAGNOSTICS", 0, 1);
-  snprintf(l, sizeof(l), "OLED: %s", Display::driverName());           Display::text(0, 12, 1, l);
-  SensorHealth h = Sensors::health();
+  snprintf(l, sizeof(l), "OLED:%s", Display::driverName());            Display::text(0, 10, 1, l);
   snprintf(l, sizeof(l), "ToF:%s %dmm", h.tofPresent ? "ok" : "--", Sensors::presenceMm());
-  Display::text(0, 22, 1, l);
-  snprintf(l, sizeof(l), "Mic:%d%%", (int)(Sensors::noise() * 100));   Display::text(0, 32, 1, l);
+  Display::text(0, 19, 1, l);
+  snprintf(l, sizeof(l), "Mic:%d%%  Btn:%s", (int)(Sensors::noise() * 100),
+           Inputs::sideFault() ? "ERR" : (Inputs::sidePressed() ? "DN" : "up"));
+  Display::text(0, 28, 1, l);
 #if HAS_LIGHT
-  snprintf(l, sizeof(l), "Lgt:%d", (int)lux);                         Display::text(0, 42, 1, l);
+  snprintf(l, sizeof(l), "Lgt:%d", (int)lux);                          Display::text(0, 37, 1, l);
 #endif
 #if HAS_TEMP
-  if (h.tempPresent)
-    snprintf(l, sizeof(l), "Tmp:%dC", (int)tempC);
-  else
-    snprintf(l, sizeof(l), "Tmp:--");
-  Display::text(64, 42, 1, l);
+  if (h.tempPresent) snprintf(l, sizeof(l), "Tmp:%dC", (int)tempC);
+  else               snprintf(l, sizeof(l), "Tmp:--");
+  Display::text(64, 37, 1, l);
 #endif
-  snprintf(l, sizeof(l), "Btn:%s", Inputs::sideFault() ? "ERR"
-             : (Inputs::sidePressed() ? "DN" : "up"));
-  Display::text(0, 52, 1, l);
+  Display::center("knob or hold = back", 54, 1);
   Display::show();
 }
 
@@ -389,8 +410,7 @@ void init() {
   int dash = full.indexOf('-');
   s_devShort = (dash >= 0) ? full.substring(dash + 1) : full;
   Menu::begin(&s_mode, &s_workDur, &s_breakDur, &s_cycleCount, &s_cfg);
-  // Overlay the owner's cloud settings onto the loaded config (no-op offline).
-  if (Cloud::fetchConfig(s_cfg)) applyConfig(s_cfg);
+  // Cloud settings now arrive asynchronously via Cloud::takeSettings() in tick().
 
   if (Storage::loadCheckpoint(s_resumeCp)) {
     int remainSec = (int)(s_resumeCp.remainingMs / 1000);
@@ -409,19 +429,29 @@ void tick() {
   Inputs::poll();
   int  btn = Inputs::button();
   int  rot = Inputs::rotationDir();
+  bool clk = Inputs::knobClicked();   // knob press = universal escape on dead-end screens
 #if USE_SPDT_TOGGLE
   s_mode = Inputs::spdtPresentWork() ? MODE_WORK : MODE_BREAK;
 #endif
   uint32_t now = millis();
   bool warm = (now - s_bootAt) > SENSOR_WARMUP_MS;
 
-  // Config downlink: defer while a session is active — HTTP blocks up to 8 s.
-  if (Cloud::online() && now - s_lastCfgFetch > CONFIG_FETCH_MS &&
-      s_state != ST_RUNNING && s_state != ST_PAUSED) {
-    s_lastCfgFetch = now;
-    DeviceConfig c = s_cfg;
-    if (Cloud::fetchConfig(c) && memcmp(&c, &s_cfg, sizeof(c)) != 0) applyConfig(c);
+  // Apply settings the net task pulled from the server (app-managed fields only).
+  CloudSettings cs;
+  if (Cloud::takeSettings(cs)) {
+    Storage::setPaired(cs.paired);
+    s_cfg.showTimer        = cs.showTimer;
+    s_cfg.hapticsEnabled   = cs.hapticsEnabled;
+    s_cfg.adaptiveCoaching = cs.adaptiveCoaching;
+    s_cfg.nudgesEnabled    = cs.nudgesEnabled;
+    s_cfg.quietStartMin    = cs.quietStartMin;
+    s_cfg.quietEndMin      = cs.quietEndMin;
+    s_cfg.dailyGoalMin     = cs.dailyGoalMin;
+    applyConfig(s_cfg);
   }
+
+  // Live mirror: refresh the net task's snapshot ~1 Hz (transitions push instantly).
+  if (now - s_lastSnap > 1000) { s_lastSnap = now; publishTelemetry(); }
 
   unsigned long pauseMs = presencePauseMs(s_cfg);
   unsigned long endMs   = presenceEndMs(s_cfg);
@@ -438,6 +468,7 @@ void tick() {
 
     case ST_RESUME: {
       updateTodayLiveFocus();
+      if (btn == 2) { discardCheckpoint(); break; }   // long-press = don't resume
       MenuAction ma = Menu::resumePromptTick(rot, btn);
       if (rot || btn) s_uiDirty = true;
       handleMenuAction(ma);
@@ -516,16 +547,16 @@ void tick() {
       break;
 
     case ST_PAIRING:
-      if (btn == 1 || btn == 2) { s_pairCode[0] = 0; enter(ST_IDLE); }
+      if (btn == 1 || btn == 2 || clk) { s_pairCode[0] = 0; enter(ST_IDLE); }
       break;
 
     case ST_DIAG:
-      if (btn == 1 || btn == 2) enter(ST_IDLE);
+      if (btn == 1 || btn == 2 || clk) enter(ST_IDLE);
       s_uiDirty = true;
       break;
 
     case ST_ERROR:
-      if (btn == 2) enter(ST_IDLE);
+      if (btn == 2 || clk) { Sensors::clearFault(); enter(ST_IDLE); }
       break;
 
     default: break;

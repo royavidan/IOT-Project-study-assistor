@@ -4,6 +4,7 @@
 #include "Payload.h"
 #include "UploadQueue.h"
 #include <ESP.h>
+#include "esp_task_wdt.h"
 
 #if ENABLE_WIFI
 #include <WiFi.h>
@@ -16,41 +17,50 @@
 #endif
 #endif
 
+// ===========================================================================
+// Credentials + cached link state. Creds are owned by the net task; the loop
+// only writes NVS + flips s_credsDirty (provisioning), never the live strings.
+// ===========================================================================
 #if ENABLE_WIFI
-static String   s_ssid, s_pass, s_baseUrl, s_secret;
-static bool     s_ntpStarted = false;
-static uint32_t s_lastWifiTry = 0;
-static bool     s_cachedOnline = false;
-static uint32_t s_lastOnlineCheck = 0;
-
-static bool refreshOnlineCache() {
-  uint32_t now = millis();
-  if (now - s_lastOnlineCheck >= WIFI_STATUS_CACHE_MS) {
-    s_lastOnlineCheck = now;
-    s_cachedOnline = (WiFi.status() == WL_CONNECTED);
-  }
-  return s_cachedOnline;
-}
+static String        s_ssid, s_pass, s_baseUrl, s_secret, s_deviceId;
+static bool          s_ntpStarted = false;
+static uint32_t      s_lastWifiTry = 0;
+static volatile bool s_cachedOnline = false;
+static volatile int  s_rssi = 0;
+static volatile bool s_credsDirty = false;
 
 static void loadCreds() {
-  s_ssid    = Storage::wifiSsid();
-  s_pass    = Storage::wifiPass();
-  s_baseUrl = Storage::appBaseUrl();
-  s_secret  = Storage::deviceSecret();
+  s_ssid     = Storage::wifiSsid();
+  s_pass     = Storage::wifiPass();
+  s_baseUrl  = Storage::appBaseUrl();
+  s_secret   = Storage::deviceSecret();
+  s_deviceId = Storage::deviceId();
   while (s_baseUrl.endsWith("/")) s_baseUrl.remove(s_baseUrl.length() - 1);
 }
 #endif
 
 #if ENABLE_CLOUD
-// Single HTTP entry. Returns the status code (>0) or a negative error.
-// `respBody` is filled on a real response. Handles http:// and https:// (TLS
-// is accepted without cert pinning — fine for a coursework/LAN dev server).
-static uint32_t s_netSuspendUntil = 0;   // skip HTTP until this time after a connect/timeout failure
+// ===========================================================================
+// task <-> loop shared state
+// ===========================================================================
+static SemaphoreHandle_t s_mux = nullptr;       // guards s_snap + s_settings
+static QueueHandle_t     s_cmdQueue = nullptr;
+static TelemetrySnap     s_snap = {};
+static CloudSettings     s_settings = {};
+static volatile bool     s_settingsReady = false;
+static volatile bool     s_pushNow = false;
+static volatile bool     s_pairPending = false;
+static char              s_pairCode[8] = {0};
 
+static uint32_t s_netSuspendUntil = 0;
+
+// ---- HTTP core. Returns status (>0) or negative error. Connect/total timeouts
+// are capped and a failure suspends all HTTP briefly so an unreachable server
+// can't stall the task in a tight retry loop. ------------------------------
 static int httpRequest(const char* method, const String& url,
                        const String& body, String& respBody) {
   if (s_baseUrl.length() == 0 || s_secret.length() == 0) return -1;
-  if ((int32_t)(millis() - s_netSuspendUntil) < 0) return -99;  // backing off an unreachable server
+  if ((int32_t)(millis() - s_netSuspendUntil) < 0) return -99;
   HTTPClient http;
   WiFiClient plain;
   bool https = url.startsWith("https:");
@@ -64,18 +74,18 @@ static int httpRequest(const char* method, const String& url,
   ok = http.begin(plain, url);
 #endif
   if (!ok) return -2;
-  http.setConnectTimeout(HTTP_CONNECT_TIMEOUT_MS);   // cap the hang on an unreachable host
+  http.setConnectTimeout(HTTP_CONNECT_TIMEOUT_MS);
   http.setTimeout(HTTP_TIMEOUT_MS);
   http.addHeader("content-type", "application/json");
   http.addHeader("x-device-secret", s_secret);
   int code = (strcmp(method, "POST") == 0) ? http.POST(body) : http.GET();
   if (code > 0) { respBody = http.getString(); s_netSuspendUntil = 0; }
-  else s_netSuspendUntil = millis() + NET_FAIL_BACKOFF_MS;  // unreachable -> stop hammering the loop
+  else s_netSuspendUntil = millis() + NET_FAIL_BACKOFF_MS;
   http.end();
   return code;
 }
 
-// Minimal flat-JSON readers for the trusted /ingest/config response.
+// ---- minimal flat-JSON readers for the trusted /ingest/config response ----
 static int valuePos(const String& b, const char* key) {
   String pat = String("\"") + key + "\"";
   int k = b.indexOf(pat);
@@ -99,6 +109,9 @@ static long jInt(const String& b, const char* key, long def) {
   return strtol(b.c_str() + p, nullptr, 10);
 }
 
+// ===========================================================================
+// upload-drain state + worker (runs on the task)
+// ===========================================================================
 static bool     s_uploadSoon = false;
 static bool     s_uploadAuthFail = false;
 static bool     s_wasOnline = false;
@@ -107,12 +120,12 @@ static uint32_t s_uploadBackoffMs = UPLOAD_RETRY_MIN_MS;
 
 static void drainUploadQueue() {
   if (s_uploadAuthFail) return;
-  if (!Cloud::online() || UploadQueue::pendingCount() == 0) return;
+  if (!s_cachedOnline || UploadQueue::pendingCount() == 0) return;
   if (!s_uploadSoon && millis() - s_lastUploadTry < s_uploadBackoffMs) return;
 
   s_lastUploadTry = millis();
   String json;
-  if (!UploadQueue::readOldest(json)) return;
+  if (!UploadQueue::readOldest(json)) return;     // FS read (mutex'd internally)
 
   String body = "[";
   body += json;
@@ -135,6 +148,104 @@ static void drainUploadQueue() {
     s_uploadSoon = false;
   }
 }
+
+// ===========================================================================
+// net-task workers
+// ===========================================================================
+static const char* stateStr(uint8_t st, uint8_t mode) {
+  switch ((SysState)st) {
+    case ST_RUNNING: return mode == MODE_WORK ? "work" : "break";
+    case ST_PAUSED:  return "paused";
+    default:         return "idle";
+  }
+}
+
+static void pushTelemetry() {
+  TelemetrySnap s;
+  xSemaphoreTake(s_mux, portMAX_DELAY); s = s_snap; xSemaphoreGive(s_mux);
+
+  String ts = (time(nullptr) > 1700000000L)
+                ? Payload::isoFromEpoch(time(nullptr)) : "1970-01-01T00:00:00Z";
+  String body = "{";
+  body += "\"deviceId\":\"" + s_deviceId + "\",";
+  body += "\"ts\":\"" + ts + "\",";
+  body += "\"state\":\""; body += stateStr(s.state, s.mode); body += "\",";
+  body += "\"batteryPct\":" + String(s.batteryPct) + ",";
+  body += "\"wifiRssi\":" + String(s_rssi) + ",";
+  body += "\"sensorHealth\":" + (s.health[0] ? String(s.health) : String("null")) + ",";
+  body += "\"firmwareVersion\":\"" FW_VERSION "\"";
+  body += "}";
+  String resp;
+  httpRequest("POST", s_baseUrl + "/ingest/telemetry", body, resp);
+}
+
+static void syncDownlink() {
+  String resp;
+  int code = httpRequest("GET", s_baseUrl + "/ingest/config?deviceId=" + s_deviceId, "", resp);
+  if (code != 200) return;
+  CloudSettings cs;
+  cs.paired           = jBool(resp, "paired", false);
+  cs.showTimer        = jBool(resp, "showTimer", true);
+  cs.hapticsEnabled   = jBool(resp, "hapticsEnabled", true);
+  cs.adaptiveCoaching = jBool(resp, "adaptiveCoaching", false);
+  cs.nudgesEnabled    = jBool(resp, "nudgesEnabled", true);
+  cs.quietStartMin    = (uint16_t)jInt(resp, "quietStartMin", 0xFFFF);
+  cs.quietEndMin      = (uint16_t)jInt(resp, "quietEndMin", 0xFFFF);
+  cs.dailyGoalMin     = (uint16_t)jInt(resp, "dailyGoalMin", 180);
+  xSemaphoreTake(s_mux, portMAX_DELAY);
+  s_settings = cs; s_settingsReady = true;
+  xSemaphoreGive(s_mux);
+}
+
+static void doPairing() {
+  String body = "{\"deviceId\":\"" + s_deviceId + "\",\"code\":\"" + String(s_pairCode) + "\"}";
+  String resp;
+  int c = httpRequest("POST", s_baseUrl + "/ingest/pairing", body, resp);
+  if (c != 200) Serial.printf("[cloud] pairing publish failed (%d): %s\n", c, resp.c_str());
+}
+
+static void manageWifi() {
+  if (s_credsDirty) {
+    s_credsDirty = false;
+    loadCreds();
+    WiFi.disconnect();
+    if (s_ssid.length()) WiFi.begin(s_ssid.c_str(), s_pass.c_str());
+    s_ntpStarted = false;
+    s_uploadAuthFail = false;
+    s_uploadSoon = true;
+  }
+  bool conn = (WiFi.status() == WL_CONNECTED);
+  s_cachedOnline = conn;
+  s_rssi = conn ? WiFi.RSSI() : 0;
+  if (!conn) {
+    if (s_ssid.length() && millis() - s_lastWifiTry > WIFI_RETRY_MS) {
+      s_lastWifiTry = millis();
+      WiFi.begin(s_ssid.c_str(), s_pass.c_str());
+    }
+  } else {
+    if (!s_ntpStarted) { configTime(0, 0, NTP_SERVER); s_ntpStarted = true; }
+    if (!s_wasOnline) { s_uploadBackoffMs = UPLOAD_RETRY_MIN_MS; s_uploadSoon = true; }
+  }
+  s_wasOnline = conn;
+}
+
+static void cloudTask(void*) {
+  esp_task_wdt_add(nullptr);
+  uint32_t lastTele = 0, lastSync = 0;
+  for (;;) {
+    esp_task_wdt_reset();
+    manageWifi();
+    if (s_cachedOnline) {
+      if (s_pairPending) { s_pairPending = false; doPairing(); }
+      if (s_pushNow || millis() - lastTele > TELEMETRY_PERIOD_MS) {
+        s_pushNow = false; lastTele = millis(); pushTelemetry();
+      }
+      if (millis() - lastSync > CONFIG_FETCH_MS) { lastSync = millis(); syncDownlink(); }
+      drainUploadQueue();
+    }
+    vTaskDelay(pdMS_TO_TICKS(NET_TASK_PERIOD_MS));
+  }
+}
 #endif // ENABLE_CLOUD
 
 namespace Cloud {
@@ -146,45 +257,52 @@ void begin() {
   WiFi.setAutoReconnect(true);
   if (s_ssid.length()) WiFi.begin(s_ssid.c_str(), s_pass.c_str());
 #endif
+#if ENABLE_CLOUD
+  s_mux = xSemaphoreCreateMutex();
+  s_cmdQueue = xQueueCreate(8, sizeof(RemoteCmd));
+  xTaskCreatePinnedToCore(cloudTask, "net", 10240, nullptr, 1, nullptr, 0);
+#endif
 }
 
-void tick(SysState sysState) {
-  const bool sessionActive =
-    sysState == ST_RUNNING || sysState == ST_PAUSED;
-#if ENABLE_WIFI
-  if (sessionActive) {
-    refreshOnlineCache();
-  } else {
-    if (s_ssid.length() && !refreshOnlineCache() &&
-        millis() - s_lastWifiTry > WIFI_RETRY_MS) {
-      s_lastWifiTry = millis();
-      WiFi.begin(s_ssid.c_str(), s_pass.c_str());
-    }
-    if (refreshOnlineCache() && !s_ntpStarted) {
-      configTime(0, 0, NTP_SERVER);
-      s_ntpStarted = true;
-    }
+void publishState(const TelemetrySnap& s) {
 #if ENABLE_CLOUD
-    bool nowOnline = s_cachedOnline;
-    if (nowOnline && !s_wasOnline) {
-      s_uploadBackoffMs = UPLOAD_RETRY_MIN_MS;
-      s_uploadSoon = true;
-    }
-    s_wasOnline = nowOnline;
-#endif
-  }
-#endif
-#if ENABLE_CLOUD
-  if (!sessionActive)
-    drainUploadQueue();
+  if (!s_mux) return;
+  xSemaphoreTake(s_mux, portMAX_DELAY); s_snap = s; xSemaphoreGive(s_mux);
 #else
-  (void)sysState;
+  (void)s;
+#endif
+}
+
+void flagTransition() {
+#if ENABLE_CLOUD
+  s_pushNow = true;
+#endif
+}
+
+bool takeSettings(CloudSettings& out) {
+#if ENABLE_CLOUD
+  if (!s_settingsReady || !s_mux) return false;
+  xSemaphoreTake(s_mux, portMAX_DELAY);
+  out = s_settings; s_settingsReady = false;
+  xSemaphoreGive(s_mux);
+  return true;
+#else
+  (void)out; return false;
+#endif
+}
+
+bool nextCommand(RemoteCmd& cmd) {
+#if ENABLE_CLOUD
+  if (!s_cmdQueue) return false;
+  return xQueueReceive(s_cmdQueue, &cmd, 0) == pdTRUE;
+#else
+  (void)cmd; return false;
 #endif
 }
 
 bool online() {
 #if ENABLE_WIFI
-  return refreshOnlineCache();
+  return s_cachedOnline;
 #else
   return false;
 #endif
@@ -192,7 +310,7 @@ bool online() {
 
 int wifiRssi() {
 #if ENABLE_WIFI
-  return online() ? WiFi.RSSI() : 0;
+  return s_rssi;
 #else
   return 0;
 #endif
@@ -200,7 +318,7 @@ int wifiRssi() {
 
 bool haveClock() {
 #if ENABLE_WIFI
-  return time(nullptr) > 1700000000L;   // sane epoch -> NTP has synced
+  return time(nullptr) > 1700000000L;
 #else
   return false;
 #endif
@@ -214,46 +332,24 @@ time_t nowEpoch() {
 #endif
 }
 
-void sendTelemetry(const TelemetryModel& t, const String& healthJson) {
-#if ENABLE_CLOUD
-  if (!online()) return;
-  String ts = haveClock() ? Payload::isoFromEpoch(nowEpoch()) : "1970-01-01T00:00:00Z";
-  String body = "{";
-  body += "\"deviceId\":\"" + Storage::deviceId() + "\",";
-  body += "\"ts\":\"" + ts + "\",";
-  body += "\"state\":\""; body += (t.state ? t.state : "idle"); body += "\",";
-  body += "\"batteryPct\":" + String(t.batteryPct) + ",";
-  body += "\"wifiRssi\":" + String(t.wifiRssi) + ",";
-  body += "\"sensorHealth\":" + (healthJson.length() ? healthJson : String("null")) + ",";
-  body += "\"firmwareVersion\":\"" FW_VERSION "\"";
-  body += "}";
-  String resp;
-  httpRequest("POST", s_baseUrl + "/ingest/telemetry", body, resp);
-#else
-  (void)t; (void)healthJson;
-#endif
-}
-
 bool uploadSession(const SessionRecord& r, const Sample* samples, int n) {
 #if ENABLE_CLOUD
-  String json = Payload::sessionJson(r, samples, n, Storage::deviceId().c_str());
+  String json = Payload::sessionJson(r, samples, n, s_deviceId.c_str());
   if (!UploadQueue::enqueueJson(r.clientSeq, json)) return false;
-  kickUpload();
+  s_uploadSoon = true;
   return true;
 #else
-  (void)r; (void)samples; (void)n;
-  return false;
+  (void)r; (void)samples; (void)n; return false;
 #endif
 }
 
 bool uploadSessionJson(uint32_t clientSeq, const String& json) {
 #if ENABLE_CLOUD
   if (!UploadQueue::enqueueJson(clientSeq, json)) return false;
-  kickUpload();
+  s_uploadSoon = true;
   return true;
 #else
-  (void)clientSeq; (void)json;
-  return false;
+  (void)clientSeq; (void)json; return false;
 #endif
 }
 
@@ -263,38 +359,19 @@ void kickUpload() {
 #endif
 }
 
-bool fetchConfig(DeviceConfig& cfg) {
+int pendingCount() {
 #if ENABLE_CLOUD
-  if (!online()) return false;
-  String resp;
-  int code = httpRequest("GET", s_baseUrl + "/ingest/config?deviceId=" + Storage::deviceId(),
-                         "", resp);
-  if (code != 200) return false;
-
-  Storage::setPaired(jBool(resp, "paired", Storage::paired()));
-  // Overlay only the app-managed fields; device-local settings are untouched.
-  cfg.showTimer        = jBool(resp, "showTimer", cfg.showTimer);
-  cfg.hapticsEnabled   = jBool(resp, "hapticsEnabled", cfg.hapticsEnabled);
-  cfg.adaptiveCoaching = jBool(resp, "adaptiveCoaching", cfg.adaptiveCoaching);
-  cfg.nudgesEnabled    = jBool(resp, "nudgesEnabled", cfg.nudgesEnabled);
-  cfg.quietStartMin    = (uint16_t)jInt(resp, "quietStartMin", cfg.quietStartMin);
-  cfg.quietEndMin      = (uint16_t)jInt(resp, "quietEndMin", cfg.quietEndMin);
-  cfg.dailyGoalMin     = (uint16_t)jInt(resp, "dailyGoalMin", cfg.dailyGoalMin);
-  return true;
+  return UploadQueue::pendingCount();
 #else
-  (void)cfg;
-  return false;
+  return 0;
 #endif
 }
 
 void publishPairingCode(const char* code) {
 #if ENABLE_CLOUD
-  if (!online()) return;
-  String body = "{\"deviceId\":\"" + Storage::deviceId() + "\",\"code\":\"" + String(code) + "\"}";
-  String resp;
-  int c = httpRequest("POST", s_baseUrl + "/ingest/pairing", body, resp);
-  if (c != 200)
-    Serial.printf("[cloud] pairing publish failed (%d): %s\n", c, resp.c_str());
+  strncpy(s_pairCode, code ? code : "", sizeof(s_pairCode) - 1);
+  s_pairCode[sizeof(s_pairCode) - 1] = 0;
+  s_pairPending = true;
 #else
   (void)code;
 #endif
@@ -307,10 +384,13 @@ static String readSerialLine(const char* prompt) {
   String s = "";
   uint32_t deadline = millis() + 60000;
   while ((int32_t)(millis() - deadline) < 0) {
+    esp_task_wdt_reset();            // keep the watchdog fed during the long wait
     if (Serial.available()) {
       char c = Serial.read();
       if (c == '\n' || c == '\r') { if (s.length()) break; else continue; }
       s += c;
+    } else {
+      delay(1);
     }
   }
   s.trim();
@@ -333,15 +413,8 @@ void provisionFromSerial() {
   if (url.length())  Storage::setAppBaseUrl(url);
   if (sec.length())  Storage::setDeviceSecret(sec);
 
-  loadCreds();
-  s_ntpStarted = false;
-#if ENABLE_CLOUD
-  s_uploadAuthFail = false;
-  s_uploadSoon = true;
-#endif
-  WiFi.disconnect();
-  if (s_ssid.length()) WiFi.begin(s_ssid.c_str(), s_pass.c_str());
-  Serial.println("Saved. Connecting to Wi-Fi...");
+  s_credsDirty = true;   // the net task reloads creds + reconnects
+  Serial.println("Saved. The network task will reconnect shortly.");
 #else
   Serial.println("[cloud] ENABLE_WIFI is 0 — provisioning unavailable.");
 #endif

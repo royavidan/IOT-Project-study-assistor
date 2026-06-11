@@ -1,7 +1,8 @@
 #pragma once
 // ============================================================================
 // UploadQueue — durable offline backlog for completed sessions (Part B).
-// Writes canonical Payload JSON to LittleFS; Cloud::tick() drains when online.
+// Writes canonical Payload JSON to LittleFS; the core-0 net task drains it.
+// Thread-safe: every FS op is guarded by an internal recursive mutex.
 // ============================================================================
 #include "types.h"
 #include <Arduino.h>

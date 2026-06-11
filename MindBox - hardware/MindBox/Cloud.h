@@ -1,34 +1,36 @@
 #pragma once
 // ============================================================================
-// Cloud — Wi-Fi + companion-app link.
-// Mirrors the app's device contract:
-//   POST /ingest/telemetry   heartbeat (state, battery, rssi, sensor_health)
-//   POST /ingest/sessions    completed sessions + samples (idempotent)
+// Cloud — Wi-Fi + companion-app link, run on a CORE-0 FreeRTOS task so HTTP
+// never blocks the render/timer loop (no in-session stutter). The loop talks to
+// the task only through the thread-safe shims below.
+//   POST /ingest/telemetry   live device snapshot
+//   POST /ingest/sessions    completed sessions (drained from LittleFS queue)
 //   POST /ingest/pairing     publish the 6-digit claim code
-//   GET  /ingest/config      pull DeviceConfig (the site->box DOWNLINK)
-// All header `x-device-secret: <DEVICE_INGEST_SECRET>`.
-// Completed sessions are enqueued to LittleFS first; tick() drains the queue.
+//   GET  /ingest/config      pull settings (the site->box DOWNLINK)
 // ============================================================================
 #include "types.h"
 #include <time.h>
 
 namespace Cloud {
-  void begin();
-  void tick(SysState sysState = ST_IDLE);
-  void kickUpload();
-  bool online();
-  int  wifiRssi();
+  void begin();                 // load creds, start Wi-Fi, spawn the net task
 
-  bool   haveClock();          // true once NTP has set real time
-  time_t nowEpoch();           // 0 if no clock yet
+  // --- loop-side, thread-safe shims -----------------------------------------
+  void publishState(const TelemetrySnap& s);    // loop -> task: live mirror data
+  void flagTransition();                         // loop -> task: push telemetry now
+  bool takeSettings(CloudSettings& out);         // task -> loop: new downlinked settings?
+  bool nextCommand(RemoteCmd& cmd);              // task -> loop: pop a remote command
 
-  void sendTelemetry(const TelemetryModel& t, const String& healthJson);
+  bool   online();              // cached Wi-Fi state (task-updated)
+  int    wifiRssi();            // cached RSSI
+  bool   haveClock();           // NTP synced
+  time_t nowEpoch();            // 0 until NTP
+
+  // Completed session -> durable LittleFS queue; the task drains it.
   bool uploadSession(const SessionRecord& r, const Sample* samples, int n);
   bool uploadSessionJson(uint32_t clientSeq, const String& json);
-  bool fetchConfig(DeviceConfig& cfg);          // config downlink (overlays cfg)
-  void publishPairingCode(const char* code);
+  void kickUpload();
+  int  pendingCount();          // queued (un-uploaded) sessions, for UI
 
-  // Serial-guided provisioning ('w' in Diagnostics): Wi-Fi SSID/pass + app URL +
-  // device secret, saved to NVS. Captive portal can replace this later.
-  void provisionFromSerial();
+  void publishPairingCode(const char* code);     // non-blocking: task POSTs it
+  void provisionFromSerial();                    // 'w' setup (loop; flags creds dirty)
 }

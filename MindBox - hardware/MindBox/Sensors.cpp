@@ -31,6 +31,10 @@ static int      s_lastDist = -1;
 static bool     s_wasPresent = true;
 static uint32_t s_absentAt = 0;
 static bool     s_fault = false;
+static bool     s_noiseValid = true;
+static int      s_micDead = 0;
+static uint32_t s_lastBusCheck = 0;
+static int      s_busFailStreak = 0;
 
 static float s_noiseScale = NOISE_FULL_SCALE_DEFAULT;
 static float s_lightLuxScale = LIGHT_LUX_SCALE_DEFAULT;
@@ -80,6 +84,38 @@ static void refreshLightWindow() {
 }
 #endif
 
+// I2C bus recovery: clock out a slave that's holding SDA low, issue STOP, then
+// re-init the bus (+ ToF). Returns true if SDA was released. Wire.setTimeOut()
+// keeps individual transactions from hanging; this unwedges a stuck bus.
+static bool i2cRecover() {
+  Wire.end();
+  pinMode(PIN_I2C_SCL, OUTPUT);
+  pinMode(PIN_I2C_SDA, INPUT_PULLUP);
+  for (int i = 0; i < 9 && digitalRead(PIN_I2C_SDA) == LOW; i++) {
+    digitalWrite(PIN_I2C_SCL, LOW);  delayMicroseconds(5);
+    digitalWrite(PIN_I2C_SCL, HIGH); delayMicroseconds(5);
+  }
+  bool freed = (digitalRead(PIN_I2C_SDA) == HIGH);
+  pinMode(PIN_I2C_SDA, OUTPUT);                 // STOP: SDA low->high while SCL high
+  digitalWrite(PIN_I2C_SDA, LOW);  delayMicroseconds(5);
+  digitalWrite(PIN_I2C_SCL, HIGH); delayMicroseconds(5);
+  digitalWrite(PIN_I2C_SDA, HIGH); delayMicroseconds(5);
+  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
+  Wire.setClock(400000);
+  Wire.setTimeOut(I2C_TIMEOUT_MS);
+#if HAS_PRESENCE
+  if (vl53.begin(0x29, &Wire)) {
+    vl53.VL53L1X_SetDistanceMode(2);
+    vl53.setTimingBudget(50);
+    vl53.startRanging();
+    s_tofPresent = true;
+  } else {
+    s_tofPresent = false;                        // ToF dead (bus fine) -> degrade
+  }
+#endif
+  return freed;
+}
+
 namespace Sensors {
 
 void reloadCalibration() {
@@ -118,8 +154,13 @@ void tick() {
   if (v < s_nMin) s_nMin = v;
   if (v > s_nMax) s_nMax = v;
   if (millis() - s_nWin >= 1000) {
-    float pp = (s_nMax - s_nMin) / s_noiseScale;
-    s_noise = pp < 0 ? 0 : (pp > 1 ? 1 : pp);
+    int rawpp = s_nMax - s_nMin;
+    // Story 18: a dead/disconnected mic rails at an extreme with no variation.
+    bool dead = (rawpp < 3) && (s_nMax < 10 || s_nMin > 4085);
+    s_micDead = dead ? s_micDead + 1 : 0;
+    s_noiseValid = (s_micDead < 5);             // ~5s of dead readings -> invalid
+    float ppn = s_noiseValid ? (rawpp / s_noiseScale) : 0;
+    s_noise = ppn < 0 ? 0 : (ppn > 1 ? 1 : ppn);
     s_nMin = 4095; s_nMax = 0; s_nWin = millis();
   }
 
@@ -139,7 +180,27 @@ void tick() {
     if (vl53.dataReady()) {
       int16_t d = vl53.distance();
       vl53.clearInterrupt();
-      if (d > 0) s_lastDist = d;
+      if (d > 0 && d < 4000) s_lastDist = d;   // ignore implausible readings (Story 18)
+    }
+  }
+  // I2C watchdog: the ToF is our bus canary. If it stops ACKing, recover the bus.
+  // SDA still held after recovery = wedged bus (also kills the OLED) -> critical
+  // fault. A dead ToF with a healthy bus only degrades (presence disabled).
+  if (s_tofPresent && millis() - s_lastBusCheck >= I2C_HEALTH_MS) {
+    s_lastBusCheck = millis();
+    Wire.beginTransmission(0x29);
+    if (Wire.endTransmission() == 0) {
+      s_busFailStreak = 0;
+    } else if (++s_busFailStreak >= 2) {
+      s_busFailStreak = 0;
+      Serial.println("[i2c] ToF not responding — recovering bus");
+      bool freed = i2cRecover();
+      if (!freed) {
+        s_fault = true;
+        Serial.println("[i2c] bus still held — sensor fault");
+      } else if (!s_tofPresent) {
+        Serial.println("[i2c] bus ok but ToF dead — presence disabled");
+      }
     }
   }
 #endif
@@ -213,11 +274,17 @@ int batteryPct() {
 #endif
 }
 
-bool faulted() { return s_fault; }   // reserved for runtime fault detection
+bool faulted() { return s_fault; }
+
+void clearFault() {
+  s_fault = false;
+  s_busFailStreak = 0;
+  i2cRecover();                       // try to bring the bus + ToF back on ERROR exit
+}
 
 SensorHealth health() {
   SensorHealth h;
-  h.micOk          = true;
+  h.micOk          = s_noiseValid;
 #if HAS_PRESENCE
   h.tofPresent     = s_tofPresent;
   h.tofOk          = s_tofPresent && !s_fault;
@@ -241,7 +308,7 @@ SensorHealth health() {
 
 String healthJson() {
   String s = "{";
-  s += "\"mic\":\"ok\",";
+  s += "\"mic\":\""; s += s_noiseValid ? "ok" : "invalid"; s += "\",";
   s += "\"tof\":\"";
 #if HAS_PRESENCE
   s += s_tofPresent ? "ok" : "invalid";

@@ -99,12 +99,18 @@ static const unsigned long WIFI_RETRY_MS   = 15000UL;    // reconnect attempt ca
 static const int           HTTP_TIMEOUT_MS = 3000;       // read timeout per request
 static const int           HTTP_CONNECT_TIMEOUT_MS = 1500; // cap the hang to an unreachable host
 static const unsigned long NET_FAIL_BACKOFF_MS = 30000UL;  // after connect/timeout fail, skip HTTP this long
+static const unsigned long NET_TASK_PERIOD_MS  = 200UL;    // core-0 net task loop cadence
 
 // ---- upload queue (LittleFS Part B) ----------------------------------------
 // Requires a partition scheme with SPIFFS/LittleFS (Arduino IDE: Tools → Partition Scheme).
 static const int           UPLOAD_QUEUE_MAX     = 12;    // drop-oldest when full
 static const unsigned long UPLOAD_RETRY_MIN_MS  = 5000UL;
 static const unsigned long UPLOAD_RETRY_MAX_MS  = 300000UL; // 5 min cap
+
+// ---- reliability -----------------------------------------------------------
+static const unsigned long WDT_TIMEOUT_MS = 15000UL;  // task watchdog: reboot if the loop stalls
+static const unsigned long I2C_HEALTH_MS  = 2000UL;   // ToF bus-canary ping cadence
+static const uint16_t      I2C_TIMEOUT_MS = 50;       // Wire transaction timeout (never hang)
 
 // ---- haptics (GPIO 2 → NPN/MOSFET → motor on 5V; 3.3V GPIO drives base/gate) --
 #define HAPTIC_USE_PWM  0     // 0 = steady HIGH on "on" steps (try 1 + ~150 Hz if weak)
