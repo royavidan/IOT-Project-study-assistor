@@ -5,6 +5,7 @@
 // ============================================================================
 #include <Arduino.h>
 #include <time.h>
+#include "config.h"
 
 // Device state machine (see StateMachine + the Tactile Interaction Model doc).
 enum SysState {
@@ -47,6 +48,15 @@ struct SessionLogEntry {
 
 #define SESSION_LOG_MAX 16
 
+// One in-session telemetry sample (Story 8/10), kept in RAM for live upload.
+struct Sample {
+  uint16_t t;        // seconds since session start
+  uint8_t  fle;      // Focus Load Estimate 0..100 at time t
+  float    noise;    // normalized 0..1
+  float    tempC;    // NAN if no temp sensor
+  float    lightLux;
+};
+
 // In-progress session snapshot for NVS resume after power loss.
 struct SessionCheckpoint {
   SysState sysState;     // ST_RUNNING or ST_PAUSED
@@ -60,15 +70,14 @@ struct SessionCheckpoint {
   uint8_t  setCycleTotal;
   uint8_t  setFocusDone;
   uint8_t  setActive;
-};
-
-// One in-session telemetry sample (Story 8/10), kept in RAM for live upload.
-struct Sample {
-  uint16_t t;        // seconds since session start
-  uint8_t  fle;      // Focus Load Estimate 0..100 at time t
-  float    noise;    // normalized 0..1
-  float    tempC;    // NAN if no temp sensor
-  float    lightLux;
+  // Env sample tail (last CHECKPOINT_TAIL_MAX samples + aggregates for finish()).
+  uint8_t  sampleCount;  // total samples taken so far (informational; RAM holds tail only)
+  uint8_t  tailCount;    // samples in tail[]
+  Sample   tail[CHECKPOINT_TAIL_MAX];
+  float    noiseSum;
+  float    noisePeak;
+  uint16_t noiseN;
+  uint32_t lastSampleMs; // millis() at save; reset on cold boot resume
 };
 
 // Completed-session summary (mirrors SessionPayload in focus-load.ts).

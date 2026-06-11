@@ -305,7 +305,23 @@ bool bufferSession(const SessionRecord& r) {
 
 int bufferedCount() { return prefs.getUShort("bufN", 0); }
 
+bool uploadQueueDropped() { return prefs.getBool("uqDrop", false); }
+
+void setUploadQueueDropped(bool v) {
+  if (prefs.getBool("uqDrop", false) != v) prefs.putBool("uqDrop", v);
+}
+
+void clearUploadQueueDropped() { setUploadQueueDropped(false); }
+
 #pragma pack(push, 1)
+struct StoredSample {
+  uint16_t t;
+  uint8_t  fle;
+  float    noise;
+  float    tempC;
+  float    lightLux;
+};
+
 struct StoredCheckpoint {
   uint16_t magic;
   uint8_t  version;
@@ -320,11 +336,37 @@ struct StoredCheckpoint {
   uint8_t  setCycleTotal;
   uint8_t  setFocusDone;
   uint8_t  setActive;
+  uint8_t  sampleCount;
+  uint8_t  tailCount;
+  StoredSample tail[CHECKPOINT_TAIL_MAX];
+  float    noiseSum;
+  float    noisePeak;
+  uint16_t noiseN;
+  uint32_t lastSampleMs;
 };
 #pragma pack(pop)
 
 static const uint16_t CK_MAGIC = 0x4D42;
-static const uint8_t  CK_VER   = 2;
+static const uint8_t  CK_VER   = 3;
+static const size_t   CK_V2_SIZE = 26;  // StoredCheckpoint through setActive (v1/v2)
+
+static void copyStoredTail(SessionCheckpoint& cp, const StoredCheckpoint& s) {
+  cp.sampleCount = s.sampleCount;
+  uint8_t n = s.tailCount;
+  if (n > CHECKPOINT_TAIL_MAX) n = CHECKPOINT_TAIL_MAX;
+  cp.tailCount = n;
+  for (int i = 0; i < n; i++) {
+    cp.tail[i].t = s.tail[i].t;
+    cp.tail[i].fle = s.tail[i].fle;
+    cp.tail[i].noise = s.tail[i].noise;
+    cp.tail[i].tempC = s.tail[i].tempC;
+    cp.tail[i].lightLux = s.tail[i].lightLux;
+  }
+  cp.noiseSum = s.noiseSum;
+  cp.noisePeak = s.noisePeak;
+  cp.noiseN = s.noiseN;
+  cp.lastSampleMs = s.lastSampleMs;
+}
 
 void saveCheckpoint(const SessionCheckpoint& cp) {
   StoredCheckpoint s = {};
@@ -341,16 +383,31 @@ void saveCheckpoint(const SessionCheckpoint& cp) {
   s.setCycleTotal = cp.setCycleTotal;
   s.setFocusDone  = cp.setFocusDone;
   s.setActive     = cp.setActive;
+  s.sampleCount  = cp.sampleCount;
+  s.tailCount    = cp.tailCount;
+  if (s.tailCount > CHECKPOINT_TAIL_MAX) s.tailCount = CHECKPOINT_TAIL_MAX;
+  for (int i = 0; i < s.tailCount; i++) {
+    s.tail[i].t = cp.tail[i].t;
+    s.tail[i].fle = cp.tail[i].fle;
+    s.tail[i].noise = cp.tail[i].noise;
+    s.tail[i].tempC = cp.tail[i].tempC;
+    s.tail[i].lightLux = cp.tail[i].lightLux;
+  }
+  s.noiseSum = cp.noiseSum;
+  s.noisePeak = cp.noisePeak;
+  s.noiseN = cp.noiseN;
+  s.lastSampleMs = cp.lastSampleMs;
   prefs.putBytes("ckpt", &s, sizeof(s));
   prefs.putBool("ckActive", true);
 }
 
 bool loadCheckpoint(SessionCheckpoint& cp) {
   if (!prefs.getBool("ckActive", false)) return false;
-  StoredCheckpoint s;
-  if (prefs.getBytes("ckpt", &s, sizeof(s)) != sizeof(s)) return false;
+  StoredCheckpoint s = {};
+  size_t got = prefs.getBytes("ckpt", &s, sizeof(s));
+  if (got < CK_V2_SIZE) return false;
   if (s.magic != CK_MAGIC) return false;
-  if (s.version != CK_VER && s.version != 1) return false;
+  if (s.version != CK_VER && s.version != 2 && s.version != 1) return false;
   if (s.sysState != ST_RUNNING && s.sysState != ST_PAUSED) return false;
   cp.sysState     = (SysState)s.sysState;
   cp.mode         = (Mode)s.mode;
@@ -369,10 +426,66 @@ bool loadCheckpoint(SessionCheckpoint& cp) {
     cp.setFocusDone  = 0;
     cp.setActive     = 1;
   }
+  cp.sampleCount = 0;
+  cp.tailCount = 0;
+  cp.noiseSum = 0;
+  cp.noisePeak = 0;
+  cp.noiseN = 0;
+  cp.lastSampleMs = 0;
+  if (s.version >= 3 && got >= sizeof(s))
+    copyStoredTail(cp, s);
   return true;
 }
 
 void clearCheckpoint() { prefs.putBool("ckActive", false); }
 bool hasCheckpoint()   { return prefs.getBool("ckActive", false); }
+
+static bool validNoiseScale(float v)   { return v >= 100.0f && v <= 20000.0f; }
+static bool validLightLuxScale(float v) { return v >= 50.0f && v <= 10000.0f; }
+static bool validLightVarScale(float v) { return v >= 50.0f && v <= 20000.0f; }
+static bool validTempOffset(float v)    { return v >= -15.0f && v <= 15.0f; }
+
+float noiseFullScale() {
+  return prefs.getFloat("noiseScale", NOISE_FULL_SCALE_DEFAULT);
+}
+
+void setNoiseFullScale(float v) {
+  if (!validNoiseScale(v)) return;
+  prefs.putFloat("noiseScale", v);
+}
+
+float lightLuxScale() {
+  return prefs.getFloat("lightLux", LIGHT_LUX_SCALE_DEFAULT);
+}
+
+void setLightLuxScale(float v) {
+  if (!validLightLuxScale(v)) return;
+  prefs.putFloat("lightLux", v);
+}
+
+float lightVarScale() {
+  return prefs.getFloat("lightVar", LIGHT_VAR_SCALE_DEFAULT);
+}
+
+void setLightVarScale(float v) {
+  if (!validLightVarScale(v)) return;
+  prefs.putFloat("lightVar", v);
+}
+
+float tempOffsetC() {
+  return prefs.getFloat("tempOff", TEMP_OFFSET_DEFAULT);
+}
+
+void setTempOffsetC(float v) {
+  if (!validTempOffset(v)) return;
+  prefs.putFloat("tempOff", v);
+}
+
+void resetSensorCalibration() {
+  prefs.putFloat("noiseScale", NOISE_FULL_SCALE_DEFAULT);
+  prefs.putFloat("lightLux",   LIGHT_LUX_SCALE_DEFAULT);
+  prefs.putFloat("lightVar",   LIGHT_VAR_SCALE_DEFAULT);
+  prefs.putFloat("tempOff",    TEMP_OFFSET_DEFAULT);
+}
 
 } // namespace Storage

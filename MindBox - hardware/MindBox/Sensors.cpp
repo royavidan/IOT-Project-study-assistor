@@ -1,6 +1,22 @@
 #include "Sensors.h"
+#include "Storage.h"
 #include "config.h"
 #include <Wire.h>
+
+#if HAS_TEMP
+#include <DHT.h>
+static DHT s_dht(PIN_DHT11, DHT11);
+static float    s_tempC = NAN;
+static bool     s_tempOk = false;
+static uint32_t s_lastDhtRead = 0;
+#endif
+
+#if HAS_LIGHT
+static float    s_lux = 0;
+static float    s_lightVar = 0;
+static int      s_lMin = 4095, s_lMax = 0;
+static uint32_t s_lWin = 0;
+#endif
 
 #if HAS_PRESENCE
 #include <Adafruit_VL53L1X.h>
@@ -16,11 +32,74 @@ static bool     s_wasPresent = true;
 static uint32_t s_absentAt = 0;
 static bool     s_fault = false;
 
+static float s_noiseScale = NOISE_FULL_SCALE_DEFAULT;
+static float s_lightLuxScale = LIGHT_LUX_SCALE_DEFAULT;
+static float s_lightVarScale = LIGHT_VAR_SCALE_DEFAULT;
+
+#if HAS_TEMP
+static bool refreshDht(bool force) {
+  uint32_t now = millis();
+  if (!force && now - s_lastDhtRead < DHT_READ_INTERVAL_MS) return s_tempOk;
+  s_lastDhtRead = now;
+  float t = s_dht.readTemperature();
+  if (isnan(t)) {
+    s_tempOk = false;
+    return false;
+  }
+  t += Storage::tempOffsetC();
+  if (t < TEMP_MIN_VALID || t > TEMP_MAX_VALID) {
+    s_tempOk = false;
+    return false;
+  }
+  s_tempC = t;
+  s_tempOk = true;
+  return true;
+}
+#endif
+
+#if HAS_LIGHT
+static float clamp01f(float v) {
+  if (v < 0) return 0;
+  if (v > 1) return 1;
+  return v;
+}
+
+static void refreshLightWindow() {
+  int raw = analogRead(PIN_LIGHT_ADC);
+  if (raw < s_lMin) s_lMin = raw;
+  if (raw > s_lMax) s_lMax = raw;
+  if (millis() - s_lWin >= 1000) {
+    int mid = (s_lMin + s_lMax) / 2;
+    s_lux = (float)mid / 4095.0f * s_lightLuxScale;
+    float pp = (float)(s_lMax - s_lMin);
+    s_lightVar = clamp01f(pp / s_lightVarScale);
+    s_lMin = 4095;
+    s_lMax = 0;
+    s_lWin = millis();
+  }
+}
+#endif
+
 namespace Sensors {
+
+void reloadCalibration() {
+  s_noiseScale = Storage::noiseFullScale();
+  s_lightLuxScale = Storage::lightLuxScale();
+  s_lightVarScale = Storage::lightVarScale();
+}
 
 void init() {
   analogReadResolution(12);
+  reloadCalibration();
   s_nWin = millis();
+#if HAS_LIGHT
+  s_lWin = millis();
+#endif
+#if HAS_TEMP
+  s_dht.begin();
+  delay(100);
+  refreshDht(true);
+#endif
 #if HAS_PRESENCE
   if (vl53.begin(0x29, &Wire)) {
     vl53.VL53L1X_SetDistanceMode(2);   // long range
@@ -39,15 +118,29 @@ void tick() {
   if (v < s_nMin) s_nMin = v;
   if (v > s_nMax) s_nMax = v;
   if (millis() - s_nWin >= 1000) {
-    float pp = (s_nMax - s_nMin) / NOISE_FULL_SCALE;
+    float pp = (s_nMax - s_nMin) / s_noiseScale;
     s_noise = pp < 0 ? 0 : (pp > 1 ? 1 : pp);
     s_nMin = 4095; s_nMax = 0; s_nWin = millis();
   }
+
+#if HAS_LIGHT
+  refreshLightWindow();
+#endif
+
+#if HAS_TEMP
+  if (millis() >= SENSOR_WARMUP_MS)
+    refreshDht(false);
+#endif
+
 #if HAS_PRESENCE
-  if (s_tofPresent && vl53.dataReady()) {
-    int16_t d = vl53.distance();
-    vl53.clearInterrupt();
-    if (d > 0) s_lastDist = d;
+  static uint32_t s_lastTofPoll = 0;
+  if (s_tofPresent && millis() - s_lastTofPoll >= TOF_POLL_MS) {
+    s_lastTofPoll = millis();
+    if (vl53.dataReady()) {
+      int16_t d = vl53.distance();
+      vl53.clearInterrupt();
+      if (d > 0) s_lastDist = d;
+    }
   }
 #endif
   // track presence transitions for the auto-pause timer
@@ -68,7 +161,7 @@ float noiseProbe(uint16_t windowMs) {
     if (v < mn) mn = v;
     if (v > mx) mx = v;
   }
-  float pp = (mx - mn) / NOISE_FULL_SCALE;
+  float pp = (mx - mn) / s_noiseScale;
   return pp < 0 ? 0 : (pp > 1 ? 1 : pp);
 }
 
@@ -87,9 +180,16 @@ unsigned long absentForMs() { return present() ? 0 : (millis() - s_absentAt); }
 
 bool readTemp(float& c) {
 #if HAS_TEMP
-  // TODO: read sensor, then Story-18 clamp:
-  //   if (c < TEMP_MIN_VALID || c > TEMP_MAX_VALID) return false;
-  c = NAN; return false;
+  if (millis() < SENSOR_WARMUP_MS) {
+    c = NAN;
+    return false;
+  }
+  if (!refreshDht(true)) {
+    c = NAN;
+    return false;
+  }
+  c = s_tempC;
+  return true;
 #else
   c = NAN; return false;
 #endif
@@ -97,7 +197,9 @@ bool readTemp(float& c) {
 
 bool readLight(float& lux, float& variance) {
 #if HAS_LIGHT
-  lux = 0; variance = 0; return false;        // TODO: e.g. BH1750
+  lux = s_lux;
+  variance = s_lightVar;
+  return true;
 #else
   lux = 0; variance = 0; return false;
 #endif
@@ -123,8 +225,16 @@ SensorHealth health() {
   h.tofPresent     = false;
   h.tofOk          = false;
 #endif
-  h.lightPresent   = HAS_LIGHT;
-  h.tempPresent    = HAS_TEMP;
+#if HAS_LIGHT
+  h.lightPresent   = true;
+#else
+  h.lightPresent   = false;
+#endif
+#if HAS_TEMP
+  h.tempPresent    = s_tempOk;
+#else
+  h.tempPresent    = false;
+#endif
   h.batteryPresent = HAS_BATTERY;
   return h;
 }
@@ -139,8 +249,20 @@ String healthJson() {
   s += "absent";
 #endif
   s += "\",";
-  s += "\"light\":\""; s += (HAS_LIGHT ? "ok" : "absent"); s += "\",";
-  s += "\"temp\":\"";  s += (HAS_TEMP  ? "ok" : "absent"); s += "\"}";
+  s += "\"light\":\"";
+#if HAS_LIGHT
+  s += "ok";
+#else
+  s += "absent";
+#endif
+  s += "\",";
+  s += "\"temp\":\"";
+#if HAS_TEMP
+  s += s_tempOk ? "ok" : "invalid";
+#else
+  s += "absent";
+#endif
+  s += "\"}";
   return s;
 }
 

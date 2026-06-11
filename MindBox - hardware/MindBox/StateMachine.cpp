@@ -8,8 +8,10 @@
 #include "LedRing.h"
 #include "Storage.h"
 #include "Cloud.h"
+#include "UploadQueue.h"
 #include "Menu.h"
 #include "Payload.h"
+#include <ESP.h>
 
 static SysState     s_state = ST_BOOTING;
 static Mode         s_mode  = MODE_WORK;
@@ -36,6 +38,30 @@ static int          s_setFocusDone = 0;
 
 static PauseReason  s_pauseReason = PAUSE_MANUAL;
 static uint32_t     s_lastCoachAt = 0;
+static int          s_lastDispSec = -1;
+static bool         s_lastCoachUi = false;
+
+static bool runningScreenChanged() {
+  int sec = Session::remainingSec();
+  bool coach = s_cfg.adaptiveCoaching && s_cfg.coachingNudgeScreen
+               && s_mode == MODE_WORK
+               && Session::lastFle() > FLE_ADAPTIVE_BREAK;
+  bool changed = sec != s_lastDispSec || coach != s_lastCoachUi;
+  s_lastDispSec = sec;
+  s_lastCoachUi = coach;
+  return changed;
+}
+
+static unsigned long renderPeriodMs() {
+  return 200;
+}
+
+static bool shouldRender(uint32_t now) {
+  if (s_uiDirty) return true;
+  // Running timer: redraw only when runningScreenChanged marks dirty (1 Hz).
+  if (s_state == ST_RUNNING && !Menu::runningActive()) return false;
+  return now - s_lastRender > renderPeriodMs();
+}
 
 static int activeDur() {
   return s_mode == MODE_WORK ? s_workDur : s_breakDur;
@@ -51,6 +77,7 @@ static void enter(SysState s) {
 
 static void enterPaused(PauseReason reason) {
   s_pauseReason = reason;
+  Session::pauseClock();
   enter(ST_PAUSED);
 }
 
@@ -100,16 +127,22 @@ static void saveCheckpointNow() {
 static bool persistSession(const char* status) {
   time_t endE = Cloud::haveClock() ? Cloud::nowEpoch() : 0;
   uint32_t seq = Storage::nextSeq();
+  const int sampleN = Session::sampleCount();
   SessionRecord r = Session::finish(status, endE, seq);
+  // One JSON build — queue first (LittleFS), then NVS stats (single heap peak).
+  String json = Payload::sessionJson(r, Session::samples(), sampleN,
+                                       Storage::deviceId().c_str());
+  UploadQueue::enqueueJson(seq, json);
+  json = String();   // release heap before NVS writes
   bool goalHit = Storage::bufferSession(r);
-  Storage::setLiveFocusSec(0);              // avoid the transient today double-count
+  Storage::setLiveFocusSec(0);
   Storage::setWorkDuration(s_workDur);
   Storage::setBreakDuration(s_breakDur);
   Storage::clearCheckpoint();
-  // Part A: emit the exact upload JSON (contract check; Part B/C consume this shape).
-  Serial.println(Payload::sessionJson(r, Session::samples(), Session::sampleCount(),
-                                      Storage::deviceId().c_str()));
-  Cloud::uploadSession(r, Session::samples(), Session::sampleCount());
+  Serial.printf("[session] %s focus=%ds samples=%d heap=%u pending=%d\n",
+                status, r.actualFocusSec, sampleN, ESP.getFreeHeap(),
+                UploadQueue::pendingCount());
+  Cloud::kickUpload();
   return goalHit;
 }
 
@@ -130,11 +163,20 @@ static void startSet() {
   s_setCycleTotal = s_cycleCount;
 }
 
+static unsigned long sessionSamplePeriodMs() {
+  if (s_mode == MODE_BREAK) return SAMPLE_PERIOD_BREAK_MS;
+  if (s_cfg.adaptiveCoaching) return SAMPLE_PERIOD_COACHING_MS;
+  return SAMPLE_PERIOD_MS;
+}
+
 static void startSessionMode(Mode m, int durMin) {
   s_mode = m;
   s_lastCoachAt = 0;
+  s_lastDispSec = -1;
+  s_lastCoachUi = false;
   time_t st = Cloud::haveClock() ? Cloud::nowEpoch() : 0;
   Session::start(m, durMin, st);
+  Session::setSamplePeriodMs(sessionSamplePeriodMs());
   saveCheckpointNow();
   Haptics::tap();
   enter(ST_RUNNING);
@@ -218,6 +260,7 @@ static void onTimerComplete() {
 
 static void resumeFromCheckpoint() {
   Session::restore(s_resumeCp);
+  Session::alignSampleTimer();
   s_mode = s_resumeCp.mode;
   s_setActive = s_resumeCp.setActive != 0;
   s_setCycleTotal = s_resumeCp.setCycleTotal > 0 ? s_resumeCp.setCycleTotal : s_cycleCount;
@@ -228,7 +271,7 @@ static void resumeFromCheckpoint() {
     Haptics::pause();
     enter(ST_PAUSED);
   } else {
-    Session::markResumed();
+    Session::resumeClock();
     Haptics::resume();
     enter(ST_RUNNING);
   }
@@ -245,12 +288,6 @@ static void discardCheckpoint() {
   if (goalHit && s_cfg.hapticsEnabled) Haptics::complete();
   else Haptics::reset();
   enter(ST_IDLE);
-}
-
-static void maybeCheckpoint(uint32_t now) {
-  if (s_state != ST_RUNNING && s_state != ST_PAUSED) return;
-  if (now - s_lastCheckpoint >= CHECKPOINT_PERIOD_MS)
-    saveCheckpointNow();
 }
 
 static void tickAdaptiveCoaching(uint32_t now) {
@@ -278,7 +315,7 @@ static void handleMenuAction(MenuAction a) {
     case MENU_ENTER_PAIRING:  enterPairing(); break;
     case MENU_ENTER_DIAGNOSTICS: enter(ST_DIAG); break;
     case MENU_RESUME_SESSION:
-      Session::markResumed();
+      Session::resumeClock();
       saveCheckpointNow();
       Haptics::resume();
       enter(ST_RUNNING);
@@ -312,16 +349,29 @@ static void handleMenuAction(MenuAction a) {
 
 static void renderDiag() {
   char l[24];
+  float lux = 0, lvar = 0, tempC = NAN;
+  Sensors::readLight(lux, lvar);
+  Sensors::readTemp(tempC);
   Display::clear();
   Display::center("DIAGNOSTICS", 0, 1);
-  snprintf(l, sizeof(l), "OLED: %s", Display::driverName());           Display::text(0, 14, 1, l);
+  snprintf(l, sizeof(l), "OLED: %s", Display::driverName());           Display::text(0, 12, 1, l);
   SensorHealth h = Sensors::health();
-  snprintf(l, sizeof(l), "ToF: %s %dmm", h.tofPresent ? "ok" : "--", Sensors::presenceMm());
-  Display::text(0, 26, 1, l);
-  snprintf(l, sizeof(l), "Mic: %d%%", (int)(Sensors::noise() * 100));  Display::text(0, 38, 1, l);
-  snprintf(l, sizeof(l), "Btn:%s r=%d", Inputs::sideFault() ? "ERR"
-             : (Inputs::sidePressed() ? "DN" : "up"), Inputs::sideRaw());
-  Display::text(0, 50, 1, l);
+  snprintf(l, sizeof(l), "ToF:%s %dmm", h.tofPresent ? "ok" : "--", Sensors::presenceMm());
+  Display::text(0, 22, 1, l);
+  snprintf(l, sizeof(l), "Mic:%d%%", (int)(Sensors::noise() * 100));   Display::text(0, 32, 1, l);
+#if HAS_LIGHT
+  snprintf(l, sizeof(l), "Lgt:%d", (int)lux);                         Display::text(0, 42, 1, l);
+#endif
+#if HAS_TEMP
+  if (h.tempPresent)
+    snprintf(l, sizeof(l), "Tmp:%dC", (int)tempC);
+  else
+    snprintf(l, sizeof(l), "Tmp:--");
+  Display::text(64, 42, 1, l);
+#endif
+  snprintf(l, sizeof(l), "Btn:%s", Inputs::sideFault() ? "ERR"
+             : (Inputs::sidePressed() ? "DN" : "up"));
+  Display::text(0, 52, 1, l);
   Display::show();
 }
 
@@ -365,8 +415,9 @@ void tick() {
   uint32_t now = millis();
   bool warm = (now - s_bootAt) > SENSOR_WARMUP_MS;
 
-  // Config downlink: pull the owner's settings periodically; apply only on change.
-  if (Cloud::online() && now - s_lastCfgFetch > CONFIG_FETCH_MS) {
+  // Config downlink: defer while a session is active — HTTP blocks up to 8 s.
+  if (Cloud::online() && now - s_lastCfgFetch > CONFIG_FETCH_MS &&
+      s_state != ST_RUNNING && s_state != ST_PAUSED) {
     s_lastCfgFetch = now;
     DeviceConfig c = s_cfg;
     if (Cloud::fetchConfig(c) && memcmp(&c, &s_cfg, sizeof(c)) != 0) applyConfig(c);
@@ -401,7 +452,6 @@ void tick() {
     }
 
     case ST_RUNNING:
-      maybeCheckpoint(now);
       if (Sensors::faulted()) { enter(ST_ERROR); break; }
       if (Menu::runningActive()) {
         if (btn == 2) { beginEnd("aborted"); Menu::runningDismiss(); break; }
@@ -420,20 +470,21 @@ void tick() {
         enterPaused(PAUSE_AWAY);
         break;
       }
+      Session::setSamplePeriodMs(sessionSamplePeriodMs());
       Session::tick(Sensors::present());
       tickAdaptiveCoaching(now);
       if (Session::finished()) {
+        Session::pauseClock();
         onTimerComplete();
         break;
       }
-      s_uiDirty = true;
+      if (runningScreenChanged()) s_uiDirty = true;
       break;
 
     case ST_PAUSED:
-      maybeCheckpoint(now);
       if (btn == 2) { beginEnd("interrupted"); break; }
       if (s_pauseReason == PAUSE_AWAY && Sensors::present()) {
-        Session::markResumed();
+        Session::resumeClock();
         saveCheckpointNow();
         Haptics::resume();
         enter(ST_RUNNING);
@@ -462,7 +513,6 @@ void tick() {
           enter(ST_IDLE);
         }
       }
-      s_uiDirty = true;
       break;
 
     case ST_PAIRING:
@@ -481,7 +531,7 @@ void tick() {
     default: break;
   }
 
-  if (s_uiDirty || now - s_lastRender > 200) {
+  if (shouldRender(now)) {
     if (s_state == ST_DIAG) {
       renderDiag();
     } else if (s_state == ST_IDLE) {

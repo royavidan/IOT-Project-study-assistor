@@ -55,4 +55,20 @@ namespace Storage {
   void     syncDayBoundary();
 
   int  bufferedCount();
+
+  // Upload-queue overflow flag (single NVS namespace — do not open a second Preferences).
+  bool uploadQueueDropped();
+  void setUploadQueueDropped(bool v);
+  void clearUploadQueueDropped();
+
+  // Per-desk sensor calibration (NVS; adjust over serial — Diagnostics 'c' command).
+  float noiseFullScale();
+  void  setNoiseFullScale(float v);
+  float lightLuxScale();
+  void  setLightLuxScale(float v);
+  float lightVarScale();
+  void  setLightVarScale(float v);
+  float tempOffsetC();
+  void  setTempOffsetC(float v);
+  void  resetSensorCalibration();
 }

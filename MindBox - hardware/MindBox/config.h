@@ -12,8 +12,8 @@
 #define USE_SPDT_TOGGLE 0   // physical Work/Break switch on GPIO 32
 #define HAS_PRESENCE    1   // VL53L1X ToF (validated by Unit Tests/lazer)
 #define HAS_LED_RING    0   // WS2812B ring (not present yet)
-#define HAS_LIGHT       0   // light sensor (not chosen/tested yet)
-#define HAS_TEMP        0   // temperature sensor (not chosen/tested yet)
+#define HAS_LIGHT       1   // Keyes KY-018 photoresistor (AO -> ADC)
+#define HAS_TEMP        1   // DHT11 temp/humidity (DATA on GPIO 26)
 #define HAS_BATTERY     0   // LiPo divider on an ADC pin (not present yet)
 #define ENABLE_WIFI     1   // Wi-Fi join + NTP (provision over serial: 'w')
 #define ENABLE_CLOUD    1   // requires ENABLE_WIFI; ingest upload + config pull
@@ -32,9 +32,11 @@
 // it shares the onboard blue LED and motor drive will stay weak. Use GPIO 25.
 #define PIN_HAPTIC    25
 #define PIN_MIC       34    // GY-MAX9814 OUT, ADC1 (input-only)
+#define PIN_DHT11     26    // DHT11 DATA (needs 4.7k–10k pull-up to 3V3)
+#define PIN_LIGHT_ADC 35    // KY-018 AO, ADC1 (input-only)
 #define PIN_SPDT      32    // optional Work/Break toggle
 #define PIN_LED_RING   5    // WS2812B data (TODO confirm; needs 5V + 470R + 1000uF)
-// #define PIN_BATTERY_ADC 35
+#define PIN_BATTERY_ADC 36  // LiPo divider when HAS_BATTERY=1 (GPIO 35 = KY-018)
 
 // ---- LED ring --------------------------------------------------------------
 #define LED_COUNT 16
@@ -58,19 +60,30 @@ static const int           GOAL_STEP_MIN      = 30;
 static const int           GOAL_DEFAULT_MIN   = 180;
 static const unsigned long SETUP_TIMEOUT_MS   = 12000UL;  // setup/armed idle -> IDLE
 static const unsigned long SENSOR_WARMUP_MS   = 5000UL;   // Story 18: ignore reads post-boot
-static const unsigned long SAMPLE_PERIOD_MS   = 60000UL;  // Story 8/10: 1-min samples
-static const unsigned long CHECKPOINT_PERIOD_MS = 30000UL; // NVS save while session active
+static const unsigned long SAMPLE_PERIOD_MS          = 60000UL;   // WORK, coaching off
+static const unsigned long SAMPLE_PERIOD_COACHING_MS = 30000UL; // WORK, adaptive coaching on
+static const unsigned long SAMPLE_PERIOD_BREAK_MS    = 120000UL; // BREAK blocks
+// Checkpoints are saved on pause/resume/start/end — not on a timer (avoids flash stalls).
 static const int           PRESENCE_NEAR_MM   = 700;      // <= this == "at the desk"
 static const unsigned long PRESENCE_PAUSE_MS  = 30000UL;  // absent this long -> PAUSE
 static const unsigned long PRESENCE_END_MS    = 300000UL; // absent 5 min -> auto-end
-static const float         NOISE_FULL_SCALE   = 2000.0f;  // ADC peak-to-peak -> 1.0 (tune)
+// Sensor calibration defaults (overridable at runtime via NVS — serial 'c' command).
+static const float         NOISE_FULL_SCALE_DEFAULT = 2000.0f;  // mic ADC p-p -> 1.0
+static const float         LIGHT_LUX_SCALE_DEFAULT  = 1000.0f;  // KY-018 ADC -> lux estimate
+static const float         LIGHT_VAR_SCALE_DEFAULT  = 2000.0f;  // light ADC p-p -> FLE variance
+static const float         TEMP_OFFSET_DEFAULT      = 0.0f;     // DHT11 bias correction (°C)
+static const unsigned long DHT_READ_INTERVAL_MS = 2000UL; // DHT11 minimum between reads
 static const int           FLE_PRESENCE_CAP   = 5;        // matches focus-load.ts
 static const int           FLE_ADAPTIVE_BREAK = 75;       // Story 16 threshold
 static const unsigned long COACHING_COOLDOWN_MS = 300000UL; // 5 min between nudges
 static const int           MAX_SAMPLES        = 240;      // ~4h at 1/min
+#define CHECKPOINT_TAIL_MAX 10                  // last N env samples in NVS checkpoint
 static const float         TEMP_MIN_VALID     = -20.0f;   // Story 18 clamp range
 static const float         TEMP_MAX_VALID     = 60.0f;
 static const unsigned long TELEMETRY_PERIOD_MS = 15000UL;
+static const unsigned long SESSION_CLOCK_MS    = 10UL;     // esp_timer tick for countdown
+static const unsigned long TOF_POLL_MS         = 100UL;    // VL53L1X read interval
+static const unsigned long WIFI_STATUS_CACHE_MS = 1000UL;  // throttle WiFi.status()
 
 // ---- connectivity (ENABLE_WIFI / ENABLE_CLOUD) -----------------------------
 // CLOUD_USE_TLS pulls in WiFiClientSecure/mbedtls — a very heavy compile that can
@@ -81,6 +94,12 @@ static const unsigned long TELEMETRY_PERIOD_MS = 15000UL;
 static const unsigned long CONFIG_FETCH_MS = 60000UL;    // pull settings every 60 s when online
 static const unsigned long WIFI_RETRY_MS   = 15000UL;    // reconnect attempt cadence
 static const int           HTTP_TIMEOUT_MS = 8000;       // per request
+
+// ---- upload queue (LittleFS Part B) ----------------------------------------
+// Requires a partition scheme with SPIFFS/LittleFS (Arduino IDE: Tools → Partition Scheme).
+static const int           UPLOAD_QUEUE_MAX     = 12;    // drop-oldest when full
+static const unsigned long UPLOAD_RETRY_MIN_MS  = 5000UL;
+static const unsigned long UPLOAD_RETRY_MAX_MS  = 300000UL; // 5 min cap
 
 // ---- haptics (GPIO 2 → NPN/MOSFET → motor on 5V; 3.3V GPIO drives base/gate) --
 #define HAPTIC_USE_PWM  0     // 0 = steady HIGH on "on" steps (try 1 + ~150 Hz if weak)

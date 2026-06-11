@@ -2,6 +2,8 @@
 #include "config.h"
 #include "Storage.h"
 #include "Payload.h"
+#include "UploadQueue.h"
+#include <ESP.h>
 
 #if ENABLE_WIFI
 #include <WiFi.h>
@@ -18,6 +20,17 @@
 static String   s_ssid, s_pass, s_baseUrl, s_secret;
 static bool     s_ntpStarted = false;
 static uint32_t s_lastWifiTry = 0;
+static bool     s_cachedOnline = false;
+static uint32_t s_lastOnlineCheck = 0;
+
+static bool refreshOnlineCache() {
+  uint32_t now = millis();
+  if (now - s_lastOnlineCheck >= WIFI_STATUS_CACHE_MS) {
+    s_lastOnlineCheck = now;
+    s_cachedOnline = (WiFi.status() == WL_CONNECTED);
+  }
+  return s_cachedOnline;
+}
 
 static void loadCreds() {
   s_ssid    = Storage::wifiSsid();
@@ -80,6 +93,43 @@ static long jInt(const String& b, const char* key, long def) {
   if (p < 0) return def;
   return strtol(b.c_str() + p, nullptr, 10);
 }
+
+static bool     s_uploadSoon = false;
+static bool     s_uploadAuthFail = false;
+static bool     s_wasOnline = false;
+static uint32_t s_lastUploadTry = 0;
+static uint32_t s_uploadBackoffMs = UPLOAD_RETRY_MIN_MS;
+
+static void drainUploadQueue() {
+  if (s_uploadAuthFail) return;
+  if (!Cloud::online() || UploadQueue::pendingCount() == 0) return;
+  if (!s_uploadSoon && millis() - s_lastUploadTry < s_uploadBackoffMs) return;
+
+  s_lastUploadTry = millis();
+  String json;
+  if (!UploadQueue::readOldest(json)) return;
+
+  String body = "[";
+  body += json;
+  body += "]";
+  String resp;
+  int code = httpRequest("POST", s_baseUrl + "/ingest/sessions", body, resp);
+  if (code == 200) {
+    UploadQueue::removeOldest();
+    s_uploadBackoffMs = UPLOAD_RETRY_MIN_MS;
+    int left = UploadQueue::pendingCount();
+    s_uploadSoon = left > 0;
+    Serial.printf("[cloud] uploaded session (pending=%d heap=%u)\n", left, ESP.getFreeHeap());
+  } else if (code == 401) {
+    s_uploadAuthFail = true;
+    Serial.println("[cloud] upload auth failed — fix DEVICE_INGEST_SECRET");
+  } else {
+    Serial.printf("[cloud] upload failed (%d): %s\n", code, resp.c_str());
+    if (s_uploadBackoffMs < UPLOAD_RETRY_MAX_MS)
+      s_uploadBackoffMs = min(s_uploadBackoffMs * 2, UPLOAD_RETRY_MAX_MS);
+    s_uploadSoon = false;
+  }
+}
 #endif // ENABLE_CLOUD
 
 namespace Cloud {
@@ -93,23 +143,43 @@ void begin() {
 #endif
 }
 
-void tick() {
+void tick(SysState sysState) {
+  const bool sessionActive =
+    sysState == ST_RUNNING || sysState == ST_PAUSED;
 #if ENABLE_WIFI
-  if (s_ssid.length() && WiFi.status() != WL_CONNECTED &&
-      millis() - s_lastWifiTry > WIFI_RETRY_MS) {
-    s_lastWifiTry = millis();
-    WiFi.begin(s_ssid.c_str(), s_pass.c_str());
+  if (sessionActive) {
+    refreshOnlineCache();
+  } else {
+    if (s_ssid.length() && !refreshOnlineCache() &&
+        millis() - s_lastWifiTry > WIFI_RETRY_MS) {
+      s_lastWifiTry = millis();
+      WiFi.begin(s_ssid.c_str(), s_pass.c_str());
+    }
+    if (refreshOnlineCache() && !s_ntpStarted) {
+      configTime(0, 0, NTP_SERVER);
+      s_ntpStarted = true;
+    }
+#if ENABLE_CLOUD
+    bool nowOnline = s_cachedOnline;
+    if (nowOnline && !s_wasOnline) {
+      s_uploadBackoffMs = UPLOAD_RETRY_MIN_MS;
+      s_uploadSoon = true;
+    }
+    s_wasOnline = nowOnline;
+#endif
   }
-  if (WiFi.status() == WL_CONNECTED && !s_ntpStarted) {
-    configTime(0, 0, NTP_SERVER);   // UTC; ISO timestamps are built in UTC
-    s_ntpStarted = true;
-  }
+#endif
+#if ENABLE_CLOUD
+  if (!sessionActive)
+    drainUploadQueue();
+#else
+  (void)sysState;
 #endif
 }
 
 bool online() {
 #if ENABLE_WIFI
-  return WiFi.status() == WL_CONNECTED;
+  return refreshOnlineCache();
 #else
   return false;
 #endif
@@ -161,18 +231,30 @@ void sendTelemetry(const TelemetryModel& t, const String& healthJson) {
 
 bool uploadSession(const SessionRecord& r, const Sample* samples, int n) {
 #if ENABLE_CLOUD
-  if (!online()) return false;
-  String body = "[";
-  body += Payload::sessionJson(r, samples, n, Storage::deviceId().c_str());
-  body += "]";
-  String resp;
-  int code = httpRequest("POST", s_baseUrl + "/ingest/sessions", body, resp);
-  if (code != 200)
-    Serial.printf("[cloud] upload failed (%d): %s\n", code, resp.c_str());
-  return code == 200;
+  String json = Payload::sessionJson(r, samples, n, Storage::deviceId().c_str());
+  if (!UploadQueue::enqueueJson(r.clientSeq, json)) return false;
+  kickUpload();
+  return true;
 #else
   (void)r; (void)samples; (void)n;
   return false;
+#endif
+}
+
+bool uploadSessionJson(uint32_t clientSeq, const String& json) {
+#if ENABLE_CLOUD
+  if (!UploadQueue::enqueueJson(clientSeq, json)) return false;
+  kickUpload();
+  return true;
+#else
+  (void)clientSeq; (void)json;
+  return false;
+#endif
+}
+
+void kickUpload() {
+#if ENABLE_CLOUD
+  s_uploadSoon = true;
 #endif
 }
 
@@ -248,6 +330,10 @@ void provisionFromSerial() {
 
   loadCreds();
   s_ntpStarted = false;
+#if ENABLE_CLOUD
+  s_uploadAuthFail = false;
+  s_uploadSoon = true;
+#endif
   WiFi.disconnect();
   if (s_ssid.length()) WiFi.begin(s_ssid.c_str(), s_pass.c_str());
   Serial.println("Saved. Connecting to Wi-Fi...");

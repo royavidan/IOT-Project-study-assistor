@@ -2,14 +2,14 @@
 // ============================================================================
 // Sensors — environment + presence inputs behind one interface.
 //   Active:  microphone (noise), VL53L1X ToF (presence).
-//   Stubbed: temperature, light, battery — return false/absent until present,
-//            so the rest of the firmware already calls them. Add a part by
-//            filling its read function and flipping the flag in config.h.
+//   Active:  DHT11 (temp), KY-018 photoresistor (light lux + variance).
+//   Stubbed: battery — return false/absent until present.
 // ============================================================================
 #include "types.h"
 
 namespace Sensors {
   void init();
+  void reloadCalibration();    // refresh NVS scale factors (after serial 'c' adjust)
   void tick();                 // sample mic (~1Hz) + refresh presence distance
 
   float noise();               // normalized 0..1 (rolling, updated ~1Hz)
