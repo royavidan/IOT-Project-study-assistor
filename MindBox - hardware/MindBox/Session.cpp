@@ -2,6 +2,7 @@
 #include "config.h"
 #include "focus_load.h"
 #include "Sensors.h"
+#include <math.h>
 
 static uint32_t s_targetSec = 0;
 static int32_t  s_remainingMs = 0;
@@ -115,14 +116,31 @@ SessionRecord finish(const char* status, time_t endEpoch, uint32_t seq) {
   r.endedAt   = endEpoch;
   r.targetSec = s_targetSec;
   r.actualFocusSec = s_actualMs / 1000;
+  if (r.startedAt == 0 && r.endedAt > 0)
+    r.startedAt = r.endedAt - r.actualFocusSec;   // backfill if NTP synced mid-session
   r.mode = s_mode;
   r.status = status;
   r.breaks = s_breaks;
   r.presenceInterruptions = s_presInt;
+
+  // Aggregate the env + FLE averages from the per-minute samples (not a one-off
+  // recompute). tempC stays NaN when there is no temp sensor; lightLux averages
+  // 0 until a light sensor exists. focusLoadAvg is the mean of sampled FLEs.
+  long fleSum = 0;
+  double tempSum = 0;  int tempN = 0;
+  double luxSum = 0;
+  for (int i = 0; i < s_count; i++) {
+    fleSum += s_samples[i].fle;
+    if (!isnan(s_samples[i].tempC)) { tempSum += s_samples[i].tempC; tempN++; }
+    luxSum += s_samples[i].lightLux;
+  }
   r.noiseAvg  = s_noiseN ? s_noiseSum / s_noiseN : 0;
   r.noisePeak = s_noisePeak;
-  r.tempC = NAN; r.lightLux = 0;
-  r.focusLoadAvg = FocusLoad::compute(r.actualFocusSec, s_targetSec, r.noiseAvg, 0, s_presInt);
+  r.tempC     = tempN ? (float)(tempSum / tempN) : NAN;
+  r.lightLux  = s_count ? (float)(luxSum / s_count) : 0;
+  r.focusLoadAvg = s_count
+      ? (int)((fleSum + s_count / 2) / s_count)   // rounded mean of sampled FLE
+      : FocusLoad::compute(r.actualFocusSec, s_targetSec, r.noiseAvg, 0, s_presInt);
   return r;
 }
 

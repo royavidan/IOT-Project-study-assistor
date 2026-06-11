@@ -26,6 +26,12 @@ namespace Storage {
   bool paired();
   void setPaired(bool p);
 
+  // Provisioning (entered over serial, persisted in NVS).
+  String wifiSsid();     void setWifiSsid(const String& s);
+  String wifiPass();     void setWifiPass(const String& s);
+  String appBaseUrl();   void setAppBaseUrl(const String& s);
+  String deviceSecret(); void setDeviceSecret(const String& s);
+
   void saveSessionLog(const SessionRecord& r);
   SessionLogEntry lastSessionLog();
   bool            sessionLogAt(int index, SessionLogEntry& out); // 0 = newest

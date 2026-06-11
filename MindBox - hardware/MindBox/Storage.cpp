@@ -3,6 +3,20 @@
 #include <Preferences.h>
 #include <time.h>
 
+// Optional compile-time defaults (Wi-Fi / app URL / secret / device id).
+#if defined(__has_include)
+#  if __has_include("SECRETS.h")
+#    include "SECRETS.h"
+#  endif
+#endif
+#ifndef SECRET_WIFI_SSID
+#  define SECRET_WIFI_SSID ""
+#  define SECRET_WIFI_PASS ""
+#  define SECRET_APP_BASE_URL ""
+#  define SECRET_DEVICE_SECRET ""
+#  define SECRET_DEVICE_ID ""
+#endif
+
 static Preferences prefs;
 static uint32_t    s_liveFocusSec = 0;
 
@@ -95,6 +109,12 @@ static String makeId() {
   return String(b);
 }
 
+// Seed an NVS credential from SECRETS.h only if it's set and not already stored
+// (so a value entered later via serial 'w' persists over the compile-time default).
+static void seedCred(const char* key, const char* val) {
+  if (strlen(val) && prefs.getString(key, "").length() == 0) prefs.putString(key, val);
+}
+
 static void migrateDurations() {
   if (prefs.isKey("workDur")) return;
   int legacy = prefs.getInt("lastDur", DUR_DEFAULT_MIN);
@@ -106,7 +126,12 @@ namespace Storage {
 
 void begin() {
   prefs.begin("mindbox", false);
-  if (prefs.getString("devId", "").length() == 0) prefs.putString("devId", makeId());
+  if (prefs.getString("devId", "").length() == 0)
+    prefs.putString("devId", strlen(SECRET_DEVICE_ID) ? String(SECRET_DEVICE_ID) : makeId());
+  seedCred("wSsid",     SECRET_WIFI_SSID);
+  seedCred("wPass",     SECRET_WIFI_PASS);
+  seedCred("appUrl",    SECRET_APP_BASE_URL);
+  seedCred("devSecret", SECRET_DEVICE_SECRET);
   migrateDurations();
   migrateSessionLog();
   syncDayBoundary();
@@ -159,7 +184,16 @@ void saveConfig(const DeviceConfig& c) {
 }
 
 bool paired()          { return prefs.getBool("paired", false); }
-void setPaired(bool p) { prefs.putBool("paired", p); }
+void setPaired(bool p) { if (prefs.getBool("paired", false) != p) prefs.putBool("paired", p); }
+
+String wifiSsid()                      { return prefs.getString("wSsid", ""); }
+void   setWifiSsid(const String& s)    { prefs.putString("wSsid", s); }
+String wifiPass()                      { return prefs.getString("wPass", ""); }
+void   setWifiPass(const String& s)    { prefs.putString("wPass", s); }
+String appBaseUrl()                    { return prefs.getString("appUrl", ""); }
+void   setAppBaseUrl(const String& s)  { prefs.putString("appUrl", s); }
+String deviceSecret()                  { return prefs.getString("devSecret", ""); }
+void   setDeviceSecret(const String& s){ prefs.putString("devSecret", s); }
 
 void saveSessionLog(const SessionRecord& r) {
   SessionLogEntry ring[SESSION_LOG_MAX];

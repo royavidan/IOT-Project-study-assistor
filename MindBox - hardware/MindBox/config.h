@@ -15,8 +15,8 @@
 #define HAS_LIGHT       0   // light sensor (not chosen/tested yet)
 #define HAS_TEMP        0   // temperature sensor (not chosen/tested yet)
 #define HAS_BATTERY     0   // LiPo divider on an ADC pin (not present yet)
-#define ENABLE_WIFI     0   // Wi-Fi join + NTP (offline-first until ready)
-#define ENABLE_CLOUD    0   // requires ENABLE_WIFI; ingest upload + config pull
+#define ENABLE_WIFI     1   // Wi-Fi join + NTP (provision over serial: 'w')
+#define ENABLE_CLOUD    1   // requires ENABLE_WIFI; ingest upload + config pull
 
 // ---- pin map (single source of truth) -------------------------------------
 #define PIN_ENC_CLK   18    // KY-040 A
@@ -71,6 +71,16 @@ static const int           MAX_SAMPLES        = 240;      // ~4h at 1/min
 static const float         TEMP_MIN_VALID     = -20.0f;   // Story 18 clamp range
 static const float         TEMP_MAX_VALID     = 60.0f;
 static const unsigned long TELEMETRY_PERIOD_MS = 15000UL;
+
+// ---- connectivity (ENABLE_WIFI / ENABLE_CLOUD) -----------------------------
+// CLOUD_USE_TLS pulls in WiFiClientSecure/mbedtls — a very heavy compile that can
+// exhaust the host toolchain's memory. Leave 0 for an http dev server; set to 1
+// only when the app is served over https (and expect a slower build).
+#define CLOUD_USE_TLS 0
+#define NTP_SERVER "pool.ntp.org"
+static const unsigned long CONFIG_FETCH_MS = 60000UL;    // pull settings every 60 s when online
+static const unsigned long WIFI_RETRY_MS   = 15000UL;    // reconnect attempt cadence
+static const int           HTTP_TIMEOUT_MS = 8000;       // per request
 
 // ---- haptics (GPIO 2 → NPN/MOSFET → motor on 5V; 3.3V GPIO drives base/gate) --
 #define HAPTIC_USE_PWM  0     // 0 = steady HIGH on "on" steps (try 1 + ~150 Hz if weak)

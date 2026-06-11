@@ -8,7 +8,7 @@
 
 // Device state machine (see StateMachine + the Tactile Interaction Model doc).
 enum SysState {
-  ST_BOOTING, ST_IDLE, ST_SETUP, ST_ARMED, ST_RUNNING,
+  ST_BOOTING, ST_IDLE, ST_RUNNING,
   ST_PAUSED, ST_COMPLETE, ST_LOGGING, ST_ERROR, ST_PAIRING, ST_DIAG,
   ST_RESUME, ST_CYCLE_OFFER
 };

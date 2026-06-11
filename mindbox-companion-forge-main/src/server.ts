@@ -43,7 +43,12 @@ export default {
       // Device ingestion endpoints (ESP32 / simulator). These are plain HTTP
       // POST routes that bypass the app router and use the service-role client.
       const url = new URL(request.url);
-      if (url.pathname === "/ingest/sessions" || url.pathname === "/ingest/telemetry") {
+      if (
+        url.pathname === "/ingest/sessions" ||
+        url.pathname === "/ingest/telemetry" ||
+        url.pathname === "/ingest/pairing" ||
+        url.pathname === "/ingest/config"
+      ) {
         const { handleIngestRequest } = await import("./lib/ingest/ingest.server");
         return await handleIngestRequest(request, url);
       }

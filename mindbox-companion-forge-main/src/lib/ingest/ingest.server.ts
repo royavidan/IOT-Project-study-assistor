@@ -74,6 +74,11 @@ const telemetrySchema = z.object({
   firmwareVersion: z.string().min(1),
 });
 
+const pairingSchema = z.object({
+  deviceId: z.string().min(1),
+  code: z.string().regex(/^\d{6}$/),
+});
+
 type SessionInput = z.infer<typeof sessionSchema>;
 
 async function handleSessions(request: Request): Promise<Response> {
@@ -242,20 +247,121 @@ async function handleTelemetry(request: Request): Promise<Response> {
 }
 
 /**
+ * Device-driven pairing (real hardware): the box mints a 6-digit code, posts it
+ * here, and shows it on its OLED. The /device page then claims it. Mirrors the
+ * dev-only createTestPairingCode server function, but authed by the shared secret.
+ */
+async function handlePairing(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON body." }, 400);
+  }
+  const parsed = pairingSchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ error: "Invalid pairing payload.", details: parsed.error.issues }, 400);
+  }
+  const { deviceId, code } = parsed.data;
+  const admin = getSupabaseAdminClient();
+
+  const ensure = await admin
+    .from("devices")
+    .upsert({ id: deviceId }, { onConflict: "id", ignoreDuplicates: true });
+  if (ensure.error) {
+    return json({ error: `Failed ensuring device: ${ensure.error.message}` }, 500);
+  }
+
+  const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+  const { error } = await admin
+    .from("device_pairing_codes")
+    .upsert({ code, device_id: deviceId, expires_at: expiresAt, used: false }, { onConflict: "code" });
+  if (error) {
+    return json({ error: `Failed to store pairing code: ${error.message}` }, 500);
+  }
+  return json({ ok: true, expiresAt }, 200);
+}
+
+/** "HH:MM[:SS]" -> minutes-from-midnight; 65535 = unset (matches firmware 0xFFFF). */
+function timeToMinutes(t: unknown): number {
+  if (typeof t !== "string" || t.length < 4) return 65535;
+  const [h, m] = t.split(":").map((n) => Number.parseInt(n, 10));
+  if (Number.isNaN(h) || Number.isNaN(m)) return 65535;
+  return h * 60 + m;
+}
+
+/**
+ * Config downlink: the box GETs the owning user's settings (the site -> box
+ * channel). Unclaimed devices get safe defaults. Resolves the owner via the
+ * service-role client, so it works without the device having a user session.
+ */
+async function handleConfig(url: URL): Promise<Response> {
+  const deviceId = url.searchParams.get("deviceId");
+  if (!deviceId) return json({ error: "deviceId is required." }, 400);
+  const admin = getSupabaseAdminClient();
+
+  const { data: device, error: devError } = await admin
+    .from("devices")
+    .select("owner_user_id")
+    .eq("id", deviceId)
+    .maybeSingle();
+  if (devError) return json({ error: devError.message }, 500);
+
+  const owner = (device as { owner_user_id: string | null } | null)?.owner_user_id ?? null;
+  if (!owner) {
+    return json(
+      {
+        paired: false, showTimer: true, hapticsEnabled: true, adaptiveCoaching: false,
+        nudgesEnabled: true, quietStartMin: 65535, quietEndMin: 65535, dailyGoalMin: 180,
+      },
+      200,
+    );
+  }
+
+  const [settingsRes, profileRes] = await Promise.all([
+    admin.from("user_settings").select("*").eq("user_id", owner).maybeSingle(),
+    admin.from("profiles").select("daily_goal_min").eq("id", owner).maybeSingle(),
+  ]);
+  const s = (settingsRes.data ?? {}) as Record<string, unknown>;
+  const p = (profileRes.data ?? {}) as { daily_goal_min?: number };
+
+  return json(
+    {
+      paired: true,
+      showTimer: (s.device_show_timer as boolean | undefined) ?? true,
+      hapticsEnabled: (s.haptics_enabled as boolean | undefined) ?? true,
+      adaptiveCoaching: (s.adaptive_coaching_enabled as boolean | undefined) ?? false,
+      nudgesEnabled: (s.notifications_enabled as boolean | undefined) ?? true,
+      quietStartMin: timeToMinutes(s.quiet_hours_start),
+      quietEndMin: timeToMinutes(s.quiet_hours_end),
+      dailyGoalMin: p.daily_goal_min ?? 180,
+    },
+    200,
+  );
+}
+
+/**
  * Entry point for device ingestion. Called from src/server.ts for `/ingest/*`.
  * Always returns JSON and never throws.
  */
 export async function handleIngestRequest(request: Request, url: URL): Promise<Response> {
   try {
-    if (request.method !== "POST") {
-      return json({ error: "Method not allowed." }, 405);
-    }
     if (!isAuthorized(request)) {
       return json({ error: "Invalid or missing x-device-secret." }, 401);
     }
 
+    // Config is the only GET route.
+    if (url.pathname === "/ingest/config") {
+      if (request.method !== "GET") return json({ error: "Method not allowed." }, 405);
+      return await handleConfig(url);
+    }
+
+    if (request.method !== "POST") {
+      return json({ error: "Method not allowed." }, 405);
+    }
     if (url.pathname === "/ingest/sessions") return await handleSessions(request);
     if (url.pathname === "/ingest/telemetry") return await handleTelemetry(request);
+    if (url.pathname === "/ingest/pairing") return await handlePairing(request);
     return json({ error: "Not found." }, 404);
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Ingestion failed." }, 500);

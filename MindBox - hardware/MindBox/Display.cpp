@@ -118,17 +118,6 @@ static void sPairing(const UiModel& m) {
   center("side: ok  hold: back", 56, 1);
   show();
 }
-static void sSetup(const UiModel& m) {
-  clear(); center("set duration", 2, 1);
-  char b[8]; snprintf(b, sizeof(b), "%d", m.durationMin); center(b, 18, 3);
-  center("minutes", 44, 1);
-  bar(14, 54, 100, 8, (float)(m.durationMin - DUR_MIN_MIN) / (DUR_MAX_MIN - DUR_MIN_MIN));
-  show();
-}
-static void sArmed(const UiModel& m) {
-  clear(); center("READY", 6, 2); center(modeName(m.mode), 28, 1);
-  center("press button to start", 46, 1); show();
-}
 static void sRunning(const UiModel& m) {
   if (!m.showTimer && !m.coachingNudge) { clear(); show(); return; }
   int s = m.remainingSec < 0 ? 0 : m.remainingSec;
@@ -190,8 +179,6 @@ void render(const UiModel& m) {
   switch (m.state) {
     case ST_BOOTING:  clear(); center("MindBox", 18, 2); center("starting...", 44, 1); show(); break;
     case ST_IDLE:     /* Menu::renderMenu */ break;
-    case ST_SETUP:    sSetup(m);    break;
-    case ST_ARMED:    sArmed(m);    break;
     case ST_RUNNING:  sRunning(m);  break;
     case ST_PAUSED:   sPaused(m);   break;
     case ST_COMPLETE: sComplete(m); break;
@@ -199,6 +186,7 @@ void render(const UiModel& m) {
     case ST_ERROR:    clear(); center("SENSOR FAULT", 12, 1); center("long-press to reset", 40, 1); show(); break;
     case ST_PAIRING:  sPairing(m);  break;
     case ST_DIAG:     /* drawn by StateMachine::renderDiag() */ break;
+    default:          break;   // ST_RESUME / ST_CYCLE_OFFER render via Menu upstream
   }
 }
 

@@ -22,6 +22,10 @@ namespace Cloud {
 
   void sendTelemetry(const TelemetryModel& t, const String& healthJson);
   bool uploadSession(const SessionRecord& r, const Sample* samples, int n);
-  bool fetchConfig(DeviceConfig& out);          // config downlink
+  bool fetchConfig(DeviceConfig& cfg);          // config downlink (overlays cfg)
   void publishPairingCode(const char* code);
+
+  // Serial-guided provisioning ('w' in Diagnostics): Wi-Fi SSID/pass + app URL +
+  // device secret, saved to NVS. Captive portal can replace this later.
+  void provisionFromSerial();
 }

@@ -18,6 +18,7 @@ each part small enough for one person to own, test, and replace.
 | `Sensors` | mic, ToF; temp/light/battery (**stubs**) | config | 8, 9, 10, 17, 18 |
 | `Storage` | NVS: device id, last duration, config, session buffer | types | 4, 7 |
 | `Cloud` | Wi-Fi + ingest upload + **config downlink** (**stub**) | types | 4, 5, 8, 11, 12 |
+| `Payload` | device→cloud JSON serializer (`SessionPayload`) | types | 5, 8, 10 |
 | `Session` | countdown, sampling, FLE, `SessionRecord` | Sensors, focus_load | 5, 8, 10 |
 | `StateMachine` | session lifecycle + orchestration | all of the above | 1, 9, 16 |
 | `Menu` | pointer menus (rotate=cursor, click=select) | Inputs, Display, Storage | 1, 3 |
@@ -95,6 +96,31 @@ ERROR   -> IDLE (side long-press)
   noise, ToF, Wi-Fi, buffered count); `d` for a single dump; `h` for help.
 - **On the box:** Device → Diagnostics in the pointer menu (OLED driver, ToF,
   mic level, Wi-Fi, firmware version). Side button exits.
+
+## Sync model & sampling policy (offline-first; Parts A–C)
+
+Save locally first, upload when Wi-Fi is available — never block a session on the network.
+
+- **`slog` (NVS):** 16 compact entries for the on-OLED stats/history (the working set).
+- **Upload queue (LittleFS, Part B):** the durable backlog — full `SessionRecord` +
+  `Sample[]` per pending session. Cap ~12 sessions; drop-oldest on overflow with a diag flag.
+  NVS is too small (~20 KB) to hold 40 KB+ of sample payloads, so the queue lives on the FS.
+- **`Payload::sessionJson()`** is the single canonical upload shape — it matches
+  `src/lib/focus-load.ts` (`SessionPayload`) and the Zod schema in
+  `src/lib/ingest/ingest.server.ts`. Every completed session prints this JSON to serial
+  today (Part A contract check); Part C POSTs it to `/ingest/sessions`.
+
+Sampling policy (target intervals, wired in Part D):
+
+| State | Interval |
+|-------|----------|
+| WORK, coaching off | 60 s |
+| WORK, coaching on  | 30 s |
+| BREAK              | 120 s or off |
+| PAUSED            | off |
+
+Env aggregates (`focusLoadAvg`, `noiseAvg`/`noisePeak`, `tempC`, `lightLux`) are averaged
+from `Sample[]` in `Session::finish()` — not a one-off recompute.
 
 ## Status of parts (2026-06-11)
 

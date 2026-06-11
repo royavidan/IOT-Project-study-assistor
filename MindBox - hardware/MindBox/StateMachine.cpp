@@ -9,6 +9,7 @@
 #include "Storage.h"
 #include "Cloud.h"
 #include "Menu.h"
+#include "Payload.h"
 
 static SysState     s_state = ST_BOOTING;
 static Mode         s_mode  = MODE_WORK;
@@ -18,6 +19,7 @@ static int          s_cycleCount = CYCLE_DEFAULT;
 static DeviceConfig s_cfg   = defaultConfig();
 static uint32_t     s_stateAt = 0, s_lastRender = 0, s_bootAt = 0;
 static uint32_t     s_lastCheckpoint = 0;
+static uint32_t     s_lastCfgFetch = 0;
 static bool         s_uiDirty = true;
 static String       s_devShort;
 static char         s_pairCode[7] = {0};
@@ -100,9 +102,13 @@ static bool persistSession(const char* status) {
   uint32_t seq = Storage::nextSeq();
   SessionRecord r = Session::finish(status, endE, seq);
   bool goalHit = Storage::bufferSession(r);
+  Storage::setLiveFocusSec(0);              // avoid the transient today double-count
   Storage::setWorkDuration(s_workDur);
   Storage::setBreakDuration(s_breakDur);
   Storage::clearCheckpoint();
+  // Part A: emit the exact upload JSON (contract check; Part B/C consume this shape).
+  Serial.println(Payload::sessionJson(r, Session::samples(), Session::sampleCount(),
+                                      Storage::deviceId().c_str()));
   Cloud::uploadSession(r, Session::samples(), Session::sampleCount());
   return goalHit;
 }
@@ -152,6 +158,9 @@ static void scheduleCycleOffer(Mode completedMode) {
 }
 
 static void updateTodayLiveFocus() {
+  static uint32_t last = 0;
+  if (millis() - last < 1000) return;   // throttle: this hits NVS, was running ~200x/s
+  last = millis();
   Storage::syncDayBoundary();
   uint32_t live = 0;
   if (s_state == ST_RUNNING || s_state == ST_PAUSED) {
@@ -330,8 +339,8 @@ void init() {
   int dash = full.indexOf('-');
   s_devShort = (dash >= 0) ? full.substring(dash + 1) : full;
   Menu::begin(&s_mode, &s_workDur, &s_breakDur, &s_cycleCount, &s_cfg);
-  DeviceConfig fromCloud;
-  if (Cloud::fetchConfig(fromCloud)) applyConfig(fromCloud);
+  // Overlay the owner's cloud settings onto the loaded config (no-op offline).
+  if (Cloud::fetchConfig(s_cfg)) applyConfig(s_cfg);
 
   if (Storage::loadCheckpoint(s_resumeCp)) {
     int remainSec = (int)(s_resumeCp.remainingMs / 1000);
@@ -355,6 +364,14 @@ void tick() {
 #endif
   uint32_t now = millis();
   bool warm = (now - s_bootAt) > SENSOR_WARMUP_MS;
+
+  // Config downlink: pull the owner's settings periodically; apply only on change.
+  if (Cloud::online() && now - s_lastCfgFetch > CONFIG_FETCH_MS) {
+    s_lastCfgFetch = now;
+    DeviceConfig c = s_cfg;
+    if (Cloud::fetchConfig(c) && memcmp(&c, &s_cfg, sizeof(c)) != 0) applyConfig(c);
+  }
+
   unsigned long pauseMs = presencePauseMs(s_cfg);
   unsigned long endMs   = presenceEndMs(s_cfg);
 

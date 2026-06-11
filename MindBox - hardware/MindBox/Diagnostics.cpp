@@ -16,8 +16,6 @@ static const char* stName(SysState s) {
   switch (s) {
     case ST_BOOTING:  return "BOOT";
     case ST_IDLE:     return "IDLE";
-    case ST_SETUP:    return "SETUP";
-    case ST_ARMED:    return "ARMED";
     case ST_RUNNING:  return "RUNNING";
     case ST_PAUSED:   return "PAUSED";
     case ST_COMPLETE: return "COMPLETE";
@@ -102,7 +100,7 @@ void selfTest() {
   Serial.println();
   if (Inputs::sideFault())
     Serial.println("         6x6x3.6 tact: use opposite-corner pins, not same-side pair.");
-  Serial.println("commands : m=monitor  b=btn test  d=dump  h=help");
+  Serial.println("commands : m=monitor  b=btn test  w=wifi setup  d=dump  h=help");
   Serial.println("===========================");
 }
 
@@ -115,7 +113,8 @@ void tick() {
     if      (c == 'm') setMonitor(!s_monitor);
     else if (c == 'b') buttonLiveTest();
     else if (c == 'd') dump();
-    else if (c == 'h') Serial.println("[diag] m=monitor  b=8s btn test  d=dump  h=help");
+    else if (c == 'w') Cloud::provisionFromSerial();
+    else if (c == 'h') Serial.println("[diag] m=monitor  b=btn test  w=wifi setup  d=dump  h=help");
   }
   if (s_monitor && millis() - s_lastMon > 1000) { s_lastMon = millis(); dump(); }
 }
