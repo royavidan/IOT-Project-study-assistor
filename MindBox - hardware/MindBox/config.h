@@ -80,7 +80,7 @@ static const int           MAX_SAMPLES        = 240;      // ~4h at 1/min
 #define CHECKPOINT_TAIL_MAX 10                  // last N env samples in NVS checkpoint
 static const float         TEMP_MIN_VALID     = -20.0f;   // Story 18 clamp range
 static const float         TEMP_MAX_VALID     = 60.0f;
-static const unsigned long TELEMETRY_PERIOD_MS = 15000UL;
+static const unsigned long TELEMETRY_PERIOD_MS = 30000UL;  // each POST briefly blocks; keep it sparse
 static const unsigned long SESSION_CLOCK_MS    = 10UL;     // esp_timer tick for countdown
 static const unsigned long TOF_POLL_MS         = 100UL;    // VL53L1X read interval
 static const unsigned long WIFI_STATUS_CACHE_MS = 1000UL;  // throttle WiFi.status()
@@ -93,7 +93,12 @@ static const unsigned long WIFI_STATUS_CACHE_MS = 1000UL;  // throttle WiFi.stat
 #define NTP_SERVER "pool.ntp.org"
 static const unsigned long CONFIG_FETCH_MS = 60000UL;    // pull settings every 60 s when online
 static const unsigned long WIFI_RETRY_MS   = 15000UL;    // reconnect attempt cadence
-static const int           HTTP_TIMEOUT_MS = 8000;       // per request
+// HTTP is synchronous on the main loop, so a stalled request freezes the UI.
+// Keep these tight and back off after a failure so an unreachable server can't
+// repeatedly stall the loop.
+static const int           HTTP_TIMEOUT_MS = 3000;       // read timeout per request
+static const int           HTTP_CONNECT_TIMEOUT_MS = 1500; // cap the hang to an unreachable host
+static const unsigned long NET_FAIL_BACKOFF_MS = 30000UL;  // after connect/timeout fail, skip HTTP this long
 
 // ---- upload queue (LittleFS Part B) ----------------------------------------
 // Requires a partition scheme with SPIFFS/LittleFS (Arduino IDE: Tools → Partition Scheme).

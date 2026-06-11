@@ -40,7 +40,7 @@ void setup() {
   delay(200);
 
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
-  Wire.setClock(100000);
+  Wire.setClock(400000);   // 400 kHz fast-mode: ~4x faster OLED redraw (was 100 kHz)
 
   Storage::begin();
   Display::init();

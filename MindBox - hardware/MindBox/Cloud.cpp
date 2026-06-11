@@ -45,9 +45,12 @@ static void loadCreds() {
 // Single HTTP entry. Returns the status code (>0) or a negative error.
 // `respBody` is filled on a real response. Handles http:// and https:// (TLS
 // is accepted without cert pinning — fine for a coursework/LAN dev server).
+static uint32_t s_netSuspendUntil = 0;   // skip HTTP until this time after a connect/timeout failure
+
 static int httpRequest(const char* method, const String& url,
                        const String& body, String& respBody) {
   if (s_baseUrl.length() == 0 || s_secret.length() == 0) return -1;
+  if ((int32_t)(millis() - s_netSuspendUntil) < 0) return -99;  // backing off an unreachable server
   HTTPClient http;
   WiFiClient plain;
   bool https = url.startsWith("https:");
@@ -61,11 +64,13 @@ static int httpRequest(const char* method, const String& url,
   ok = http.begin(plain, url);
 #endif
   if (!ok) return -2;
+  http.setConnectTimeout(HTTP_CONNECT_TIMEOUT_MS);   // cap the hang on an unreachable host
   http.setTimeout(HTTP_TIMEOUT_MS);
   http.addHeader("content-type", "application/json");
   http.addHeader("x-device-secret", s_secret);
   int code = (strcmp(method, "POST") == 0) ? http.POST(body) : http.GET();
-  if (code > 0) respBody = http.getString();
+  if (code > 0) { respBody = http.getString(); s_netSuspendUntil = 0; }
+  else s_netSuspendUntil = millis() + NET_FAIL_BACKOFF_MS;  // unreachable -> stop hammering the loop
   http.end();
   return code;
 }

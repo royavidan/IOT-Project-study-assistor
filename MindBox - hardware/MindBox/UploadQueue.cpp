@@ -80,9 +80,14 @@ static void removeTmpFiles() {
   for (File f = root.openNextFile(); f; f = root.openNextFile()) {
     if (f.isDirectory()) continue;
     const char* name = f.name();
-    size_t len = strlen(name);
-    if (len > 4 && strcmp(name + len - 4, ".tmp") == 0)
-      LittleFS.remove(name);
+    const char* base = strrchr(name, '/');
+    base = base ? base + 1 : name;                 // core 3.x name() = basename
+    size_t len = strlen(base);
+    if (len > 4 && strcmp(base + len - 4, ".tmp") == 0) {
+      char full[40];
+      snprintf(full, sizeof(full), "%s/%s", UPLOAD_DIR, base);
+      LittleFS.remove(full);                        // remove needs the full path
+    }
   }
 }
 
