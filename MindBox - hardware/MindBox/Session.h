@@ -21,10 +21,16 @@ namespace Session {
   int  targetSec();
   int  actualFocusSec();
   int  actualFocusMin();
+  int  breaks();
+  int  presenceInterruptions();
   int  lastFle();              // most recent sampled estimate (Story 16)
 
   const Sample* samples();
   int  sampleCount();
 
   SessionRecord finish(const char* status, time_t endEpoch, uint32_t seq);
+
+  void restore(const SessionCheckpoint& cp);
+  SessionCheckpoint snapshot(SysState sysState);
+  Mode mode();
 }

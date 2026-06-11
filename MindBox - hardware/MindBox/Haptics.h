@@ -15,9 +15,11 @@ namespace Haptics {
   void stopAll();
 
   void tap();       // confirm / start          (1 short)
-  void click();     // +5 min detent            (1 very short)
+  void click();     // menu detent              (1 very short)
+  void enableTest(); // settings: haptics ON confirmation pulse
+  void testPulse();  // settings: Test motor (always fires, for wiring check)
   void pause();     // presence-loss / break    (2 short)
   void resume();    // presence-return          (1 long)
-  void complete();  // timer end                (alert)
+  void complete();  // timer end                (strong alert)
   void reset();     // long-press reset
 }

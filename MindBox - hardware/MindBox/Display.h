@@ -12,6 +12,7 @@ namespace Display {
   const char* driverName();    // "SH1106" | "SSD1306" | "none"
 
   void render(const UiModel& m);   // draw the screen for the current state
+  void renderMenu(const MenuView& m);  // pointer menu lists + duration editor
 
   // low-level primitives (also used by the diagnostics screen)
   void clear();

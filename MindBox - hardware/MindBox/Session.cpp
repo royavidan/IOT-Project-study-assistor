@@ -62,10 +62,44 @@ int remainingSec()   { int s = s_remainingMs / 1000; return s < 0 ? 0 : s; }
 int targetSec()      { return s_targetSec; }
 int actualFocusSec() { return s_actualMs / 1000; }
 int actualFocusMin() { return s_actualMs / 60000; }
+int breaks()               { return s_breaks; }
+int presenceInterruptions(){ return s_presInt; }
 int lastFle()        { return s_lastFle; }
 
 const Sample* samples() { return s_samples; }
 int sampleCount()       { return s_count; }
+
+void restore(const SessionCheckpoint& cp) {
+  s_mode = cp.mode;
+  s_targetSec = cp.targetSec;
+  s_remainingMs = cp.remainingMs;
+  s_actualMs = cp.actualMs;
+  s_lastTick = millis();
+  s_startEpoch = cp.startEpoch;
+  s_breaks = cp.breaks;
+  s_presInt = cp.presInt;
+  s_count = 0;
+  s_lastSample = millis();
+  s_noiseSum = 0;
+  s_noisePeak = 0;
+  s_noiseN = 0;
+  s_lastFle = 0;
+}
+
+SessionCheckpoint snapshot(SysState sysState) {
+  SessionCheckpoint cp = {};
+  cp.sysState = sysState;
+  cp.mode = s_mode;
+  cp.remainingMs = s_remainingMs;
+  cp.actualMs = s_actualMs;
+  cp.targetSec = s_targetSec;
+  cp.breaks = (uint8_t)s_breaks;
+  cp.presInt = (uint8_t)s_presInt;
+  cp.startEpoch = s_startEpoch;
+  return cp;
+}
+
+Mode mode() { return s_mode; }
 
 SessionRecord finish(const char* status, time_t endEpoch, uint32_t seq) {
   SessionRecord r = {};

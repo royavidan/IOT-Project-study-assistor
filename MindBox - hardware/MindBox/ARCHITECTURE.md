@@ -19,7 +19,8 @@ each part small enough for one person to own, test, and replace.
 | `Storage` | NVS: device id, last duration, config, session buffer | types | 4, 7 |
 | `Cloud` | Wi-Fi + ingest upload + **config downlink** (**stub**) | types | 4, 5, 8, 11, 12 |
 | `Session` | countdown, sampling, FLE, `SessionRecord` | Sensors, focus_load | 5, 8, 10 |
-| `StateMachine` | the brain: state diagram + orchestration | all of the above | 1, 9, 16 |
+| `StateMachine` | session lifecycle + orchestration | all of the above | 1, 9, 16 |
+| `Menu` | pointer menus (rotate=cursor, click=select) | Inputs, Display, Storage | 1, 3 |
 | `Diagnostics` | serial self-test + live monitor | Sensors, Session, StateMachine, Cloud | 15 |
 | `MindBox.ino` | `setup()` wiring + `loop()` ticks | all modules | — |
 
@@ -27,7 +28,8 @@ each part small enough for one person to own, test, and replace.
 
 ```
 MindBox.ino
-   └─ StateMachine ─┬─ Inputs ─ Sensors ─ Session ─ focus_load
+   └─ StateMachine ─┬─ Menu ─ Inputs
+                    ├─ Sensors ─ Session ─ focus_load
                     ├─ Display ─ LedRing ─ Haptics
                     └─ Storage ─ Cloud
    └─ Diagnostics ──> (reads StateMachine / Session / Sensors / Cloud)
@@ -45,21 +47,45 @@ state machine. `Diagnostics` only *reads* other modules.
 - **Go online:** set `ENABLE_WIFI`/`ENABLE_CLOUD` = 1, implement the `Cloud.cpp`
   TODOs (captive portal, NTP, the four HTTP calls). Payload shapes: copy
   `mindbox-companion-forge-main/scripts/simulator.ts`.
-- **Change a screen:** edit only `Display.cpp`.
-- **Re-map a control / add a state:** edit only `StateMachine.cpp` (+ `SysState`).
+- **Change a menu or session screen:** edit `Menu.cpp` and/or `Display.cpp`.
+- **Re-map a control / add a menu item:** edit `Menu.cpp` (+ `StateMachine.cpp` if it starts a session).
 
-## State diagram (implemented in `StateMachine.cpp`)
+## Pointer menu (IDLE home — `Menu.cpp` + `Display::renderMenu`)
+
+When idle, the OLED shows a scrollable list with a `>` cursor:
 
 ```
-BOOTING -> IDLE
-IDLE    -> SETUP (rotate)  | cycle mode (knob click) | DIAG (long-press)
-SETUP   -> ARMED (knob click) | IDLE (timeout)
-ARMED   -> RUNNING (button) | SETUP (rotate) | cycle mode (knob click)
-RUNNING -> PAUSED (button short / presence lost)
-        -> COMPLETE (timer 0) | IDLE-abort (button long) | ERROR (fault)
-PAUSED  -> RUNNING (button / presence back) | end (long absence / button long)
-COMPLETE-> LOGGING -> IDLE
-DIAG    -> IDLE (any button)     ERROR -> IDLE (long-press)
+> Start
+  Mode            WORK
+  Duration        25 min
+  Settings
+  (Device, About — scroll)
+```
+
+| Input | Action |
+|-------|--------|
+| Rotate knob | Move cursor |
+| Side button short | Select / enter / toggle / save |
+| Side button long | Back one level (no-op on main menu root) |
+| Knob shaft click | Unused |
+
+During **RUNNING**: side short = pause, side long = abort (unchanged).
+
+**Start** → Ready → **Begin** starts the session. **Mode**, **Duration**, **Settings**
+(Display toggles), **Device** (Pair, Diagnostics), **About** are all menu entries.
+
+## State diagram (session lifecycle — `StateMachine.cpp`)
+
+```
+BOOTING -> IDLE (menu root)
+IDLE    -> RUNNING (menu: Start -> Begin)
+        -> PAIRING / DIAG (menu: Device)
+RUNNING -> PAUSED (side button / presence lost)
+        -> COMPLETE (timer 0) | IDLE-abort (side long) | ERROR (fault)
+PAUSED  -> RUNNING (menu: Resume / presence back) | end (menu or side long)
+COMPLETE-> LOGGING -> IDLE (menu root)
+PAIRING -> IDLE (side button)     DIAG -> IDLE (side button)
+ERROR   -> IDLE (side long-press)
 ```
 
 ## Monitoring (the "watch the timer & sensors" option)
@@ -67,8 +93,8 @@ DIAG    -> IDLE (any button)     ERROR -> IDLE (long-press)
 - **Serial @115200:** boot prints a self-test (I2C scan, OLED, ToF, mic, Wi-Fi).
   Press `m` for a 1 Hz live stream (state, timer, mode, presence, distance,
   noise, ToF, Wi-Fi, buffered count); `d` for a single dump; `h` for help.
-- **On the box:** long-press the side button in IDLE to open the diagnostics
-  screen (OLED driver, ToF + distance, mic level, Wi-Fi, firmware version).
+- **On the box:** Device → Diagnostics in the pointer menu (OLED driver, ToF,
+  mic level, Wi-Fi, firmware version). Side button exits.
 
 ## Status of parts (2026-06-11)
 

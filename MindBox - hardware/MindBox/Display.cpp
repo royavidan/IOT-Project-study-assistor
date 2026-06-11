@@ -50,11 +50,73 @@ void bar(int x, int y, int w, int h, float frac) {
   if (fw > 0) gfx->fillRect(x + 1, y + 1, fw, h - 2, OLED_WHITE);
 }
 
+// right-aligned size-1 text
+static void rtext(const char* s, int y) {
+  if (!gfx) return;
+  gfx->setTextSize(1); gfx->setTextColor(OLED_WHITE);
+  int16_t x1, y1; uint16_t w, h;
+  gfx->getTextBounds(s, 0, 0, &x1, &y1, &w, &h);
+  gfx->setCursor(OLED_W - (int)w, y); gfx->print(s);
+}
+
+static void menuHeader(const MenuView& m) {
+  if (m.showBrand) text(0, 0, 1, "MindBox");
+  else             text(0, 0, 1, m.title);
+  if (m.statusWord[0]) rtext(m.statusWord, 0);
+  if (gfx) gfx->drawLine(0, 10, OLED_W - 1, 10, OLED_WHITE);
+}
+
+static void menuRow(int y, const MenuRow& row) {
+  char line[24];
+  if (row.selected) snprintf(line, sizeof(line), ">%s", row.label);
+  else              snprintf(line, sizeof(line), " %s", row.label);
+  text(0, y, 1, line);
+  if (row.hasValue) rtext(row.value, y);
+}
+
+void renderMenu(const MenuView& m) {
+  if (!gfx) return;
+  clear();
+
+  if (m.durationEditor) {
+    center(m.title[0] ? m.title : "MINUTES", 2, 1);
+    char b[8]; snprintf(b, sizeof(b), "%d", m.durationMin);
+    center(b, 18, 3);
+    center("minutes", 44, 1);
+    bar(14, 54, 100, 8, m.durationFrac);
+    show();
+    return;
+  }
+
+  menuHeader(m);
+  if (m.infoLine[0]) center(m.infoLine, 14, 1);
+
+  int baseY = m.infoLine[0] ? 26 : 14;
+  for (uint8_t i = 0; i < m.rowCount; i++)
+    menuRow(baseY + (int)i * 10, m.rows[i]);
+  show();
+}
+
 // --- per-state screens ------------------------------------------------------
-static void sIdle(const UiModel& m) {
-  clear(); center("MINDBOX", 12, 2);
-  char b[28]; snprintf(b, sizeof(b), "ready  -  %s", modeName(m.mode));
-  center(b, 36, 1); center("turn knob to begin", 52, 1); show();
+static void sPairing(const UiModel& m) {
+  clear();
+  char id[24]; snprintf(id, sizeof(id), "id %s", (m.deviceId && m.deviceId[0]) ? m.deviceId : "?");
+  if (m.paired) {
+    center("PAIRED", 0, 1);
+    center(id, 16, 1);
+    center("linked to account", 34, 1);
+  } else if (m.wifi && m.pairCode && m.pairCode[0]) {
+    center("PAIR THIS BOX", 0, 1);
+    center(m.pairCode, 20, 2);                           // 6-digit code (hero)
+    center("enter in MindBox app", 44, 1);
+  } else {
+    center("PAIR THIS BOX", 0, 1);
+    center(id, 16, 1);
+    center("connect Wi-Fi, then", 32, 1);
+    center("pair in the app", 42, 1);
+  }
+  center("side: ok  hold: back", 56, 1);
+  show();
 }
 static void sSetup(const UiModel& m) {
   clear(); center("set duration", 2, 1);
@@ -68,35 +130,74 @@ static void sArmed(const UiModel& m) {
   center("press button to start", 46, 1); show();
 }
 static void sRunning(const UiModel& m) {
-  if (!m.showTimer) { clear(); show(); return; }   // site setting: eyes-off
+  if (!m.showTimer && !m.coachingNudge) { clear(); show(); return; }
   int s = m.remainingSec < 0 ? 0 : m.remainingSec;
   char t[8]; snprintf(t, sizeof(t), "%02d:%02d", s / 60, s % 60);
-  clear(); text(0, 0, 1, modeName(m.mode));
-  if (m.wifi) text(OLED_W - 24, 0, 1, "wifi");
-  center(t, 20, 3);
-  bar(8, 54, 112, 8, m.targetSec > 0 ? 1.0f - (float)s / m.targetSec : 0);
+  char hdr[16];
+  if (m.setActive && m.setCycleTotal > 1) {
+    if (m.mode == MODE_WORK)
+      snprintf(hdr, sizeof(hdr), "WORK %d/%d", m.setFocusDone + 1, m.setCycleTotal);
+    else
+      snprintf(hdr, sizeof(hdr), "BREAK");
+  } else {
+    snprintf(hdr, sizeof(hdr), "%s", modeName(m.mode));
+  }
+  clear();
+  if (m.showTimer) {
+    text(0, 0, 1, hdr);
+    if (m.wifi) text(OLED_W - 24, 0, 1, "wifi");
+    center(t, 20, 3);
+    if (m.coachingNudge)
+      center("Consider a break", 44, 1);
+    bar(8, 54, 112, 8, m.targetSec > 0 ? 1.0f - (float)s / m.targetSec : 0);
+  } else if (m.coachingNudge) {
+    text(0, 0, 1, hdr);
+    center("Consider a break", 28, 1);
+  }
   show();
 }
-static void sPaused() {
-  clear(); center("PAUSED", 12, 2); center("step back to resume", 40, 1); show();
+static void sPaused(const UiModel& m) {
+  clear();
+  center("PAUSED", 0, 2);
+  center(pauseReasonLine(m.pauseReason), 24, 1);
+  if (m.pauseReason == PAUSE_AWAY)
+    center("step back to resume", 44, 1);
+  show();
 }
 static void sComplete(const UiModel& m) {
-  clear(); center("DONE", 8, 2);
-  char b[24]; snprintf(b, sizeof(b), "%d min focused", m.actualFocusMin);
-  center(b, 36, 1); show();
+  clear();
+  if (m.setComplete) {
+    center("SET DONE", 0, 2);
+    char b[24];
+    snprintf(b, sizeof(b), "%d cycles", m.setCycleTotal);
+    center(b, 28, 1);
+    show();
+    return;
+  }
+  center("DONE", 0, 2);
+  char b[24];
+  int targetM = m.targetSec / 60;
+  snprintf(b, sizeof(b), "%dm / %dm", m.actualFocusMin, targetM > 0 ? targetM : m.durationMin);
+  center(b, 22, 1);
+  if (m.sessionBreaks > 0 || m.sessionPresInt > 0) {
+    snprintf(b, sizeof(b), "%d brk  %d away", m.sessionBreaks, m.sessionPresInt);
+    center(b, 38, 1);
+  }
+  show();
 }
 
 void render(const UiModel& m) {
   switch (m.state) {
     case ST_BOOTING:  clear(); center("MindBox", 18, 2); center("starting...", 44, 1); show(); break;
-    case ST_IDLE:     sIdle(m);     break;
+    case ST_IDLE:     /* Menu::renderMenu */ break;
     case ST_SETUP:    sSetup(m);    break;
     case ST_ARMED:    sArmed(m);    break;
     case ST_RUNNING:  sRunning(m);  break;
-    case ST_PAUSED:   sPaused();    break;
+    case ST_PAUSED:   sPaused(m);   break;
     case ST_COMPLETE: sComplete(m); break;
     case ST_LOGGING:  clear(); center("syncing...", 24, 1); show(); break;
     case ST_ERROR:    clear(); center("SENSOR FAULT", 12, 1); center("long-press to reset", 40, 1); show(); break;
+    case ST_PAIRING:  sPairing(m);  break;
     case ST_DIAG:     /* drawn by StateMachine::renderDiag() */ break;
   }
 }

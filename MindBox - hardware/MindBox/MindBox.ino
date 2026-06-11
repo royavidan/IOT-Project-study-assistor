@@ -12,10 +12,11 @@
      Sensors         mic / ToF / temp / light / batt Storage       NVS persistence
      Cloud           Wi-Fi + ingest + config pull    Session       timing + samples
      StateMachine    the brain (state diagram)       Diagnostics   serial monitor
+     Menu            pointer menus (home/settings)   
 
    To extend: implement a sensor's read function + flip its flag in config.h;
    nothing else changes. Monitor at runtime: open Serial @115200 and press 'm',
-   or long-press the side button in IDLE for the on-box diagnostics screen.
+   or open Device -> Diagnostics in the pointer menu.
    ========================================================================== */
 #include <Wire.h>
 #include "config.h"
