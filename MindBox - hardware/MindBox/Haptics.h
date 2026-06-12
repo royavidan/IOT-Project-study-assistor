@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================================
-// Haptics — non-blocking vibration-motor pattern player (GPIO 2, via driver).
+// Haptics — non-blocking vibration-motor pattern player (PIN_HAPTIC, via transistor).
 // Patterns come from the Control->Feedback table. Respects cfg.hapticsEnabled.
 // Call tick() every loop; the named helpers fire a pattern and return at once.
 // ============================================================================
@@ -18,6 +18,8 @@ namespace Haptics {
   void click();     // menu detent              (1 very short)
   void enableTest(); // settings: haptics ON confirmation pulse
   void testPulse();  // settings: Test motor (always fires, for wiring check)
+  void wiringTest(); // serial diag: tries both GPIO polarities
+  bool isHolding();  // true while Test motor / enable confirm is running
   void pause();     // presence-loss / break    (2 short)
   void resume();    // presence-return          (1 long)
   void complete();  // timer end                (strong alert)

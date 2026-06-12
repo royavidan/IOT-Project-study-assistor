@@ -15,6 +15,7 @@ import { BATTERY_TRACKING_ENABLED } from "@/lib/feature-flags";
 import { useReviewerStudents } from "@/lib/queries/reviewer";
 import { maybeSendWeeklySummaries } from "@/lib/api/report-email.functions";
 import { useSessions, useTodayStats } from "@/lib/queries/sessions";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   Battery,
   Wifi,
@@ -55,6 +56,19 @@ function Dashboard() {
   const reviewerStudents = useReviewerStudents();
   const weeklyShareRan = useRef(false);
   const [weeklyNote, setWeeklyNote] = useState<string | null>(null);
+
+  // Keep the user's UTC offset on their profile so the box's "today" total
+  // (computed server-side in GET /ingest/config) matches this dashboard's local day.
+  const tzSyncRan = useRef(false);
+  useEffect(() => {
+    if (tzSyncRan.current || !user?.id) return;
+    tzSyncRan.current = true;
+    const offsetMin = -new Date().getTimezoneOffset(); // minutes ahead of UTC
+    void getSupabaseBrowserClient()
+      .from("profiles")
+      .update({ tz_offset_min: offsetMin })
+      .eq("id", user.id);
+  }, [user?.id]);
 
   useEffect(() => {
     if (weeklyShareRan.current) return;

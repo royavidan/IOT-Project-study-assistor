@@ -320,10 +320,27 @@ async function handleConfig(url: URL): Promise<Response> {
 
   const [settingsRes, profileRes] = await Promise.all([
     admin.from("user_settings").select("*").eq("user_id", owner).maybeSingle(),
-    admin.from("profiles").select("daily_goal_min").eq("id", owner).maybeSingle(),
+    admin.from("profiles").select("*").eq("id", owner).maybeSingle(),
   ]);
   const s = (settingsRes.data ?? {}) as Record<string, unknown>;
-  const p = (profileRes.data ?? {}) as { daily_goal_min?: number };
+  const p = (profileRes.data ?? {}) as { daily_goal_min?: number; tz_offset_min?: number };
+
+  // Today's focus = sum of actual_focus_sec for the owner's sessions since their
+  // LOCAL midnight (via the stored tz offset), so the box matches the app dashboard.
+  const offsetMin = Number(p.tz_offset_min ?? 0);
+  const local = new Date(Date.now() + offsetMin * 60000);
+  const localMidnightUtcMs =
+    Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate()) - offsetMin * 60000;
+  const fromIso = new Date(localMidnightUtcMs).toISOString();
+  const { data: todayRows } = await admin
+    .from("sessions")
+    .select("actual_focus_sec")
+    .eq("user_id", owner)
+    .gte("started_at", fromIso);
+  const todayFocusSec = (todayRows ?? []).reduce(
+    (sum, r) => sum + Number((r as { actual_focus_sec?: number }).actual_focus_sec ?? 0),
+    0,
+  );
 
   return json(
     {
@@ -335,6 +352,7 @@ async function handleConfig(url: URL): Promise<Response> {
       quietStartMin: timeToMinutes(s.quiet_hours_start),
       quietEndMin: timeToMinutes(s.quiet_hours_end),
       dailyGoalMin: p.daily_goal_min ?? 180,
+      todayFocusSec,
     },
     200,
   );

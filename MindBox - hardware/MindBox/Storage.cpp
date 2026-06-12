@@ -19,6 +19,9 @@
 
 static Preferences prefs;
 static uint32_t    s_liveFocusSec = 0;
+static uint32_t    s_serverTodaySec = 0;
+static uint32_t    s_serverTodayAt = 0;
+static bool        s_serverTodayValid = false;
 
 static const uint8_t SLOG_VER = 2;
 static const int     SLOG_V1_MAX = 8;
@@ -241,9 +244,23 @@ int      sessionLogCount() { return prefs.getUChar("slogN", 0); }
 
 void setLiveFocusSec(uint32_t sec) { s_liveFocusSec = sec; }
 
+void setServerTodaySec(uint32_t sec) {
+  s_serverTodaySec = sec; s_serverTodayAt = millis(); s_serverTodayValid = true;
+}
+void bumpServerTodaySec(uint32_t sec) {
+  if (s_serverTodayValid) s_serverTodaySec += sec;   // keep the total steady after a session
+}
+
 uint32_t todayFocusSec() { return prefs.getUInt("todayFocus", 0); }
 
-uint32_t todayDisplaySec() { return todayFocusSec() + s_liveFocusSec; }
+// Online + paired: the server's account-wide today total (local-day) is the
+// source of truth so the box matches the app; fall back to the local NVS tally
+// once that value goes stale (offline).
+uint32_t todayDisplaySec() {
+  if (s_serverTodayValid && (millis() - s_serverTodayAt) < SERVER_TODAY_TTL_MS)
+    return s_serverTodaySec + s_liveFocusSec;
+  return todayFocusSec() + s_liveFocusSec;
+}
 
 int todayFocusCount() { return prefs.getUShort("todayCnt", 0); }
 

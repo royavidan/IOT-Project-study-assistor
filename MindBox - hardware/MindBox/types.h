@@ -152,6 +152,7 @@ struct CloudSettings {
   bool     paired;
   bool     showTimer, hapticsEnabled, adaptiveCoaching, nudgesEnabled;
   uint16_t quietStartMin, quietEndMin, dailyGoalMin;
+  int32_t  todayFocusSec;   // server-truth focus today (account-wide, local day)
 };
 
 // Remote command from the app (Part 3), delivered loop<-task via a queue.

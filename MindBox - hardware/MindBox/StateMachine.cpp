@@ -60,6 +60,7 @@ static unsigned long renderPeriodMs() {
 
 static bool shouldRender(uint32_t now) {
   if (s_uiDirty) return true;
+  if (Haptics::isHolding()) return true;  // animate "Test motor ON..." on Display menu
   // Running timer: redraw only when runningScreenChanged marks dirty (1 Hz).
   if (s_state == ST_RUNNING && !Menu::runningActive()) return false;
   return now - s_lastRender > renderPeriodMs();
@@ -158,6 +159,7 @@ static bool persistSession(const char* status) {
   json = String();   // release heap before NVS writes
   Cloud::kickUpload();
   bool goalHit = Storage::bufferSession(r);
+  if (r.mode == MODE_WORK) Storage::bumpServerTodaySec((uint32_t)r.actualFocusSec);
   Storage::setLiveFocusSec(0);
   Storage::setWorkDuration(s_workDur);
   Storage::setBreakDuration(s_breakDur);
@@ -428,6 +430,7 @@ void init() {
 void tick() {
   Inputs::poll();
   int  btn = Inputs::button();
+  if (btn == 0 && Inputs::knobClicked()) btn = 1;  // shaft press = select in menus
   int  rot = Inputs::rotationDir();
   bool clk = Inputs::knobClicked();   // knob press = universal escape on dead-end screens
 #if USE_SPDT_TOGGLE
@@ -448,6 +451,8 @@ void tick() {
     s_cfg.quietEndMin      = cs.quietEndMin;
     s_cfg.dailyGoalMin     = cs.dailyGoalMin;
     applyConfig(s_cfg);
+    if (cs.paired)
+      Storage::setServerTodaySec(cs.todayFocusSec < 0 ? 0 : (uint32_t)cs.todayFocusSec);
   }
 
   // Live mirror: refresh the net task's snapshot ~1 Hz (transitions push instantly).

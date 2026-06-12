@@ -453,9 +453,12 @@ MenuAction tick(int rotDir, int sideBtn) {
     case SCR_DISPLAY:
       if (s_cursor == 0) toggleShowTimer();
       else if (s_cursor == 1) toggleHaptics();
-      else if (s_cursor == 2) Haptics::testPulse();
-      else pop();
+      else if (s_cursor == 2) {
+        Serial.println("[menu] Test motor selected");
+        Haptics::testPulse();
+      } else pop();
       if (s_cursor == 3) Haptics::click();
+      markDirty();
       break;
 
     case SCR_PRESENCE:
@@ -627,7 +630,7 @@ const MenuView& view() {
       case SCR_DISPLAY:
         if (idx == 0) fillRow(row, "Show timer", s_cfg->showTimer ? "ON" : "OFF", sel);
         else if (idx == 1) fillRow(row, "Haptics", s_cfg->hapticsEnabled ? "ON" : "OFF", sel);
-        else if (idx == 2) fillRow(row, "Test motor", nullptr, sel);
+        else if (idx == 2) fillRow(row, "Test motor", Haptics::isHolding() ? "MAX..." : "press", sel);
         else fillRow(row, "Back", nullptr, sel);
         break;
 

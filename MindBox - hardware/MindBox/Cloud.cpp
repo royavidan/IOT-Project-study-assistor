@@ -192,6 +192,7 @@ static void syncDownlink() {
   cs.quietStartMin    = (uint16_t)jInt(resp, "quietStartMin", 0xFFFF);
   cs.quietEndMin      = (uint16_t)jInt(resp, "quietEndMin", 0xFFFF);
   cs.dailyGoalMin     = (uint16_t)jInt(resp, "dailyGoalMin", 180);
+  cs.todayFocusSec    = (int32_t)jInt(resp, "todayFocusSec", 0);
   xSemaphoreTake(s_mux, portMAX_DELAY);
   s_settings = cs; s_settingsReady = true;
   xSemaphoreGive(s_mux);

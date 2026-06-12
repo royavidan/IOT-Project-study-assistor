@@ -48,8 +48,10 @@ namespace Storage {
   bool bufferSession(const SessionRecord& r);   // returns true if daily goal hit
 
   void     setLiveFocusSec(uint32_t sec);
-  uint32_t todayFocusSec();       // persisted completed WORK focus today
-  uint32_t todayDisplaySec();     // persisted + live in-progress WORK
+  void     setServerTodaySec(uint32_t sec);   // account-wide today total from the server
+  void     bumpServerTodaySec(uint32_t sec);  // optimistic add after a local session
+  uint32_t todayFocusSec();       // persisted completed WORK focus today (local fallback)
+  uint32_t todayDisplaySec();     // server today (online) or local today, + live in-progress
   int      todayFocusCount();
   void     resetToday();
   void     syncDayBoundary();

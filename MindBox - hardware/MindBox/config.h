@@ -100,6 +100,7 @@ static const int           HTTP_TIMEOUT_MS = 3000;       // read timeout per req
 static const int           HTTP_CONNECT_TIMEOUT_MS = 1500; // cap the hang to an unreachable host
 static const unsigned long NET_FAIL_BACKOFF_MS = 30000UL;  // after connect/timeout fail, skip HTTP this long
 static const unsigned long NET_TASK_PERIOD_MS  = 200UL;    // core-0 net task loop cadence
+static const unsigned long SERVER_TODAY_TTL_MS = 180000UL; // prefer the server's today total if this fresh
 
 // ---- upload queue (LittleFS Part B) ----------------------------------------
 // Requires a partition scheme with SPIFFS/LittleFS (Arduino IDE: Tools → Partition Scheme).
@@ -112,23 +113,27 @@ static const unsigned long WDT_TIMEOUT_MS = 15000UL;  // task watchdog: reboot i
 static const unsigned long I2C_HEALTH_MS  = 2000UL;   // ToF bus-canary ping cadence
 static const uint16_t      I2C_TIMEOUT_MS = 50;       // Wire transaction timeout (never hang)
 
-// ---- haptics (GPIO 2 → NPN/MOSFET → motor on 5V; 3.3V GPIO drives base/gate) --
-#define HAPTIC_USE_PWM  0     // 0 = steady HIGH on "on" steps (try 1 + ~150 Hz if weak)
-static const uint32_t      HAPTIC_FREQ_HZ       = 150;    // ERM coin-motor band (if PWM on)
+// ---- haptics (GPIO 25 → NPN/MOSFET → motor on 5V; 3.3V GPIO drives base/gate) --
+// Strength: 0=soft 1=normal 2=strong (scales on-times up, gaps down).
+// Hardware limit: motor VCC must be 5V; try 470Ω base resistor for more drive current.
+#define HAPTIC_ACTIVE_LOW 0   // 1 if your driver IN pin vibrates on LOW (some relay boards)
+#define HAPTIC_STRENGTH   2   // 0..2 — default max
+#define HAPTIC_USE_PWM    0   // 0 = steady HIGH (max strength); 1 = PWM at HAPTIC_FREQ_HZ
+static const uint32_t      HAPTIC_FREQ_HZ       = 150;
 static const uint8_t       HAPTIC_DUTY          = 255;
-static const uint8_t       HAPTIC_BURST_N       = 4;      // pulses in enable/test burst
-static const uint16_t      HAPTIC_BURST_ON_MS   = 550;  // each burst "on" phase
-static const uint16_t      HAPTIC_BURST_GAP_MS  = 140;
-static const uint16_t      HAPTIC_MS_CLICK      = 100;
-static const uint16_t      HAPTIC_MS_TAP        = 500;
-static const uint16_t      HAPTIC_MS_ENABLE_TEST = 550; // legacy alias = BURST_ON
-static const uint16_t      HAPTIC_MS_PAUSE      = 220;
-static const uint16_t      HAPTIC_MS_PAUSE_GAP  = 140;
-static const uint16_t      HAPTIC_MS_RESUME     = 600;
-static const uint16_t      HAPTIC_MS_COMPLETE   = 700;
-static const uint16_t      HAPTIC_MS_COMPLETE_GAP = 200;
-static const uint16_t      HAPTIC_MS_RESET      = 750;
-static const uint16_t      HAPTIC_TEST_HOLD_MS  = 3000; // Test motor: steady ON (full power)
+static const uint8_t       HAPTIC_BURST_N       = 5;      // enable-confirm burst
+static const uint16_t      HAPTIC_BURST_ON_MS   = 1100;
+static const uint16_t      HAPTIC_BURST_GAP_MS  = 70;     // short gap keeps mass spinning
+static const uint16_t      HAPTIC_MS_CLICK      = 320;
+static const uint16_t      HAPTIC_MS_TAP        = 900;
+static const uint16_t      HAPTIC_MS_ENABLE_TEST = 1100;
+static const uint16_t      HAPTIC_MS_PAUSE      = 500;
+static const uint16_t      HAPTIC_MS_PAUSE_GAP  = 90;
+static const uint16_t      HAPTIC_MS_RESUME     = 1100;
+static const uint16_t      HAPTIC_MS_COMPLETE   = 1200;
+static const uint16_t      HAPTIC_MS_COMPLETE_GAP = 120;
+static const uint16_t      HAPTIC_MS_RESET      = 1200;
+static const uint16_t      HAPTIC_TEST_HOLD_MS  = 6000;   // Test motor: continuous full power
 
 // ---- side tactile button (GPIO 4) timing -----------------------------------
 static const unsigned long BTN_DEBOUNCE_MS      = 50UL;

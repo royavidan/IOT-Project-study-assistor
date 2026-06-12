@@ -65,9 +65,9 @@ void setup() {
 
 void loop() {
   esp_task_wdt_reset();      // feed the watchdog
-  Haptics::tick();           // advance any active vibration pattern
   Sensors::tick();           // sample mic + refresh presence
-  StateMachine::tick();      // inputs, FSM, render + publish live state to the net task
+  StateMachine::tick();      // inputs, FSM, menu (may call Haptics::testPulse)
+  Haptics::tick();           // run/stop motor hold after menu actions in same frame
   Diagnostics::tick();       // serial monitor commands + stream
   delay(5);                  // Wi-Fi/HTTP/telemetry/upload all run on the core-0 net task
 }
