@@ -18,7 +18,7 @@ namespace Inputs {
   int  minutes();              // current duration (5-min steps, clamped)
   void setMinutes(int m);      // sync encoder to a value (e.g. restored default)
 
-  bool knobClicked();          // shaft button (select in menus; see StateMachine::tick)
+  bool knobClicked();          // shaft button (unused in menu UI; ignored)
   int  button();               // side button: 0 none, 1 short=select, 2 long=back
 
   bool sidePressed();          // debounced, true while tact switch held

@@ -6,6 +6,7 @@
 //   POST /ingest/telemetry   live device snapshot
 //   POST /ingest/sessions    completed sessions (drained from LittleFS queue)
 //   POST /ingest/pairing     publish the 6-digit claim code
+//   POST /ingest/unpair      release this box's account link (box-side sign-out)
 //   GET  /ingest/config      pull settings (the site->box DOWNLINK)
 // ============================================================================
 #include "types.h"
@@ -32,5 +33,6 @@ namespace Cloud {
   int  pendingCount();          // queued (un-uploaded) sessions, for UI
 
   void publishPairingCode(const char* code);     // non-blocking: task POSTs it
+  void requestUnpair();                          // non-blocking: task POSTs /ingest/unpair
   void provisionFromSerial();                    // 'w' setup (loop; flags creds dirty)
 }

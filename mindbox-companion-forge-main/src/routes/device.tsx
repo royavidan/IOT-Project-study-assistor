@@ -9,7 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useDeviceStatus } from "@/lib/queries/sessions";
-import { claimDeviceByCode, createTestPairingCode } from "@/lib/api/pairing.functions";
+import { useMyDevice } from "@/lib/queries/device";
+import {
+  claimDeviceByCode,
+  createTestPairingCode,
+  renameDevice,
+  unlinkDevice,
+} from "@/lib/api/pairing.functions";
 import { summarizeSensorHealth } from "@/lib/sensor-health";
 import { LowBatteryBanner } from "@/components/LowBatteryBanner";
 import { BluetoothConnectCard } from "@/components/BluetoothConnectCard";
@@ -49,8 +55,38 @@ function Device() {
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["device-status"] });
+    void queryClient.invalidateQueries({ queryKey: ["my-device"] });
     void queryClient.invalidateQueries({ queryKey: ["simulator-device"] });
   };
+
+  const { data: myDevice } = useMyDevice();
+  const [renaming, setRenaming] = useState(false);
+  const [nameInput, setNameInput] = useState("");
+
+  const unlinkMutation = useMutation({
+    mutationFn: () => unlinkDevice(),
+    onSuccess: () => {
+      setMessageKind("success");
+      setMessage("Signed out. Your MindBox returns to its pairing screen and stops syncing shortly.");
+      invalidate();
+    },
+    onError: (err) => {
+      setMessageKind("error");
+      setMessage(err instanceof Error ? err.message : "Could not sign out the device.");
+    },
+  });
+
+  const renameMutation = useMutation({
+    mutationFn: (name: string) => renameDevice({ data: { deviceId: myDevice?.id ?? "", name } }),
+    onSuccess: () => {
+      setRenaming(false);
+      invalidate();
+    },
+    onError: (err) => {
+      setMessageKind("error");
+      setMessage(err instanceof Error ? err.message : "Could not rename the device.");
+    },
+  });
 
   const claimMutation = useMutation({
     mutationFn: (c: string) => claimDeviceByCode({ data: { code: c } }),
@@ -191,6 +227,88 @@ function Device() {
         </CardContent>
       </Card>
 
+      {myDevice && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-base">Your MindBox</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {renaming ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const n = nameInput.trim();
+                  if (n) renameMutation.mutate(n);
+                }}
+                className="flex flex-wrap items-end gap-2"
+              >
+                <div className="grid gap-1.5">
+                  <Label htmlFor="device-name">Device name</Label>
+                  <Input
+                    id="device-name"
+                    value={nameInput}
+                    maxLength={40}
+                    onChange={(e) => setNameInput(e.target.value)}
+                    className="max-w-xs"
+                  />
+                </div>
+                <Button type="submit" size="sm" disabled={renameMutation.isPending}>
+                  {renameMutation.isPending ? "Saving…" : "Save"}
+                </Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => setRenaming(false)}>
+                  Cancel
+                </Button>
+              </form>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold">{myDevice.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {myDevice.firmwareVersion
+                      ? `Firmware ${myDevice.firmwareVersion}`
+                      : "Linked to your account"}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setNameInput(myDevice.name);
+                      setRenaming(true);
+                    }}
+                  >
+                    Rename
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={unlinkMutation.isPending}
+                    onClick={() => unlinkMutation.mutate()}
+                  >
+                    {unlinkMutation.isPending ? "Signing out…" : "Unlink / Sign out"}
+                  </Button>
+                </div>
+              </div>
+            )}
+            {message && (
+              <p
+                role="status"
+                className={`text-sm ${messageKind === "error" ? "text-danger" : "text-success"}`}
+              >
+                {message}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Signing out releases this MindBox from your account — it returns to its pairing screen and
+              stops syncing your sessions. Re-pair anytime with a new code.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!myDevice && (
+        <>
       <ol className="space-y-3">
         {steps.map((s) => (
           <li key={s.n}>
@@ -267,6 +385,8 @@ function Device() {
       </Card>
 
       <BluetoothConnectCard onPairingCode={setCode} />
+        </>
+      )}
     </>
   );
 }

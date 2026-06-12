@@ -10,6 +10,11 @@ const claimInput = z.object({
     .regex(/^\d{6}$/, "Enter the 6-digit code shown on your MindBox."),
 });
 
+const renameInput = z.object({
+  deviceId: z.string().min(1),
+  name: z.string().trim().min(1, "Enter a name.").max(40),
+});
+
 async function requireUser() {
   const {
     data: { user },
@@ -74,6 +79,56 @@ export const claimDeviceByCode = createServerFn({ method: "POST" })
       deviceId,
       name: String(claimed.name ?? "MindBox"),
     };
+  });
+
+/**
+ * Sign the MindBox out of this account (remote unlink). Releases ownership of
+ * every device the caller owns; the box sees `paired:false` on its next config
+ * sync (GET /ingest/config) and signs out locally. Also clears slot assignments
+ * and burns outstanding pairing codes so an old code can't silently re-claim it.
+ */
+export const unlinkDevice = createServerFn({ method: "POST" }).handler(async () => {
+  const user = await requireUser();
+  const admin = getSupabaseAdminClient();
+
+  const { data: devices, error: findError } = await admin
+    .from("devices")
+    .select("id")
+    .eq("owner_user_id", user.id);
+  if (findError) throw new Error(`Could not load your devices: ${findError.message}`);
+
+  const ids = (devices ?? []).map((d) => String((d as { id: string }).id));
+  if (ids.length === 0) return { ok: true as const, unlinked: 0 };
+
+  const { error: unlinkError } = await admin
+    .from("devices")
+    .update({ owner_user_id: null, paired_at: null })
+    .in("id", ids);
+  if (unlinkError) throw new Error(`Failed to unlink: ${unlinkError.message}`);
+
+  await admin.from("device_profiles").delete().in("device_id", ids);
+  await admin
+    .from("device_pairing_codes")
+    .update({ used: true })
+    .in("device_id", ids)
+    .eq("used", false);
+
+  return { ok: true as const, unlinked: ids.length };
+});
+
+/** Rename the caller's MindBox (owner-checked). */
+export const renameDevice = createServerFn({ method: "POST" })
+  .validator(renameInput)
+  .handler(async ({ data }) => {
+    const user = await requireUser();
+    const admin = getSupabaseAdminClient();
+    const { error } = await admin
+      .from("devices")
+      .update({ name: data.name })
+      .eq("id", data.deviceId)
+      .eq("owner_user_id", user.id);
+    if (error) throw new Error(`Failed to rename: ${error.message}`);
+    return { ok: true as const, name: data.name };
   });
 
 /**

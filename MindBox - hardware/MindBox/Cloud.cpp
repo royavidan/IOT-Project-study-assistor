@@ -50,6 +50,7 @@ static CloudSettings     s_settings = {};
 static volatile bool     s_settingsReady = false;
 static volatile bool     s_pushNow = false;
 static volatile bool     s_pairPending = false;
+static volatile bool     s_unpairPending = false;
 static char              s_pairCode[8] = {0};
 
 static uint32_t s_netSuspendUntil = 0;
@@ -205,6 +206,15 @@ static void doPairing() {
   if (c != 200) Serial.printf("[cloud] pairing publish failed (%d): %s\n", c, resp.c_str());
 }
 
+static bool doUnpair() {
+  String body = "{\"deviceId\":\"" + s_deviceId + "\"}";
+  String resp;
+  int c = httpRequest("POST", s_baseUrl + "/ingest/unpair", body, resp);
+  if (c != 200) { Serial.printf("[cloud] unpair failed (%d): %s\n", c, resp.c_str()); return false; }
+  Serial.println("[cloud] account released on server");
+  return true;
+}
+
 static void manageWifi() {
   if (s_credsDirty) {
     s_credsDirty = false;
@@ -237,7 +247,12 @@ static void cloudTask(void*) {
     esp_task_wdt_reset();
     manageWifi();
     if (s_cachedOnline) {
-      if (s_pairPending) { s_pairPending = false; doPairing(); }
+      if (s_pairPending)   { s_pairPending = false;   doPairing(); }
+      // Unpair BEFORE the config fetch below so the server releases ownership
+      // and the same/next downlink can't re-report paired:true. Retry until it
+      // lands (only clear the flag on success) so a transient error can't leave
+      // the box locally signed out but still linked server-side.
+      if (s_unpairPending && doUnpair()) s_unpairPending = false;
       if (s_pushNow || millis() - lastTele > TELEMETRY_PERIOD_MS) {
         s_pushNow = false; lastTele = millis(); pushTelemetry();
       }
@@ -375,6 +390,12 @@ void publishPairingCode(const char* code) {
   s_pairPending = true;
 #else
   (void)code;
+#endif
+}
+
+void requestUnpair() {
+#if ENABLE_CLOUD
+  s_unpairPending = true;
 #endif
 }
 

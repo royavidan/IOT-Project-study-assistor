@@ -79,6 +79,10 @@ const pairingSchema = z.object({
   code: z.string().regex(/^\d{6}$/),
 });
 
+const unpairSchema = z.object({
+  deviceId: z.string().min(1),
+});
+
 type SessionInput = z.infer<typeof sessionSchema>;
 
 async function handleSessions(request: Request): Promise<Response> {
@@ -282,6 +286,46 @@ async function handlePairing(request: Request): Promise<Response> {
   return json({ ok: true, expiresAt }, 200);
 }
 
+/**
+ * Device-driven sign-out: the box releases its account link from the hardware
+ * (Settings -> Device -> Sign out). Clears ownership so handleConfig returns
+ * paired:false on the next downlink, and the /device card reflects it. Authed by
+ * the shared secret (any box knows its own deviceId), so it cannot release a
+ * device it isn't. Mirrors the app-side unlinkDevice server fn.
+ */
+async function handleUnpair(request: Request): Promise<Response> {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Invalid JSON body." }, 400);
+  }
+  const parsed = unpairSchema.safeParse(body);
+  if (!parsed.success) {
+    return json({ error: "Invalid unpair payload.", details: parsed.error.issues }, 400);
+  }
+  const { deviceId } = parsed.data;
+  const admin = getSupabaseAdminClient();
+
+  const { error } = await admin
+    .from("devices")
+    .update({ owner_user_id: null, paired_at: null })
+    .eq("id", deviceId);
+  if (error) {
+    return json({ error: `Failed to unpair: ${error.message}` }, 500);
+  }
+
+  // Best-effort cleanup so a stale slot/code can't silently re-link the box.
+  await admin.from("device_profiles").delete().eq("device_id", deviceId);
+  await admin
+    .from("device_pairing_codes")
+    .update({ used: true })
+    .eq("device_id", deviceId)
+    .eq("used", false);
+
+  return json({ ok: true }, 200);
+}
+
 /** "HH:MM[:SS]" -> minutes-from-midnight; 65535 = unset (matches firmware 0xFFFF). */
 function timeToMinutes(t: unknown): number {
   if (typeof t !== "string" || t.length < 4) return 65535;
@@ -380,6 +424,7 @@ export async function handleIngestRequest(request: Request, url: URL): Promise<R
     if (url.pathname === "/ingest/sessions") return await handleSessions(request);
     if (url.pathname === "/ingest/telemetry") return await handleTelemetry(request);
     if (url.pathname === "/ingest/pairing") return await handlePairing(request);
+    if (url.pathname === "/ingest/unpair") return await handleUnpair(request);
     return json({ error: "Not found." }, 404);
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "Ingestion failed." }, 500);

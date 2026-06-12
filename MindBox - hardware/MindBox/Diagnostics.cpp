@@ -9,7 +9,6 @@
 #include "Cloud.h"
 #include "UploadQueue.h"
 #include "Inputs.h"
-#include "Haptics.h"
 #include <ESP.h>
 #include <esp_system.h>
 #include <math.h>
@@ -253,8 +252,7 @@ void selfTest() {
   Serial.printf("calib    : noise=%.0f light=%.0f lightvar=%.0f tempOff=%.1f C\n",
                 Storage::noiseFullScale(), Storage::lightLuxScale(),
                 Storage::lightVarScale(), Storage::tempOffsetC());
-  Serial.printf("haptic   : GPIO%d (NPN/MOSFET driver required — NOT direct to GPIO)\n", PIN_HAPTIC);
-  Serial.println("commands : m=monitor  c=calib  b=btn  v=motor  w=wifi  q=queue  d=dump  h=help");
+  Serial.println("commands : m=monitor  c=calib  b=btn  w=wifi  q=queue  d=dump  h=help");
   Serial.println("===========================");
 }
 
@@ -270,8 +268,7 @@ void tick() {
     else if (c == 'q') queueStatus();
     else if (c == 'w') Cloud::provisionFromSerial();
     else if (c == 'c') handleCalibCommand();
-    else if (c == 'v') Haptics::wiringTest();
-    else if (c == 'h') Serial.println("[diag] m=monitor  c=calib  b=btn  v=motor  w=wifi  q=queue  d=dump  h=help");
+    else if (c == 'h') Serial.println("[diag] m=monitor  c=calib  b=btn  w=wifi  q=queue  d=dump  h=help");
   }
   if (s_monitor && millis() - s_lastMon > 1000) { s_lastMon = millis(); dump(); }
 }

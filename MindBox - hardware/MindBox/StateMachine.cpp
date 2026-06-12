@@ -22,6 +22,7 @@ static DeviceConfig s_cfg   = defaultConfig();
 static uint32_t     s_stateAt = 0, s_lastRender = 0, s_bootAt = 0;
 static uint32_t     s_lastCheckpoint = 0;
 static uint32_t     s_lastSnap = 0;
+static unsigned long s_signOutGuardUntil = 0;  // ignore stale paired:true until this millis()
 static bool         s_uiDirty = true;
 static String       s_devShort;
 static char         s_pairCode[7] = {0};
@@ -60,7 +61,6 @@ static unsigned long renderPeriodMs() {
 
 static bool shouldRender(uint32_t now) {
   if (s_uiDirty) return true;
-  if (Haptics::isHolding()) return true;  // animate "Test motor ON..." on Display menu
   // Running timer: redraw only when runningScreenChanged marks dirty (1 Hz).
   if (s_state == ST_RUNNING && !Menu::runningActive()) return false;
   return now - s_lastRender > renderPeriodMs();
@@ -175,6 +175,22 @@ static void enterPairing() {
   snprintf(s_pairCode, sizeof(s_pairCode), "%06u", (unsigned)(esp_random() % 1000000u));
   Cloud::publishPairingCode(s_pairCode);
   enter(ST_PAIRING);
+}
+
+// Box-side sign-out: release the account on the server AND drop it locally, so
+// the box stops syncing to that account and the /device card clears. The guard
+// window prevents an in-flight config fetch from re-pairing us before the
+// server-side unpair lands.
+static void signOutAccount() {
+  Cloud::requestUnpair();                 // task POSTs /ingest/unpair -> owner=null
+  Storage::setPaired(false);
+  Storage::setServerTodaySec(0);
+  s_signOutGuardUntil = millis() + SIGN_OUT_GUARD_MS;
+  if (s_cfg.hapticsEnabled) Haptics::reset();
+  Menu::setContext(Cloud::online(), false, s_devShort.c_str());
+  Menu::resetToRoot();
+  s_uiDirty = true;
+  Serial.println("[device] signed out from the box");
 }
 
 static void clearSet() {
@@ -338,6 +354,7 @@ static void handleMenuAction(MenuAction a) {
   switch (a) {
     case MENU_START_SESSION:  startSession(); break;
     case MENU_ENTER_PAIRING:  enterPairing(); break;
+    case MENU_SIGN_OUT:       signOutAccount(); break;
     case MENU_ENTER_DIAGNOSTICS: enter(ST_DIAG); break;
     case MENU_RESUME_SESSION:
       Session::resumeClock();
@@ -430,7 +447,6 @@ void init() {
 void tick() {
   Inputs::poll();
   int  btn = Inputs::button();
-  if (btn == 0 && Inputs::knobClicked()) btn = 1;  // shaft press = select in menus
   int  rot = Inputs::rotationDir();
   bool clk = Inputs::knobClicked();   // knob press = universal escape on dead-end screens
 #if USE_SPDT_TOGGLE
@@ -442,7 +458,14 @@ void tick() {
   // Apply settings the net task pulled from the server (app-managed fields only).
   CloudSettings cs;
   if (Cloud::takeSettings(cs)) {
-    Storage::setPaired(cs.paired);
+    bool wasPaired = Storage::paired();
+    // After a local "Sign out", ignore a stale paired:true from a config fetch
+    // that was already in flight, until the server-side unpair propagates (a
+    // real paired:false then clears the guard).
+    bool paired = cs.paired;
+    if (paired && now < s_signOutGuardUntil) paired = false;
+    else                                     s_signOutGuardUntil = 0;
+    Storage::setPaired(paired);
     s_cfg.showTimer        = cs.showTimer;
     s_cfg.hapticsEnabled   = cs.hapticsEnabled;
     s_cfg.adaptiveCoaching = cs.adaptiveCoaching;
@@ -451,8 +474,16 @@ void tick() {
     s_cfg.quietEndMin      = cs.quietEndMin;
     s_cfg.dailyGoalMin     = cs.dailyGoalMin;
     applyConfig(s_cfg);
-    if (cs.paired)
+    if (paired) {
       Storage::setServerTodaySec(cs.todayFocusSec < 0 ? 0 : (uint32_t)cs.todayFocusSec);
+    } else if (wasPaired) {
+      // Remote sign-out from the web app: drop the account locally + notify.
+      // (The box keeps no owner identity on-device; unpair is the whole state.)
+      Storage::setServerTodaySec(0);
+      if (s_cfg.hapticsEnabled) Haptics::reset();
+      s_uiDirty = true;
+      Serial.println("[device] account unlinked from the app — signed out");
+    }
   }
 
   // Live mirror: refresh the net task's snapshot ~1 Hz (transitions push instantly).

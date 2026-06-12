@@ -491,7 +491,7 @@ MenuAction tick(int rotDir, int sideBtn) {
       break;
 
     case SCR_DEVICE:
-      if (s_cursor == 0) return MENU_ENTER_PAIRING;
+      if (s_cursor == 0) return s_paired ? MENU_SIGN_OUT : MENU_ENTER_PAIRING;
       if (s_cursor == 1) return MENU_ENTER_DIAGNOSTICS;
       pop();
       Haptics::click();
@@ -700,7 +700,7 @@ const MenuView& view() {
       }
 
       case SCR_DEVICE:
-        if (idx == 0) fillRow(row, "Pair account", nullptr, sel);
+        if (idx == 0) fillRow(row, s_paired ? "Sign out" : "Pair account", nullptr, sel);
         else if (idx == 1) fillRow(row, "Diagnostics", nullptr, sel);
         else fillRow(row, "Back", nullptr, sel);
         break;
