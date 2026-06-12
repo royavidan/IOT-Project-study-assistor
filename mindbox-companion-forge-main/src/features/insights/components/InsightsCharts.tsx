@@ -15,7 +15,7 @@ import {
 } from "recharts";
 
 import type { DailyAggregate } from "@/lib/types";
-import type { EnvScatterPoint, HourlyHeatCell, TimeOfDaySlot } from "@/lib/insights";
+import type { EnvScatterPoint, HourlyHeatCell, TimeOfDaySlot } from "@/features/insights/insights";
 
 const tooltipStyle = {
   background: "var(--color-popover)",

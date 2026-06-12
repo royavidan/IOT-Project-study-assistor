@@ -5,7 +5,7 @@ import { z } from "zod";
 import { PageHeader } from "@/components/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { acceptReviewerInvite } from "@/lib/api/reviewer.functions";
+import { acceptReviewerInvite } from "@/features/social/reviewer.functions";
 import { useAuth } from "@/lib/auth/auth-context";
 
 export const Route = createFileRoute("/reviewer/accept")({

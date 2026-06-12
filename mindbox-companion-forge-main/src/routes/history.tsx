@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { z } from "zod";
 import { PageHeader } from "@/components/PageHeader";
 import { ErrorState, LoadingState } from "@/components/EmptyState";
-import { DeleteSessionDialog } from "@/components/DeleteSessionDialog";
+import { DeleteSessionDialog } from "@/features/sessions/components/DeleteSessionDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

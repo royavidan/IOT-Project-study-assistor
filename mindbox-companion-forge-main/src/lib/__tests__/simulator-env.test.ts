@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_SIM_ENV, randomSimulatorEnv } from "@/lib/simulator-env";
+import { DEFAULT_SIM_ENV, randomSimulatorEnv } from "@/features/simulator/simulator-env";
 
 describe("randomSimulatorEnv", () => {
   it("returns values within expected sensor ranges", () => {

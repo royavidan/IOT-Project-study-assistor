@@ -2,7 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import PDFDocument from "pdfkit";
 
-import { buildReportHtml, summarize, type ReportMeta } from "@/lib/export";
+import { buildReportHtml, summarize, type ReportMeta } from "@/features/reports/export";
 import { computeWellbeing } from "@/lib/wellbeing";
 import type { Session } from "@/lib/types";
 

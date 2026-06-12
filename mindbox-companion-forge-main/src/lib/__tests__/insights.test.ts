@@ -5,7 +5,7 @@ import {
   computeEnvScatterPoints,
   computeHourlyHeatmap,
   computeSessionInsights,
-} from "@/lib/insights";
+} from "@/features/insights/insights";
 import type { Session } from "@/lib/types";
 
 function session(overrides: Partial<Session> = {}): Session {

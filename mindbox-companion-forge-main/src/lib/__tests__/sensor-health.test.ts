@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { summarizeSensorHealth } from "@/lib/sensor-health";
+import { summarizeSensorHealth } from "@/features/device/sensor-health";
 
 describe("summarizeSensorHealth", () => {
   it("returns empty when no data", () => {

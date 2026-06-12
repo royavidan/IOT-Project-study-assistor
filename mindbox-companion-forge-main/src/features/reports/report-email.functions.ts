@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { dateKeyDaysAgo } from "@/lib/dates";
-import { deliverReportByEmail } from "@/lib/email/deliver-report.server";
+import { deliverReportByEmail } from "@/features/reports/deliver-report.server";
 import { getSupabaseAdminClient, getSupabaseServerClient } from "@/lib/supabase/server";
 
 const emailReportInput = z.object({

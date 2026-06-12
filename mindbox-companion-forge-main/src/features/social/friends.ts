@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/lib/auth/auth-context";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { respondToFriendRequestFn, sendFriendRequestFn } from "@/lib/api/friends.functions";
+import { respondToFriendRequestFn, sendFriendRequestFn } from "@/features/social/friends.functions";
 
 export interface Friend {
   friendId: string;

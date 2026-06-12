@@ -16,10 +16,10 @@ import {
   sessionsToJson,
   summarize,
   type ReportMeta,
-} from "@/lib/export";
+} from "@/features/reports/export";
 import { dateKeyDaysAgo } from "@/lib/dates";
-import { printReportHtml } from "@/lib/print-report";
-import { emailReport } from "@/lib/api/report-email.functions";
+import { printReportHtml } from "@/features/reports/print-report";
+import { emailReport } from "@/features/reports/report-email.functions";
 import { FileText, FileSpreadsheet, FileJson, Mail } from "lucide-react";
 
 export const Route = createFileRoute("/exports")({

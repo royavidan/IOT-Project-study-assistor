@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "@/components/EmptyState";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useLeaderboard } from "@/lib/queries/leaderboard";
+import { useLeaderboard } from "@/features/social/leaderboard";
 import type { LeaderboardEntry } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { Trophy, Users } from "lucide-react";

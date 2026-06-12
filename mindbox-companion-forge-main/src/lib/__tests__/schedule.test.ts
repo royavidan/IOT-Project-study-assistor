@@ -11,8 +11,8 @@ import {
   upcomingExams,
   validateScheduleTimes,
   weekDateKeys,
-} from "@/lib/schedule";
-import type { ScheduleEvent } from "@/lib/schedule";
+} from "@/features/schedule/schedule";
+import type { ScheduleEvent } from "@/features/schedule/schedule";
 import type { Session } from "@/lib/types";
 
 const weeklyLecture: ScheduleEvent = {

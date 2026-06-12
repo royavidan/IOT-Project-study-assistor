@@ -10,17 +10,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth/auth-context";
 import { useDeviceStatus } from "@/lib/queries/sessions";
-import { useMyDevice, type MyDevice } from "@/lib/queries/device";
+import { useMyDevice, type MyDevice } from "@/features/device/queries";
 import { useSettings } from "@/lib/queries/settings";
 import {
   claimDeviceByCode,
   createTestPairingCode,
   renameDevice,
   unlinkDevice,
-} from "@/lib/api/pairing.functions";
-import { summarizeSensorHealth } from "@/lib/sensor-health";
+} from "@/features/device/pairing.functions";
+import { summarizeSensorHealth } from "@/features/device/sensor-health";
 import { LowBatteryBanner } from "@/components/LowBatteryBanner";
-import { BluetoothConnectCard } from "@/components/BluetoothConnectCard";
+import { BluetoothConnectCard } from "@/features/device/components/BluetoothConnectCard";
 import { BATTERY_TRACKING_ENABLED } from "@/lib/feature-flags";
 import { Battery, Wifi, AlertTriangle, CheckCircle2, User } from "lucide-react";
 

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import { useAuth } from "@/lib/auth/auth-context";
-import { useReviewerStudents } from "@/lib/queries/reviewer";
+import { useReviewerStudents } from "@/features/social/reviewer";
 import { useSessions } from "@/lib/queries/sessions";
 import { filterSessionsByUser } from "@/lib/session-scope";
 

@@ -1,0 +1,13 @@
+{
+  "folders": [
+    { "name": "🖥️  Web app", "path": "mindbox-companion-forge-main" },
+    { "name": "🔌  Firmware", "path": "MindBox - hardware/MindBox" },
+    { "name": "·  repo root (archive, docs)", "path": "." }
+  ],
+  "settings": {
+    "search.exclude": {
+      "**/archive/**": true,
+      "**/node_modules/**": true
+    }
+  }
+}

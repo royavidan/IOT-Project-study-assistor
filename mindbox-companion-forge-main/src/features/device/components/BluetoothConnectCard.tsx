@@ -7,7 +7,7 @@ import {
   connectMindBoxOverBluetooth,
   isWebBluetoothSupported,
   type MindBoxBleInfo,
-} from "@/lib/bluetooth/web-bluetooth";
+} from "@/features/device/web-bluetooth";
 
 /**
  * Optional BLE pairing entry point. Feature-detects Web Bluetooth and degrades

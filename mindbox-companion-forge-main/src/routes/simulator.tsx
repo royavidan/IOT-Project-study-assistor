@@ -21,8 +21,8 @@ import {
   getSimulatorDevice,
   submitSimulatorSession,
   submitSimulatorTelemetry,
-} from "@/lib/api/simulator.functions";
-import { DEFAULT_SIM_ENV, randomSimulatorEnv } from "@/lib/simulator-env";
+} from "@/features/simulator/simulator.functions";
+import { DEFAULT_SIM_ENV, randomSimulatorEnv } from "@/features/simulator/simulator-env";
 import type { DeviceState, SessionMode, SessionStatus } from "@/lib/types";
 import { ArrowRight, Dices, FlaskConical, Trash2 } from "lucide-react";
 

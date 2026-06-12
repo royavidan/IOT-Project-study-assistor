@@ -9,11 +9,11 @@ import { Progress } from "@/components/ui/progress";
 import { LowBatteryBanner } from "@/components/LowBatteryBanner";
 import { useAuth } from "@/lib/auth/auth-context";
 import { dateKeyDaysAgo } from "@/lib/dates";
-import { computeDashboardInsightTeaser } from "@/lib/insights";
+import { computeDashboardInsightTeaser } from "@/features/insights/insights";
 import { filterSessionsByUser } from "@/lib/session-scope";
 import { BATTERY_TRACKING_ENABLED } from "@/lib/feature-flags";
-import { useReviewerStudents } from "@/lib/queries/reviewer";
-import { maybeSendWeeklySummaries } from "@/lib/api/report-email.functions";
+import { useReviewerStudents } from "@/features/social/reviewer";
+import { maybeSendWeeklySummaries } from "@/features/reports/report-email.functions";
 import { useSessions, useTodayStats } from "@/lib/queries/sessions";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {

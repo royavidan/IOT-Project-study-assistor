@@ -12,7 +12,7 @@ import {
   createReviewerInvite,
   listReviewerGrants,
   revokeReviewerInvite,
-} from "@/lib/api/reviewer.functions";
+} from "@/features/social/reviewer.functions";
 
 export const Route = createFileRoute("/reviewers")({
   head: () => ({ meta: [{ title: "Reviewer Access — MindBox" }] }),

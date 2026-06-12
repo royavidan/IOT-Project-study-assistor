@@ -8,12 +8,12 @@ import {
   HourlyHeatmapGrid,
   TimeOfDayHeatmapChart,
   WeeklyTrendChart,
-} from "@/components/InsightsCharts";
+} from "@/features/insights/components/InsightsCharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StudentScopePicker } from "@/components/StudentScopePicker";
-import { WellbeingPanel } from "@/components/WellbeingPanel";
+import { WellbeingPanel } from "@/features/insights/components/WellbeingPanel";
 import { InfoHint } from "@/components/InfoHint";
 import { useSessionScope } from "@/hooks/use-session-scope";
 import { dateKeyDaysAgo } from "@/lib/dates";
@@ -22,9 +22,9 @@ import {
   computeHourlyHeatmap,
   computeSessionInsights,
   countSessionsWithEnv,
-} from "@/lib/insights";
+} from "@/features/insights/insights";
 import { computeWellbeing } from "@/lib/wellbeing";
-import { useExternalLoads } from "@/lib/queries/external-load";
+import { useExternalLoads } from "@/features/insights/external-load";
 import { dailyAggregates } from "@/lib/queries/sessions";
 import { Lightbulb } from "lucide-react";
 

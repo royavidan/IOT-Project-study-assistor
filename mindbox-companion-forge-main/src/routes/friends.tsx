@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useFriends, useFriendActions, type Friend } from "@/lib/queries/friends";
+import { useFriends, useFriendActions, type Friend } from "@/features/social/friends";
 import { UserPlus, Users } from "lucide-react";
 
 export const Route = createFileRoute("/friends")({

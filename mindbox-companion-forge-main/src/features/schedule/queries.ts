@@ -2,8 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/lib/auth/auth-context";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import type { ScheduleCategory, ScheduleEvent, ScheduleKind } from "@/lib/schedule";
-import { validateScheduleTimes } from "@/lib/schedule";
+import type { ScheduleCategory, ScheduleEvent, ScheduleKind } from "@/features/schedule/schedule";
+import { validateScheduleTimes } from "@/features/schedule/schedule";
 
 export interface ScheduleEventInput {
   title: string;

@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { getSupabaseAdminClient, getSupabaseServerClient } from "@/lib/supabase/server";
-import { sendFriendAcceptedEmail, sendFriendRequestEmail } from "@/lib/email/friend-notify.server";
+import { sendFriendAcceptedEmail, sendFriendRequestEmail } from "@/features/social/friend-notify.server";
 
 const sendInput = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address."),

@@ -50,7 +50,7 @@ export default {
         url.pathname === "/ingest/unpair" ||
         url.pathname === "/ingest/config"
       ) {
-        const { handleIngestRequest } = await import("./lib/ingest/ingest.server");
+        const { handleIngestRequest } = await import("./features/device/ingest.server");
         return await handleIngestRequest(request, url);
       }
 

@@ -2,8 +2,8 @@ import { Link } from "@tanstack/react-router";
 import { BookOpen, Brain, GraduationCap, MapPin, Pencil, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import type { AgendaItem } from "@/lib/schedule";
-import { formatDurationMinutes, formatTimeDisplay, meetingTypeLabel } from "@/lib/schedule";
+import type { AgendaItem } from "@/features/schedule/schedule";
+import { formatDurationMinutes, formatTimeDisplay, meetingTypeLabel } from "@/features/schedule/schedule";
 
 export function ScheduleTimeline({
   items,

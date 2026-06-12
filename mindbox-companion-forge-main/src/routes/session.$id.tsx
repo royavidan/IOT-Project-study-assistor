@@ -1,11 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/PageHeader";
 import { ErrorState, LoadingState } from "@/components/EmptyState";
-import { DeleteSessionDialog } from "@/components/DeleteSessionDialog";
+import { DeleteSessionDialog } from "@/features/sessions/components/DeleteSessionDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InfoHint } from "@/components/InfoHint";
-import { useSessionDetail } from "@/lib/queries/session-detail";
+import { useSessionDetail } from "@/features/sessions/session-detail";
 import { useAuth } from "@/lib/auth/auth-context";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
 import {

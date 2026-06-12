@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { computeFocusLoad } from "@/lib/focus-load";
-import { DEFAULT_SIM_ENV } from "@/lib/simulator-env";
+import { DEFAULT_SIM_ENV } from "@/features/simulator/simulator-env";
 import { getSupabaseAdminClient, getSupabaseServerClient } from "@/lib/supabase/server";
 
 const MODES = ["Deep Focus", "Study", "Reading", "Review"] as const;

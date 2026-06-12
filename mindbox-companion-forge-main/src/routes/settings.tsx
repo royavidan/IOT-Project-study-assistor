@@ -13,7 +13,7 @@ import {
   useSettings,
   type AppSettings,
 } from "@/lib/queries/settings";
-import { ExternalLoadCard } from "@/components/ExternalLoadCard";
+import { ExternalLoadCard } from "@/features/insights/components/ExternalLoadCard";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Settings — MindBox" }] }),

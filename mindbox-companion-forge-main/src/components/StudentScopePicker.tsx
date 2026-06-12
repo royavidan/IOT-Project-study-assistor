@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { ReviewerStudent } from "@/lib/queries/reviewer";
+import type { ReviewerStudent } from "@/features/social/reviewer";
 
 export function StudentScopePicker({
   students,

@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { dateKeyDaysAgo } from "@/lib/dates";
-import { useExternalLoadActions, useExternalLoads } from "@/lib/queries/external-load";
+import { useExternalLoadActions, useExternalLoads } from "@/features/insights/external-load";
 
 /**
  * Manage "general load" — lectures, labs, anything outside MindBox sessions.

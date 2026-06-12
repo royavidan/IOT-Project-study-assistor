@@ -29,8 +29,8 @@ import {
   type CourseExamDraft,
   type CourseMeetingDraft,
   type MeetingType,
-} from "@/lib/schedule";
-import type { ScheduleEventInput } from "@/lib/queries/schedule";
+} from "@/features/schedule/schedule";
+import type { ScheduleEventInput } from "@/features/schedule/queries";
 
 type Props = {
   open: boolean;

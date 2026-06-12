@@ -1,6 +1,6 @@
 import { parseDateKey, toDateKey } from "@/lib/dates";
 import type { Session } from "@/lib/types";
-import type { ScheduleEventInput } from "@/lib/queries/schedule";
+import type { ScheduleEventInput } from "@/features/schedule/queries";
 
 export type ScheduleKind = "weekly" | "once";
 export type ScheduleCategory = "class" | "exam";

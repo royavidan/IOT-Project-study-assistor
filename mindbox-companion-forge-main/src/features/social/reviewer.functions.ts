@@ -3,7 +3,7 @@ import { getRequestUrl } from "@tanstack/react-start/server";
 import { z } from "zod";
 
 import { getServerConfig } from "@/lib/config.server";
-import { sendReviewerInviteEmail } from "@/lib/email/reviewer-invite.server";
+import { sendReviewerInviteEmail } from "@/features/social/reviewer-invite.server";
 import { getSupabaseAdminClient, getSupabaseServerClient } from "@/lib/supabase/server";
 
 const reviewerInviteInput = z.object({

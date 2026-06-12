@@ -19,9 +19,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { ScheduleCategory, ScheduleEvent, ScheduleKind } from "@/lib/schedule";
-import { COURSE_COLORS, DAY_LABELS_FULL, MEETING_TYPES } from "@/lib/schedule";
-import type { ScheduleEventInput } from "@/lib/queries/schedule";
+import type { ScheduleCategory, ScheduleEvent, ScheduleKind } from "@/features/schedule/schedule";
+import { COURSE_COLORS, DAY_LABELS_FULL, MEETING_TYPES } from "@/features/schedule/schedule";
+import type { ScheduleEventInput } from "@/features/schedule/queries";
 
 const EXAM_COLOR = "#f43f5e";
 

@@ -5,9 +5,9 @@ import { ChevronLeft, ChevronRight, GraduationCap, Plus } from "lucide-react";
 
 import { PageHeader } from "@/components/PageHeader";
 import { ErrorState, LoadingState } from "@/components/EmptyState";
-import { ScheduleEventDialog } from "@/components/ScheduleEventDialog";
-import { CourseBuilderDialog } from "@/components/CourseBuilderDialog";
-import { ScheduleTimeline } from "@/components/ScheduleTimeline";
+import { ScheduleEventDialog } from "@/features/schedule/components/ScheduleEventDialog";
+import { CourseBuilderDialog } from "@/features/schedule/components/CourseBuilderDialog";
+import { ScheduleTimeline } from "@/features/schedule/components/ScheduleTimeline";
 import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,10 +18,10 @@ import { parseDateKey, todayDateKey, toDateKey } from "@/lib/dates";
 import { filterSessionsByUser } from "@/lib/session-scope";
 import { useAuth } from "@/lib/auth/auth-context";
 import { useSessions } from "@/lib/queries/sessions";
-import { useScheduleActions, useScheduleEvents } from "@/lib/queries/schedule";
-import type { ScheduleEventInput } from "@/lib/queries/schedule";
+import { useScheduleActions, useScheduleEvents } from "@/features/schedule/queries";
+import type { ScheduleEventInput } from "@/features/schedule/queries";
 import { useSaveSettings, useSettings } from "@/lib/queries/settings";
-import type { ScheduleEvent } from "@/lib/schedule";
+import type { ScheduleEvent } from "@/features/schedule/schedule";
 import {
   buildDayAgenda,
   countdownLabel,
@@ -32,7 +32,7 @@ import {
   monthDateRange,
   upcomingExams,
   weekDateKeys,
-} from "@/lib/schedule";
+} from "@/features/schedule/schedule";
 
 export const Route = createFileRoute("/calendar")({
   validateSearch: z.object({
