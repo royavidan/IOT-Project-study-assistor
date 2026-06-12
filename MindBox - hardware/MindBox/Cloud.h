@@ -18,6 +18,7 @@ namespace Cloud {
   // --- loop-side, thread-safe shims -----------------------------------------
   void publishState(const TelemetrySnap& s);    // loop -> task: live mirror data
   void flagTransition();                         // loop -> task: push telemetry now
+  void requestConfigSync();                      // loop -> task: pull /ingest/config now
   bool takeSettings(CloudSettings& out);         // task -> loop: new downlinked settings?
   bool nextCommand(RemoteCmd& cmd);              // task -> loop: pop a remote command
 

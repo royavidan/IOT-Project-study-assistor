@@ -47,6 +47,7 @@ export default {
         url.pathname === "/ingest/sessions" ||
         url.pathname === "/ingest/telemetry" ||
         url.pathname === "/ingest/pairing" ||
+        url.pathname === "/ingest/unpair" ||
         url.pathname === "/ingest/config"
       ) {
         const { handleIngestRequest } = await import("./lib/ingest/ingest.server");

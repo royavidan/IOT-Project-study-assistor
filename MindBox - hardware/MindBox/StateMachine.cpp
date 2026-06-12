@@ -23,6 +23,7 @@ static uint32_t     s_stateAt = 0, s_lastRender = 0, s_bootAt = 0;
 static uint32_t     s_lastCheckpoint = 0;
 static uint32_t     s_lastSnap = 0;
 static unsigned long s_signOutGuardUntil = 0;  // ignore stale paired:true until this millis()
+static uint32_t     s_lastPairConfigPoll = 0;
 static bool         s_uiDirty = true;
 static String       s_devShort;
 static char         s_pairCode[7] = {0};
@@ -174,6 +175,8 @@ static bool persistSession(const char* status) {
 static void enterPairing() {
   snprintf(s_pairCode, sizeof(s_pairCode), "%06u", (unsigned)(esp_random() % 1000000u));
   Cloud::publishPairingCode(s_pairCode);
+  s_lastPairConfigPoll = 0;
+  Cloud::requestConfigSync();
   enter(ST_PAIRING);
 }
 
@@ -466,6 +469,7 @@ void tick() {
     if (paired && now < s_signOutGuardUntil) paired = false;
     else                                     s_signOutGuardUntil = 0;
     Storage::setPaired(paired);
+    if (paired != wasPaired) s_uiDirty = true;
     s_cfg.showTimer        = cs.showTimer;
     s_cfg.hapticsEnabled   = cs.hapticsEnabled;
     s_cfg.adaptiveCoaching = cs.adaptiveCoaching;
@@ -583,6 +587,11 @@ void tick() {
       break;
 
     case ST_PAIRING:
+      if (now - s_lastPairConfigPoll > CONFIG_FETCH_PAIRING_MS) {
+        s_lastPairConfigPoll = now;
+        Cloud::requestConfigSync();
+      }
+      if (Storage::paired()) s_pairCode[0] = 0;
       if (btn == 1 || btn == 2 || clk) { s_pairCode[0] = 0; enter(ST_IDLE); }
       break;
 

@@ -95,6 +95,7 @@ function Device() {
       setMessage(`Paired with ${result.name}. Your sessions will now sync to this app.`);
       setCode("");
       invalidate();
+      void refetch();
     },
     onError: (err) => {
       setMessageKind("error");
@@ -210,7 +211,13 @@ function Device() {
                 );
               })()}
 
-              {status.battery === 0 && status.state === "idle" && (
+              {myDevice && status.battery === 0 && status.state === "idle" && (
+                <p className="w-full text-sm text-muted-foreground" role="status">
+                  Account linked — waiting for your MindBox to check in (usually within a few
+                  seconds).
+                </p>
+              )}
+              {!myDevice && status.battery === 0 && status.state === "idle" && (
                 <p className="w-full text-sm text-muted-foreground">
                   No paired device found. Complete the steps below to connect your MindBox, or{" "}
                   <Link

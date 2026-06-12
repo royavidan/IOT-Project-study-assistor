@@ -92,6 +92,7 @@ static const unsigned long WIFI_STATUS_CACHE_MS = 1000UL;  // throttle WiFi.stat
 #define CLOUD_USE_TLS 0
 #define NTP_SERVER "pool.ntp.org"
 static const unsigned long CONFIG_FETCH_MS = 60000UL;    // pull settings every 60 s when online
+static const unsigned long CONFIG_FETCH_PAIRING_MS = 3000UL; // fast poll while waiting for app claim
 static const unsigned long WIFI_RETRY_MS   = 15000UL;    // reconnect attempt cadence
 // HTTP is synchronous on the main loop, so a stalled request freezes the UI.
 // Keep these tight and back off after a failure so an unreachable server can't

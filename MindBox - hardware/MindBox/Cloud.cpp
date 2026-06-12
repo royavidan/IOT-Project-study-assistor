@@ -49,6 +49,7 @@ static TelemetrySnap     s_snap = {};
 static CloudSettings     s_settings = {};
 static volatile bool     s_settingsReady = false;
 static volatile bool     s_pushNow = false;
+static volatile bool     s_configNow = false;
 static volatile bool     s_pairPending = false;
 static volatile bool     s_unpairPending = false;
 static char              s_pairCode[8] = {0};
@@ -204,6 +205,7 @@ static void doPairing() {
   String resp;
   int c = httpRequest("POST", s_baseUrl + "/ingest/pairing", body, resp);
   if (c != 200) Serial.printf("[cloud] pairing publish failed (%d): %s\n", c, resp.c_str());
+  else s_configNow = true;   // poll soon in case the user claims immediately
 }
 
 static bool doUnpair() {
@@ -235,7 +237,11 @@ static void manageWifi() {
     }
   } else {
     if (!s_ntpStarted) { configTime(0, 0, NTP_SERVER); s_ntpStarted = true; }
-    if (!s_wasOnline) { s_uploadBackoffMs = UPLOAD_RETRY_MIN_MS; s_uploadSoon = true; }
+    if (!s_wasOnline) {
+      s_uploadBackoffMs = UPLOAD_RETRY_MIN_MS;
+      s_uploadSoon = true;
+      s_configNow = true;    // learn paired state + settings without waiting 60 s
+    }
   }
   s_wasOnline = conn;
 }
@@ -256,7 +262,11 @@ static void cloudTask(void*) {
       if (s_pushNow || millis() - lastTele > TELEMETRY_PERIOD_MS) {
         s_pushNow = false; lastTele = millis(); pushTelemetry();
       }
-      if (millis() - lastSync > CONFIG_FETCH_MS) { lastSync = millis(); syncDownlink(); }
+      if (s_configNow || millis() - lastSync > CONFIG_FETCH_MS) {
+        s_configNow = false;
+        lastSync = millis();
+        syncDownlink();
+      }
       drainUploadQueue();
     }
     vTaskDelay(pdMS_TO_TICKS(NET_TASK_PERIOD_MS));
@@ -292,6 +302,12 @@ void publishState(const TelemetrySnap& s) {
 void flagTransition() {
 #if ENABLE_CLOUD
   s_pushNow = true;
+#endif
+}
+
+void requestConfigSync() {
+#if ENABLE_CLOUD
+  s_configNow = true;
 #endif
 }
 
