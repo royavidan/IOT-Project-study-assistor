@@ -189,6 +189,17 @@ void saveConfig(const DeviceConfig& c) {
 bool paired()          { return prefs.getBool("paired", false); }
 void setPaired(bool p) { if (prefs.getBool("paired", false) != p) prefs.putBool("paired", p); }
 
+void setOwnerAccount(const char* displayName, const char* email) {
+  prefs.putString("ownerName", displayName ? displayName : "");
+  prefs.putString("ownerEmail", email ? email : "");
+}
+void clearOwnerAccount() {
+  prefs.putString("ownerName", "");
+  prefs.putString("ownerEmail", "");
+}
+String ownerDisplayName() { return prefs.getString("ownerName", ""); }
+String ownerEmail()       { return prefs.getString("ownerEmail", ""); }
+
 String wifiSsid()                      { return prefs.getString("wSsid", ""); }
 void   setWifiSsid(const String& s)    { prefs.putString("wSsid", s); }
 String wifiPass()                      { return prefs.getString("wPass", ""); }

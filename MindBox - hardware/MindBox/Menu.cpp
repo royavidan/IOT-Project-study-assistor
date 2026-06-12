@@ -331,6 +331,8 @@ void setContext(bool wifi, bool paired, const char* deviceId) {
   s_devId  = deviceId ? deviceId : "";
 }
 
+void invalidate() { markDirty(); }
+
 void setLiveFocusSec(uint32_t sec) {
   Storage::setLiveFocusSec(sec);
   markDirty();
@@ -700,8 +702,14 @@ const MenuView& view() {
       }
 
       case SCR_DEVICE:
-        if (idx == 0) fillRow(row, s_paired ? "Sign out" : "Pair account", nullptr, sel);
-        else if (idx == 1) fillRow(row, "Diagnostics", nullptr, sel);
+        if (idx == 0) {
+          if (s_paired) {
+            String owner = Storage::ownerDisplayName();
+            fillRow(row, "Sign out", owner.length() ? owner.c_str() : "Account", sel);
+          } else {
+            fillRow(row, "Pair account", nullptr, sel);
+          }
+        } else if (idx == 1) fillRow(row, "Diagnostics", nullptr, sel);
         else fillRow(row, "Back", nullptr, sel);
         break;
 
@@ -713,6 +721,14 @@ const MenuView& view() {
       default: break;
     }
   }
+
+  if (s_screen == SCR_DEVICE && s_paired) {
+    String email = Storage::ownerEmail();
+    if (email.length() > 21) email = email.substring(0, 21);
+    if (email.length())
+      strncpy(v.accountEmail, email.c_str(), sizeof(v.accountEmail) - 1);
+  }
+
   s_dirty = false;
   return v;
 }

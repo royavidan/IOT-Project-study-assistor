@@ -26,6 +26,11 @@ namespace Storage {
   bool paired();
   void setPaired(bool p);
 
+  void setOwnerAccount(const char* displayName, const char* email);
+  void clearOwnerAccount();
+  String ownerDisplayName();
+  String ownerEmail();
+
   // Provisioning (entered over serial, persisted in NVS).
   String wifiSsid();     void setWifiSsid(const String& s);
   String wifiPass();     void setWifiPass(const String& s);

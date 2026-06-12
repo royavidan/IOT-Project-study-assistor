@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { StateBadge } from "@/components/StateBadge";
 import { ErrorState, LoadingState } from "@/components/EmptyState";
@@ -8,8 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/lib/auth/auth-context";
 import { useDeviceStatus } from "@/lib/queries/sessions";
-import { useMyDevice } from "@/lib/queries/device";
+import { useMyDevice, type MyDevice } from "@/lib/queries/device";
+import { useSettings } from "@/lib/queries/settings";
 import {
   claimDeviceByCode,
   createTestPairingCode,
@@ -20,7 +22,7 @@ import { summarizeSensorHealth } from "@/lib/sensor-health";
 import { LowBatteryBanner } from "@/components/LowBatteryBanner";
 import { BluetoothConnectCard } from "@/components/BluetoothConnectCard";
 import { BATTERY_TRACKING_ENABLED } from "@/lib/feature-flags";
-import { Battery, Wifi, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Battery, Wifi, AlertTriangle, CheckCircle2, User } from "lucide-react";
 
 export const Route = createFileRoute("/device")({
   head: () => ({ meta: [{ title: "Device Setup — MindBox" }] }),
@@ -45,8 +47,21 @@ const steps = [
   },
 ];
 
+function formatAccountLabel(displayName: string | undefined, email: string | undefined): string {
+  const name = displayName?.trim();
+  const mail = email?.trim();
+  if (name && mail) return `${name} (${mail})`;
+  return name || mail || "Signed in";
+}
+
 function Device() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const { data: settings } = useSettings();
+  const accountLabel = useMemo(
+    () => formatAccountLabel(settings?.displayName, user?.email ?? undefined),
+    [settings?.displayName, user?.email],
+  );
   const { data: status, isLoading, isError, error, refetch } = useDeviceStatus();
 
   const [code, setCode] = useState("");
@@ -68,6 +83,9 @@ function Device() {
     onSuccess: () => {
       setMessageKind("success");
       setMessage("Signed out. Your MindBox returns to its pairing screen and stops syncing shortly.");
+      if (user?.id) {
+        queryClient.setQueryData<MyDevice | null>(["my-device", user.id], null);
+      }
       invalidate();
     },
     onError: (err) => {
@@ -91,10 +109,20 @@ function Device() {
   const claimMutation = useMutation({
     mutationFn: (c: string) => claimDeviceByCode({ data: { code: c } }),
     onSuccess: (result) => {
+      const linked: MyDevice = {
+        id: result.deviceId,
+        name: result.name,
+        firmwareVersion: result.firmwareVersion,
+        pairedAt: result.pairedAt,
+      };
+      if (user?.id) {
+        queryClient.setQueryData<MyDevice | null>(["my-device", user.id], linked);
+      }
       setMessageKind("success");
       setMessage(`Paired with ${result.name}. Your sessions will now sync to this app.`);
       setCode("");
-      invalidate();
+      void queryClient.invalidateQueries({ queryKey: ["device-status", user?.id] });
+      void queryClient.refetchQueries({ queryKey: ["my-device", user?.id] });
       void refetch();
     },
     onError: (err) => {
@@ -147,6 +175,15 @@ function Device() {
           <CardTitle className="text-base">Status</CardTitle>
         </CardHeader>
         <CardContent>
+          {user && (
+            <p className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground">
+              <User className="h-4 w-4 shrink-0" aria-hidden />
+              <span>
+                Signed in as{" "}
+                <span className="font-medium text-foreground">{accountLabel}</span>
+              </span>
+            </p>
+          )}
           {isLoading && <LoadingState label="Checking device…" />}
           {isError && (
             <ErrorState
@@ -157,6 +194,18 @@ function Device() {
           )}
           {!isLoading && !isError && status && (
             <div className="space-y-4">
+              {myDevice && (
+                <div
+                  className="flex items-center gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-sm text-success"
+                  role="status"
+                >
+                  <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+                  <span>
+                    <span className="font-medium">{myDevice.name}</span> linked to{" "}
+                    <span className="font-medium">{accountLabel}</span>
+                  </span>
+                </div>
+              )}
               <div className="flex flex-wrap items-center gap-4">
                 <StateBadge state={status.state} battery={status.battery} />
                 {BATTERY_TRACKING_ENABLED && (
@@ -272,8 +321,8 @@ function Device() {
                   <p className="text-sm font-semibold">{myDevice.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {myDevice.firmwareVersion
-                      ? `Firmware ${myDevice.firmwareVersion}`
-                      : "Linked to your account"}
+                      ? `Firmware ${myDevice.firmwareVersion} · linked to ${accountLabel}`
+                      : `Linked to ${accountLabel}`}
                   </p>
                 </div>
                 <div className="flex gap-2">
@@ -316,82 +365,87 @@ function Device() {
 
       {!myDevice && (
         <>
-      <ol className="space-y-3">
-        {steps.map((s) => (
-          <li key={s.n}>
-            <Card>
-              <CardContent className="flex items-start gap-4 p-5">
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sync-muted text-sm font-semibold text-sync">
-                  {s.n}
-                </span>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold">{s.title}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{s.body}</p>
+          <ol className="space-y-3">
+            {steps.map((s) => (
+              <li key={s.n}>
+                <Card>
+                  <CardContent className="flex items-start gap-4 p-5">
+                    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sync-muted text-sm font-semibold text-sync">
+                      {s.n}
+                    </span>
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold">{s.title}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{s.body}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </li>
+            ))}
+          </ol>
+
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-base">Pair with a code</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {user && (
+                <p className="text-sm text-muted-foreground">
+                  Pairing links your MindBox to{" "}
+                  <span className="font-medium text-foreground">{accountLabel}</span>.
+                </p>
+              )}
+              <form onSubmit={onPair} className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="pair-code">6-digit code</Label>
+                  <Input
+                    id="pair-code"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    maxLength={6}
+                    placeholder="123456"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                    className="w-[160px] font-mono tracking-widest"
+                  />
                 </div>
-              </CardContent>
-            </Card>
-          </li>
-        ))}
-      </ol>
+                <Button type="submit" disabled={claimMutation.isPending}>
+                  {claimMutation.isPending ? "Pairing…" : "Pair device"}
+                </Button>
+              </form>
 
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-base">Pair with a code</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <form onSubmit={onPair} className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
-            <div className="grid gap-1.5">
-              <Label htmlFor="pair-code">6-digit code</Label>
-              <Input
-                id="pair-code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                maxLength={6}
-                placeholder="123456"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                className="w-[160px] font-mono tracking-widest"
-              />
-            </div>
-            <Button type="submit" disabled={claimMutation.isPending}>
-              {claimMutation.isPending ? "Pairing…" : "Pair device"}
-            </Button>
-          </form>
+              {message && (
+                <p
+                  role="status"
+                  className={`text-sm ${messageKind === "error"
+                      ? "text-danger"
+                      : messageKind === "info"
+                        ? "text-sync"
+                        : "text-success"
+                    }`}
+                >
+                  {message}
+                </p>
+              )}
 
-          {message && (
-            <p
-              role="status"
-              className={`text-sm ${
-                messageKind === "error"
-                  ? "text-danger"
-                  : messageKind === "info"
-                    ? "text-sync"
-                    : "text-success"
-              }`}
-            >
-              {message}
-            </p>
-          )}
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground">
+                  No hardware yet? Generate a one-time test code to try the pairing flow end-to-end.
+                </p>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="mt-2"
+                  disabled={testCodeMutation.isPending}
+                  onClick={() => testCodeMutation.mutate()}
+                >
+                  {testCodeMutation.isPending ? "Generating…" : "Generate a test code"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
-          <div className="rounded-lg border border-dashed border-border bg-muted/30 p-3">
-            <p className="text-xs text-muted-foreground">
-              No hardware yet? Generate a one-time test code to try the pairing flow end-to-end.
-            </p>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="mt-2"
-              disabled={testCodeMutation.isPending}
-              onClick={() => testCodeMutation.mutate()}
-            >
-              {testCodeMutation.isPending ? "Generating…" : "Generate a test code"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <BluetoothConnectCard onPairingCode={setCode} />
+          <BluetoothConnectCard onPairingCode={setCode} />
         </>
       )}
     </>

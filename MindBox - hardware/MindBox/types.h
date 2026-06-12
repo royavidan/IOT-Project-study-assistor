@@ -153,6 +153,8 @@ struct CloudSettings {
   bool     showTimer, hapticsEnabled, adaptiveCoaching, nudgesEnabled;
   uint16_t quietStartMin, quietEndMin, dailyGoalMin;
   int32_t  todayFocusSec;   // server-truth focus today (account-wide, local day)
+  char     ownerDisplayName[20];
+  char     ownerEmail[32];
 };
 
 // Remote command from the app (Part 3), delivered loop<-task via a queue.
@@ -182,6 +184,7 @@ struct MenuView {
   int      durationMin;
   float    durationFrac;
   char     infoLine[24];    // optional subtitle (READY screen summary)
+  char     accountEmail[32]; // DEVICE screen: shown below Sign out when paired
 };
 
 // Actions Menu::tick() returns for StateMachine to handle.

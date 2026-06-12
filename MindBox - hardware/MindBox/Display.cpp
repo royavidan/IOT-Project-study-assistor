@@ -1,5 +1,6 @@
 #include "Display.h"
 #include "config.h"
+#include "Storage.h"
 #include <Wire.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SH110X.h>
@@ -92,8 +93,12 @@ void renderMenu(const MenuView& m) {
   if (m.infoLine[0]) center(m.infoLine, 14, 1);
 
   int baseY = m.infoLine[0] ? 26 : 14;
-  for (uint8_t i = 0; i < m.rowCount; i++)
-    menuRow(baseY + (int)i * 10, m.rows[i]);
+  for (uint8_t i = 0; i < m.rowCount; i++) {
+    int y = baseY + (int)i * 10;
+    if (i > 0 && m.accountEmail[0]) y += 8;
+    menuRow(y, m.rows[i]);
+    if (i == 0 && m.accountEmail[0]) text(2, baseY + 9, 1, m.accountEmail);
+  }
   show();
 }
 
@@ -103,8 +108,17 @@ static void sPairing(const UiModel& m) {
   char id[24]; snprintf(id, sizeof(id), "id %s", (m.deviceId && m.deviceId[0]) ? m.deviceId : "?");
   if (m.paired) {
     center("PAIRED", 0, 1);
-    center(id, 16, 1);
-    center("linked to account", 34, 1);
+    String owner = Storage::ownerDisplayName();
+    String email = Storage::ownerEmail();
+    if (owner.length())
+      center(owner.c_str(), 16, 1);
+    if (email.length()) {
+      String line = email;
+      if (line.length() > 21) line = line.substring(0, 21);
+      center(line.c_str(), owner.length() ? 28 : 16, 1);
+    } else if (!owner.length()) {
+      center("linked to account", 28, 1);
+    }
   } else if (m.wifi && m.pairCode && m.pairCode[0]) {
     center("PAIR THIS BOX", 0, 1);
     center(m.pairCode, 20, 2);                           // 6-digit code (hero)

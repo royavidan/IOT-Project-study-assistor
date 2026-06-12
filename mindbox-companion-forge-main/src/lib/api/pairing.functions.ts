@@ -63,7 +63,7 @@ export const claimDeviceByCode = createServerFn({ method: "POST" })
       .from("devices")
       .update({ owner_user_id: user.id, paired_at: new Date().toISOString() })
       .eq("id", deviceId)
-      .select("id, name")
+      .select("id, name, firmware_version, paired_at")
       .maybeSingle();
     if (claimError) throw new Error(`Failed to claim device: ${claimError.message}`);
 
@@ -78,6 +78,8 @@ export const claimDeviceByCode = createServerFn({ method: "POST" })
       ok: true as const,
       deviceId,
       name: String(claimed.name ?? "MindBox"),
+      firmwareVersion: claimed.firmware_version ? String(claimed.firmware_version) : null,
+      pairedAt: claimed.paired_at ? String(claimed.paired_at) : new Date().toISOString(),
     };
   });
 

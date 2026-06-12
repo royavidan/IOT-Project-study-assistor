@@ -24,6 +24,7 @@ static uint32_t     s_lastCheckpoint = 0;
 static uint32_t     s_lastSnap = 0;
 static unsigned long s_signOutGuardUntil = 0;  // ignore stale paired:true until this millis()
 static uint32_t     s_lastPairConfigPoll = 0;
+static uint32_t     s_lastIdleConfigPoll = 0;
 static bool         s_uiDirty = true;
 static String       s_devShort;
 static char         s_pairCode[7] = {0};
@@ -175,7 +176,7 @@ static bool persistSession(const char* status) {
 static void enterPairing() {
   snprintf(s_pairCode, sizeof(s_pairCode), "%06u", (unsigned)(esp_random() % 1000000u));
   Cloud::publishPairingCode(s_pairCode);
-  s_lastPairConfigPoll = 0;
+  s_lastPairConfigPoll = millis();
   Cloud::requestConfigSync();
   enter(ST_PAIRING);
 }
@@ -187,10 +188,12 @@ static void enterPairing() {
 static void signOutAccount() {
   Cloud::requestUnpair();                 // task POSTs /ingest/unpair -> owner=null
   Storage::setPaired(false);
+  Storage::clearOwnerAccount();
   Storage::setServerTodaySec(0);
   s_signOutGuardUntil = millis() + SIGN_OUT_GUARD_MS;
   if (s_cfg.hapticsEnabled) Haptics::reset();
   Menu::setContext(Cloud::online(), false, s_devShort.c_str());
+  Menu::invalidate();
   Menu::resetToRoot();
   s_uiDirty = true;
   Serial.println("[device] signed out from the box");
@@ -470,6 +473,10 @@ void tick() {
     else                                     s_signOutGuardUntil = 0;
     Storage::setPaired(paired);
     if (paired != wasPaired) s_uiDirty = true;
+    if (paired && !wasPaired) {
+      Menu::setContext(Cloud::online(), true, s_devShort.c_str());
+      Cloud::flagTransition();
+    }
     s_cfg.showTimer        = cs.showTimer;
     s_cfg.hapticsEnabled   = cs.hapticsEnabled;
     s_cfg.adaptiveCoaching = cs.adaptiveCoaching;
@@ -479,10 +486,17 @@ void tick() {
     s_cfg.dailyGoalMin     = cs.dailyGoalMin;
     applyConfig(s_cfg);
     if (paired) {
+      bool acctChanged =
+        Storage::ownerDisplayName() != String(cs.ownerDisplayName) ||
+        Storage::ownerEmail() != String(cs.ownerEmail);
+      Storage::setOwnerAccount(cs.ownerDisplayName, cs.ownerEmail);
+      if (acctChanged) Menu::invalidate();
       Storage::setServerTodaySec(cs.todayFocusSec < 0 ? 0 : (uint32_t)cs.todayFocusSec);
     } else if (wasPaired) {
       // Remote sign-out from the web app: drop the account locally + notify.
       // (The box keeps no owner identity on-device; unpair is the whole state.)
+      Storage::clearOwnerAccount();
+      Menu::invalidate();
       Storage::setServerTodaySec(0);
       if (s_cfg.hapticsEnabled) Haptics::reset();
       s_uiDirty = true;
@@ -499,6 +513,14 @@ void tick() {
   switch (s_state) {
     case ST_IDLE: {
       updateTodayLiveFocus();
+      if (Cloud::online() && !Storage::paired()) {
+        if (now - s_lastIdleConfigPoll > CONFIG_FETCH_UNPAIRED_MS) {
+          s_lastIdleConfigPoll = now;
+          Cloud::requestConfigSync();
+        }
+      } else {
+        s_lastIdleConfigPoll = 0;
+      }
       Menu::setContext(Cloud::online(), Storage::paired(), s_devShort.c_str());
       MenuAction ma = Menu::tick(rot, btn);
       if (rot || btn) s_uiDirty = true;
@@ -587,11 +609,14 @@ void tick() {
       break;
 
     case ST_PAIRING:
-      if (now - s_lastPairConfigPoll > CONFIG_FETCH_PAIRING_MS) {
+      if (now - s_lastPairConfigPoll >= CONFIG_FETCH_PAIRING_MS) {
         s_lastPairConfigPoll = now;
         Cloud::requestConfigSync();
       }
-      if (Storage::paired()) s_pairCode[0] = 0;
+      if (Storage::paired()) {
+        s_pairCode[0] = 0;
+        s_uiDirty = true;
+      }
       if (btn == 1 || btn == 2 || clk) { s_pairCode[0] = 0; enter(ST_IDLE); }
       break;
 

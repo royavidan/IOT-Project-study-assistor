@@ -326,6 +326,18 @@ async function handleUnpair(request: Request): Promise<Response> {
   return json({ ok: true }, 200);
 }
 
+/** Owner label for the box OLED (display name, else email local-part). */
+function ownerDisplayLabel(profile: {
+  display_name?: string | null;
+  email?: string | null;
+}): string {
+  const name = typeof profile.display_name === "string" ? profile.display_name.trim() : "";
+  if (name) return name.slice(0, 19);
+  const email = typeof profile.email === "string" ? profile.email.trim() : "";
+  if (email.includes("@")) return email.split("@")[0]!.slice(0, 19);
+  return "User";
+}
+
 /** "HH:MM[:SS]" -> minutes-from-midnight; 65535 = unset (matches firmware 0xFFFF). */
 function timeToMinutes(t: unknown): number {
   if (typeof t !== "string" || t.length < 4) return 65535;
@@ -367,7 +379,12 @@ async function handleConfig(url: URL): Promise<Response> {
     admin.from("profiles").select("*").eq("id", owner).maybeSingle(),
   ]);
   const s = (settingsRes.data ?? {}) as Record<string, unknown>;
-  const p = (profileRes.data ?? {}) as { daily_goal_min?: number; tz_offset_min?: number };
+  const p = (profileRes.data ?? {}) as {
+    daily_goal_min?: number;
+    tz_offset_min?: number;
+    display_name?: string | null;
+    email?: string | null;
+  };
 
   // Today's focus = sum of actual_focus_sec for the owner's sessions since their
   // LOCAL midnight (via the stored tz offset), so the box matches the app dashboard.
@@ -397,6 +414,8 @@ async function handleConfig(url: URL): Promise<Response> {
       quietEndMin: timeToMinutes(s.quiet_hours_end),
       dailyGoalMin: p.daily_goal_min ?? 180,
       todayFocusSec,
+      ownerDisplayName: ownerDisplayLabel(p),
+      ownerEmail: (typeof p.email === "string" ? p.email.trim() : "").slice(0, 31),
     },
     200,
   );

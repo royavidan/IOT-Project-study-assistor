@@ -110,6 +110,16 @@ static long jInt(const String& b, const char* key, long def) {
   if (p < 0) return def;
   return strtol(b.c_str() + p, nullptr, 10);
 }
+static void jStr(const String& b, const char* key, char* out, size_t n) {
+  if (!out || n == 0) return;
+  out[0] = 0;
+  int p = valuePos(b, key);
+  if (p < 0 || p >= (int)b.length() || b[p] != '"') return;
+  p++;
+  size_t i = 0;
+  while (p < (int)b.length() && b[p] != '"' && i + 1 < n) out[i++] = b[p++];
+  out[i] = 0;
+}
 
 // ===========================================================================
 // upload-drain state + worker (runs on the task)
@@ -195,6 +205,8 @@ static void syncDownlink() {
   cs.quietEndMin      = (uint16_t)jInt(resp, "quietEndMin", 0xFFFF);
   cs.dailyGoalMin     = (uint16_t)jInt(resp, "dailyGoalMin", 180);
   cs.todayFocusSec    = (int32_t)jInt(resp, "todayFocusSec", 0);
+  jStr(resp, "ownerDisplayName", cs.ownerDisplayName, sizeof(cs.ownerDisplayName));
+  jStr(resp, "ownerEmail", cs.ownerEmail, sizeof(cs.ownerEmail));
   xSemaphoreTake(s_mux, portMAX_DELAY);
   s_settings = cs; s_settingsReady = true;
   xSemaphoreGive(s_mux);

@@ -8,6 +8,7 @@
 namespace Menu {
   void begin(Mode* mode, int* workMin, int* breakMin, int* cycleCount, DeviceConfig* cfg);
   void setContext(bool wifi, bool paired, const char* deviceId);
+  void invalidate();
   void setLiveFocusSec(uint32_t sec);
 
   int activeDurationMin();
