@@ -43,6 +43,6 @@ export function useMyDevice() {
     queryKey: ["my-device", user?.id],
     queryFn: fetchMyDevice,
     enabled: !!user,
-    refetchInterval: 15000, // reflect a device-initiated sign-out within ~15s
+    refetchInterval: 5000, // reflect a device-initiated sign-out within ~5s
   });
 }

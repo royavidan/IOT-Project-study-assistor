@@ -2,6 +2,8 @@
 #include "config.h"
 #include <Preferences.h>
 #include <time.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 // Optional compile-time defaults (Wi-Fi / app URL / secret / device id).
 #if defined(__has_include)
@@ -18,6 +20,25 @@
 #endif
 
 static Preferences prefs;
+
+// NVS/Preferences is NOT thread-safe, yet both the main loop (core 1: render +
+// FSM) and the net task (core 0, via UploadQueue) reach Storage. Serialize ALL
+// prefs access with one RECURSIVE mutex so nested public calls (e.g.
+// bufferSession -> saveSessionLog) don't self-deadlock. Mirrors UploadQueue's QLock.
+static SemaphoreHandle_t s_nvsMux = nullptr;
+struct NvsLock {
+  NvsLock()  { if (s_nvsMux) xSemaphoreTakeRecursive(s_nvsMux, portMAX_DELAY); }
+  ~NvsLock() { if (s_nvsMux) xSemaphoreGiveRecursive(s_nvsMux); }
+};
+
+// RAM mirrors of the hot / cross-core keys so the render + net paths read memory
+// instead of flash — kills the per-frame NVS churn and the cross-core race on
+// these values. Written only on the main loop (so the getters need no lock); the
+// prefs write inside each setter still takes the lock.
+static String      s_deviceId;            // immutable after begin()
+static bool        s_paired = false;
+static String      s_ownerName, s_ownerEmail;
+
 static uint32_t    s_liveFocusSec = 0;
 static uint32_t    s_serverTodaySec = 0;
 static uint32_t    s_serverTodayAt = 0;
@@ -128,6 +149,8 @@ static void migrateDurations() {
 namespace Storage {
 
 void begin() {
+  if (!s_nvsMux) s_nvsMux = xSemaphoreCreateRecursiveMutex();
+  NvsLock lock;
   prefs.begin("mindbox", false);
   if (prefs.getString("devId", "").length() == 0)
     prefs.putString("devId", strlen(SECRET_DEVICE_ID) ? String(SECRET_DEVICE_ID) : makeId());
@@ -138,25 +161,32 @@ void begin() {
   migrateDurations();
   migrateSessionLog();
   syncDayBoundary();
+  // Prime the RAM mirrors once; the getters below then avoid flash entirely.
+  s_deviceId   = prefs.getString("devId", makeId());
+  s_paired     = prefs.getBool("paired", false);
+  s_ownerName  = prefs.getString("ownerName", "");
+  s_ownerEmail = prefs.getString("ownerEmail", "");
 }
 
-String deviceId() { return prefs.getString("devId", makeId()); }
+String deviceId() { return s_deviceId; }   // RAM mirror (immutable after begin)
 
-int workDurationMin()  { return prefs.getInt("workDur", DUR_DEFAULT_MIN); }
-int breakDurationMin() { return prefs.getInt("breakDur", 5); }
-void setWorkDuration(int m)  { prefs.putInt("workDur", m); }
-void setBreakDuration(int m) { prefs.putInt("breakDur", m); }
+int workDurationMin()  { NvsLock lock; return prefs.getInt("workDur", DUR_DEFAULT_MIN); }
+int breakDurationMin() { NvsLock lock; return prefs.getInt("breakDur", 5); }
+void setWorkDuration(int m)  { NvsLock lock; prefs.putInt("workDur", m); }
+void setBreakDuration(int m) { NvsLock lock; prefs.putInt("breakDur", m); }
 
-int  cycleCount()            { return prefs.getInt("cycles", CYCLE_DEFAULT); }
-void setCycleCount(int n)    { prefs.putInt("cycles", n); }
+int  cycleCount()            { NvsLock lock; return prefs.getInt("cycles", CYCLE_DEFAULT); }
+void setCycleCount(int n)    { NvsLock lock; prefs.putInt("cycles", n); }
 
 uint32_t nextSeq() {
+  NvsLock lock;
   uint32_t s = prefs.getUInt("seq", 0) + 1;
   prefs.putUInt("seq", s);
   return s;
 }
 
 DeviceConfig loadConfig(const DeviceConfig& d) {
+  NvsLock lock;
   DeviceConfig c = d;
   c.showTimer        = prefs.getBool("showTimer", d.showTimer);
   c.hapticsEnabled   = prefs.getBool("haptics",   d.hapticsEnabled);
@@ -175,6 +205,7 @@ DeviceConfig loadConfig(const DeviceConfig& d) {
 }
 
 void saveConfig(const DeviceConfig& c) {
+  NvsLock lock;
   prefs.putBool("showTimer", c.showTimer);
   prefs.putBool("haptics",   c.hapticsEnabled);
   prefs.putBool("adaptive",  c.adaptiveCoaching);
@@ -190,30 +221,39 @@ void saveConfig(const DeviceConfig& c) {
   prefs.putUShort("goal",    c.dailyGoalMin);
 }
 
-bool paired()          { return prefs.getBool("paired", false); }
-void setPaired(bool p) { if (prefs.getBool("paired", false) != p) prefs.putBool("paired", p); }
+bool paired() { return s_paired; }   // RAM mirror
+void setPaired(bool p) {
+  NvsLock lock;
+  if (s_paired != p) { prefs.putBool("paired", p); s_paired = p; }
+}
 
 void setOwnerAccount(const char* displayName, const char* email) {
-  prefs.putString("ownerName", displayName ? displayName : "");
-  prefs.putString("ownerEmail", email ? email : "");
+  NvsLock lock;
+  s_ownerName  = displayName ? displayName : "";
+  s_ownerEmail = email ? email : "";
+  prefs.putString("ownerName",  s_ownerName);
+  prefs.putString("ownerEmail", s_ownerEmail);
 }
 void clearOwnerAccount() {
+  NvsLock lock;
+  s_ownerName = ""; s_ownerEmail = "";
   prefs.putString("ownerName", "");
   prefs.putString("ownerEmail", "");
 }
-String ownerDisplayName() { return prefs.getString("ownerName", ""); }
-String ownerEmail()       { return prefs.getString("ownerEmail", ""); }
+String ownerDisplayName() { return s_ownerName; }    // RAM mirror
+String ownerEmail()       { return s_ownerEmail; }   // RAM mirror
 
-String wifiSsid()                      { return prefs.getString("wSsid", ""); }
-void   setWifiSsid(const String& s)    { prefs.putString("wSsid", s); }
-String wifiPass()                      { return prefs.getString("wPass", ""); }
-void   setWifiPass(const String& s)    { prefs.putString("wPass", s); }
-String appBaseUrl()                    { return prefs.getString("appUrl", ""); }
-void   setAppBaseUrl(const String& s)  { prefs.putString("appUrl", s); }
-String deviceSecret()                  { return prefs.getString("devSecret", ""); }
-void   setDeviceSecret(const String& s){ prefs.putString("devSecret", s); }
+String wifiSsid()                      { NvsLock lock; return prefs.getString("wSsid", ""); }
+void   setWifiSsid(const String& s)    { NvsLock lock; prefs.putString("wSsid", s); }
+String wifiPass()                      { NvsLock lock; return prefs.getString("wPass", ""); }
+void   setWifiPass(const String& s)    { NvsLock lock; prefs.putString("wPass", s); }
+String appBaseUrl()                    { NvsLock lock; return prefs.getString("appUrl", ""); }
+void   setAppBaseUrl(const String& s)  { NvsLock lock; prefs.putString("appUrl", s); }
+String deviceSecret()                  { NvsLock lock; return prefs.getString("devSecret", ""); }
+void   setDeviceSecret(const String& s){ NvsLock lock; prefs.putString("devSecret", s); }
 
 void saveSessionLog(const SessionRecord& r) {
+  NvsLock lock;
   SessionLogEntry ring[SESSION_LOG_MAX];
   prefs.getBytes("slog", ring, sizeof(ring));
 
@@ -237,6 +277,7 @@ void saveSessionLog(const SessionRecord& r) {
 }
 
 SessionLogEntry lastSessionLog() {
+  NvsLock lock;
   SessionLogEntry e = {};
   SessionLogEntry ring[SESSION_LOG_MAX];
   if (prefs.getBytes("slog", ring, sizeof(ring)) >= sizeof(SessionLogEntry))
@@ -245,6 +286,7 @@ SessionLogEntry lastSessionLog() {
 }
 
 bool sessionLogAt(int index, SessionLogEntry& out) {
+  NvsLock lock;
   if (index < 0) return false;
   int n = sessionLogCount();
   if (index >= n) return false;
@@ -254,8 +296,8 @@ bool sessionLogAt(int index, SessionLogEntry& out) {
   return true;
 }
 
-uint32_t totalFocusSec() { return prefs.getUInt("totFocus", 0); }
-int      sessionLogCount() { return prefs.getUChar("slogN", 0); }
+uint32_t totalFocusSec() { NvsLock lock; return prefs.getUInt("totFocus", 0); }
+int      sessionLogCount() { NvsLock lock; return prefs.getUChar("slogN", 0); }
 
 void setLiveFocusSec(uint32_t sec) { s_liveFocusSec = sec; }
 
@@ -266,7 +308,7 @@ void bumpServerTodaySec(uint32_t sec) {
   if (s_serverTodayValid) s_serverTodaySec += sec;   // keep the total steady after a session
 }
 
-uint32_t todayFocusSec() { return prefs.getUInt("todayFocus", 0); }
+uint32_t todayFocusSec() { NvsLock lock; return prefs.getUInt("todayFocus", 0); }
 
 // Online + paired: the server's account-wide today total (local-day) is the
 // source of truth so the box matches the app; fall back to the local NVS tally
@@ -277,11 +319,12 @@ uint32_t todayDisplaySec() {
   return todayFocusSec() + s_liveFocusSec;
 }
 
-int todayFocusCount() { return prefs.getUShort("todayCnt", 0); }
+int todayFocusCount() { NvsLock lock; return prefs.getUShort("todayCnt", 0); }
 
-int todaySetsCount() { return prefs.getUShort("todaySets", 0); }
+int todaySetsCount() { NvsLock lock; return prefs.getUShort("todaySets", 0); }
 
 void syncDayBoundary() {
+  NvsLock lock;
   uint32_t day = calendarDayId();
   uint32_t stored = prefs.getUInt("lastDayId", 0xFFFFFFFFUL);
   if (stored == 0xFFFFFFFFUL) {
@@ -296,6 +339,7 @@ void syncDayBoundary() {
 }
 
 void resetToday() {
+  NvsLock lock;
   zeroTodayCounters();
   if (!haveClock())
     prefs.putUInt("manualDay", prefs.getUInt("manualDay", 0) + 1);
@@ -303,6 +347,7 @@ void resetToday() {
 }
 
 void recordSetComplete() {
+  NvsLock lock;
   syncDayBoundary();
   uint16_t n = prefs.getUShort("todaySets", 0);
   prefs.putUShort("todaySets", n + 1);
@@ -327,6 +372,7 @@ static bool recordWorkFocus(uint32_t sec) {
 }
 
 bool bufferSession(const SessionRecord& r) {
+  NvsLock lock;
   saveSessionLog(r);
   uint16_t c = prefs.getUShort("bufN", 0) + 1;
   prefs.putUShort("bufN", c);
@@ -335,11 +381,12 @@ bool bufferSession(const SessionRecord& r) {
   return false;
 }
 
-int bufferedCount() { return prefs.getUShort("bufN", 0); }
+int bufferedCount() { NvsLock lock; return prefs.getUShort("bufN", 0); }
 
-bool uploadQueueDropped() { return prefs.getBool("uqDrop", false); }
+bool uploadQueueDropped() { NvsLock lock; return prefs.getBool("uqDrop", false); }
 
 void setUploadQueueDropped(bool v) {
+  NvsLock lock;
   if (prefs.getBool("uqDrop", false) != v) prefs.putBool("uqDrop", v);
 }
 
@@ -401,6 +448,7 @@ static void copyStoredTail(SessionCheckpoint& cp, const StoredCheckpoint& s) {
 }
 
 void saveCheckpoint(const SessionCheckpoint& cp) {
+  NvsLock lock;
   StoredCheckpoint s = {};
   s.magic        = CK_MAGIC;
   s.version      = CK_VER;
@@ -434,6 +482,7 @@ void saveCheckpoint(const SessionCheckpoint& cp) {
 }
 
 bool loadCheckpoint(SessionCheckpoint& cp) {
+  NvsLock lock;
   if (!prefs.getBool("ckActive", false)) return false;
   StoredCheckpoint s = {};
   size_t got = prefs.getBytes("ckpt", &s, sizeof(s));
@@ -469,8 +518,8 @@ bool loadCheckpoint(SessionCheckpoint& cp) {
   return true;
 }
 
-void clearCheckpoint() { prefs.putBool("ckActive", false); }
-bool hasCheckpoint()   { return prefs.getBool("ckActive", false); }
+void clearCheckpoint() { NvsLock lock; prefs.putBool("ckActive", false); }
+bool hasCheckpoint()   { NvsLock lock; return prefs.getBool("ckActive", false); }
 
 static bool validNoiseScale(float v)   { return v >= 100.0f && v <= 20000.0f; }
 static bool validLightLuxScale(float v) { return v >= 50.0f && v <= 10000.0f; }
@@ -478,42 +527,51 @@ static bool validLightVarScale(float v) { return v >= 50.0f && v <= 20000.0f; }
 static bool validTempOffset(float v)    { return v >= -15.0f && v <= 15.0f; }
 
 float noiseFullScale() {
+  NvsLock lock;
   return prefs.getFloat("noiseScale", NOISE_FULL_SCALE_DEFAULT);
 }
 
 void setNoiseFullScale(float v) {
   if (!validNoiseScale(v)) return;
+  NvsLock lock;
   prefs.putFloat("noiseScale", v);
 }
 
 float lightLuxScale() {
+  NvsLock lock;
   return prefs.getFloat("lightLux", LIGHT_LUX_SCALE_DEFAULT);
 }
 
 void setLightLuxScale(float v) {
   if (!validLightLuxScale(v)) return;
+  NvsLock lock;
   prefs.putFloat("lightLux", v);
 }
 
 float lightVarScale() {
+  NvsLock lock;
   return prefs.getFloat("lightVar", LIGHT_VAR_SCALE_DEFAULT);
 }
 
 void setLightVarScale(float v) {
   if (!validLightVarScale(v)) return;
+  NvsLock lock;
   prefs.putFloat("lightVar", v);
 }
 
 float tempOffsetC() {
+  NvsLock lock;
   return prefs.getFloat("tempOff", TEMP_OFFSET_DEFAULT);
 }
 
 void setTempOffsetC(float v) {
   if (!validTempOffset(v)) return;
+  NvsLock lock;
   prefs.putFloat("tempOff", v);
 }
 
 void resetSensorCalibration() {
+  NvsLock lock;
   prefs.putFloat("noiseScale", NOISE_FULL_SCALE_DEFAULT);
   prefs.putFloat("lightLux",   LIGHT_LUX_SCALE_DEFAULT);
   prefs.putFloat("lightVar",   LIGHT_VAR_SCALE_DEFAULT);
