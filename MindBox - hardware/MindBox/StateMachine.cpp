@@ -461,7 +461,9 @@ void tick() {
   uint32_t now = millis();
   bool warm = (now - s_bootAt) > SENSOR_WARMUP_MS;
 
-  // Apply settings the net task pulled from the server (app-managed fields only).
+  // Apply settings the net task pulled from the server. Device menu settings
+  // live in NVS and survive power cycles — routine config polls must NOT
+  // overwrite them (only seed once on first account link).
   CloudSettings cs;
   if (Cloud::takeSettings(cs)) {
     bool wasPaired = Storage::paired();
@@ -473,18 +475,21 @@ void tick() {
     else                                     s_signOutGuardUntil = 0;
     Storage::setPaired(paired);
     if (paired != wasPaired) s_uiDirty = true;
+
     if (paired && !wasPaired) {
+      // First link: pull companion defaults once, then the box owns them in NVS.
+      s_cfg.showTimer        = cs.showTimer;
+      s_cfg.hapticsEnabled   = cs.hapticsEnabled;
+      s_cfg.adaptiveCoaching = cs.adaptiveCoaching;
+      s_cfg.nudgesEnabled    = cs.nudgesEnabled;
+      s_cfg.quietStartMin    = cs.quietStartMin;
+      s_cfg.quietEndMin      = cs.quietEndMin;
+      s_cfg.dailyGoalMin     = cs.dailyGoalMin;
+      applyConfig(s_cfg);
       Menu::setContext(Cloud::online(), true, s_devShort.c_str());
       Cloud::flagTransition();
     }
-    s_cfg.showTimer        = cs.showTimer;
-    s_cfg.hapticsEnabled   = cs.hapticsEnabled;
-    s_cfg.adaptiveCoaching = cs.adaptiveCoaching;
-    s_cfg.nudgesEnabled    = cs.nudgesEnabled;
-    s_cfg.quietStartMin    = cs.quietStartMin;
-    s_cfg.quietEndMin      = cs.quietEndMin;
-    s_cfg.dailyGoalMin     = cs.dailyGoalMin;
-    applyConfig(s_cfg);
+
     if (paired) {
       bool acctChanged =
         Storage::ownerDisplayName() != String(cs.ownerDisplayName) ||

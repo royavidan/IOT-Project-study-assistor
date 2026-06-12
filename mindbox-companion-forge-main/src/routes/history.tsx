@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { z } from "zod";
 import { PageHeader } from "@/components/PageHeader";
 import { ErrorState, LoadingState } from "@/components/EmptyState";
+import { DeleteSessionDialog } from "@/components/DeleteSessionDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -291,32 +292,39 @@ function History() {
             </p>
           )}
           {filtered.map((s) => (
-            <Link
+            <div
               key={s.id}
-              to="/session/$id"
-              params={{ id: s.id }}
-              className="grid grid-cols-[1fr_auto] items-center gap-3 px-5 py-3 transition-colors hover:bg-accent/50"
+              className="flex items-center gap-1 px-5 py-3 transition-colors hover:bg-accent/50"
             >
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium">
-                  {s.subject} · <span className="font-normal text-muted-foreground">{s.mode}</span>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {s.date} · {s.start} · {s.durationMin} min · {s.breaks} break
-                  {s.breaks === 1 ? "" : "s"}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${statusClass(s.status)}`}
-                >
-                  {s.status}
-                </span>
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums">
-                  {s.focusScore}
-                </span>
-              </div>
-            </Link>
+              <Link
+                to="/session/$id"
+                params={{ id: s.id }}
+                className="grid min-w-0 flex-1 grid-cols-[1fr_auto] items-center gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {s.subject} · <span className="font-normal text-muted-foreground">{s.mode}</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {s.date} · {s.start} · {s.durationMin} min · {s.breaks} break
+                    {s.breaks === 1 ? "" : "s"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium capitalize ${statusClass(s.status)}`}
+                  >
+                    {s.status}
+                  </span>
+                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums">
+                    {s.focusScore}
+                  </span>
+                </div>
+              </Link>
+              {!isReviewerView && (
+                <DeleteSessionDialog sessionId={s.id} variant="icon" redirectTo={null} />
+              )}
+            </div>
           ))}
         </CardContent>
       </Card>

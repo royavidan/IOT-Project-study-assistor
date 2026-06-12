@@ -168,6 +168,8 @@ DeviceConfig loadConfig(const DeviceConfig& d) {
   c.autoPause        = prefs.getBool("autoPause", d.autoPause);
   c.presencePauseIdx = prefs.getUChar("pauseIdx", d.presencePauseIdx);
   c.presenceEndIdx   = prefs.getUChar("endIdx",   d.presenceEndIdx);
+  c.quietStartMin    = prefs.getUShort("quietStart", d.quietStartMin);
+  c.quietEndMin      = prefs.getUShort("quietEnd",   d.quietEndMin);
   c.dailyGoalMin     = prefs.getUShort("goal",    d.dailyGoalMin);
   return c;
 }
@@ -183,6 +185,8 @@ void saveConfig(const DeviceConfig& c) {
   prefs.putBool("autoPause", c.autoPause);
   prefs.putUChar("pauseIdx", c.presencePauseIdx);
   prefs.putUChar("endIdx",   c.presenceEndIdx);
+  prefs.putUShort("quietStart", c.quietStartMin);
+  prefs.putUShort("quietEnd",   c.quietEndMin);
   prefs.putUShort("goal",    c.dailyGoalMin);
 }
 

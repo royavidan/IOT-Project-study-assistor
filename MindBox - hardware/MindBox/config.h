@@ -76,13 +76,14 @@ static const unsigned long DHT_READ_INTERVAL_MS = 2000UL; // DHT11 minimum betwe
 static const int           FLE_PRESENCE_CAP   = 5;        // matches focus-load.ts
 static const int           FLE_ADAPTIVE_BREAK = 75;       // Story 16 threshold
 static const unsigned long COACHING_COOLDOWN_MS = 300000UL; // 5 min between nudges
-static const int           MAX_SAMPLES        = 240;      // ~4h at 1/min
+// Performance: 120 samples ≈ 2 h at 1/min — halves session RAM + upload JSON vs 240 (~8/10 crash win).
+static const int           MAX_SAMPLES        = 120;
 #define CHECKPOINT_TAIL_MAX 10                  // last N env samples in NVS checkpoint
 static const float         TEMP_MIN_VALID     = -20.0f;   // Story 18 clamp range
 static const float         TEMP_MAX_VALID     = 60.0f;
-static const unsigned long TELEMETRY_PERIOD_MS = 30000UL;  // each POST briefly blocks; keep it sparse
+static const unsigned long TELEMETRY_PERIOD_MS = 60000UL; // 60 s: half the HTTP load vs 30 s (balanced profile)
 static const unsigned long SESSION_CLOCK_MS    = 10UL;     // esp_timer tick for countdown
-static const unsigned long TOF_POLL_MS         = 100UL;    // VL53L1X read interval
+static const unsigned long TOF_POLL_MS         = 200UL;    // less I2C contention with OLED vs 100 ms
 static const unsigned long WIFI_STATUS_CACHE_MS = 1000UL;  // throttle WiFi.status()
 
 // ---- connectivity (ENABLE_WIFI / ENABLE_CLOUD) -----------------------------
@@ -92,7 +93,7 @@ static const unsigned long WIFI_STATUS_CACHE_MS = 1000UL;  // throttle WiFi.stat
 #define CLOUD_USE_TLS 0
 #define NTP_SERVER "pool.ntp.org"
 static const unsigned long CONFIG_FETCH_MS = 60000UL;    // pull settings every 60 s when online
-static const unsigned long CONFIG_FETCH_PAIRING_MS = 500UL;  // fast poll while waiting for app claim
+static const unsigned long CONFIG_FETCH_PAIRING_MS = 3000UL; // 3 s: ~83% less HTTP than 500 ms while pairing
 static const unsigned long CONFIG_FETCH_UNPAIRED_MS = 5000UL; // idle + online but not linked yet
 static const unsigned long WIFI_RETRY_MS   = 15000UL;    // reconnect attempt cadence
 // HTTP is synchronous on the main loop, so a stalled request freezes the UI.

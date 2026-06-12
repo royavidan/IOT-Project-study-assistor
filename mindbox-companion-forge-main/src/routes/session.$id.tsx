@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/PageHeader";
 import { ErrorState, LoadingState } from "@/components/EmptyState";
+import { DeleteSessionDialog } from "@/components/DeleteSessionDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InfoHint } from "@/components/InfoHint";
@@ -68,11 +69,14 @@ function SessionDetail() {
         title={`${meta.mode} session`}
         description={`${fmtTime(meta.startedAt)} · ${meta.status}`}
         actions={
-          <Button variant="outline" size="sm" asChild>
-            <Link to="/history">
-              <ArrowLeft className="h-4 w-4" /> Back to history
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {!isReviewerView && <DeleteSessionDialog sessionId={id} />}
+            <Button variant="outline" size="sm" asChild>
+              <Link to="/history">
+                <ArrowLeft className="h-4 w-4" /> Back to history
+              </Link>
+            </Button>
+          </div>
         }
       />
 
