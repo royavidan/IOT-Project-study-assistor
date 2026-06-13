@@ -100,7 +100,10 @@ When idle, the OLED shows a scrollable list with a `>` cursor:
 | Side button long | Back one level (no-op on main menu root) |
 | Knob shaft click | Unused |
 
-During **RUNNING**: side short = pause, side long = abort (unchanged).
+During **RUNNING**: side short opens the session overlay (**Pause / Show timer / Haptics / End** — knob
+scrolls, side short selects/toggles, side long returns to the timer). Side long on the bare timer (overlay
+closed) aborts. The Show timer / Haptics rows flip `DeviceConfig` live (and persist) without ending the
+session — the countdown keeps running on `esp_timer` while the overlay is open.
 
 **Start** → Ready → **Begin** starts the session. **Mode**, **Duration**, **Settings**
 (Display toggles), **Device** (Pair, Diagnostics), **About** are all menu entries.

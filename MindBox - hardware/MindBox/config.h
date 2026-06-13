@@ -92,6 +92,12 @@ static const unsigned long WIFI_STATUS_CACHE_MS = 1000UL;  // throttle WiFi.stat
 // only when the app is served over https (and expect a slower build).
 #define CLOUD_USE_TLS 0
 #define NTP_SERVER "pool.ntp.org"
+// On-box Wi-Fi setup portal (SoftAP + captive page). The box hosts this open AP
+// so a phone can pick a network + password with no laptop/reflash. Open AP is the
+// standard captive-portal trade-off, bounded by the timeout (set a softAP password
+// in Cloud.cpp if you want to lock it).
+#define WIFI_AP_SSID "MindBox-Setup"
+static const unsigned long PORTAL_TIMEOUT_MS = 300000UL;  // auto-exit setup AP after 5 min
 static const unsigned long CONFIG_FETCH_MS = 60000UL;    // pull settings every 60 s when online
 static const unsigned long CONFIG_FETCH_PAIRING_MS = 3000UL; // 3 s: ~83% less HTTP than 500 ms while pairing
 static const unsigned long CONFIG_FETCH_UNPAIRED_MS = 5000UL; // idle + online but not linked yet

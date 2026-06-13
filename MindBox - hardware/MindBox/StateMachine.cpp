@@ -362,6 +362,7 @@ static void handleMenuAction(MenuAction a) {
     case MENU_ENTER_PAIRING:  enterPairing(); break;
     case MENU_SIGN_OUT:       signOutAccount(); break;
     case MENU_ENTER_DIAGNOSTICS: enter(ST_DIAG); break;
+    case MENU_ENTER_WIFI_SETUP: Cloud::startWifiPortal(); enter(ST_WIFI_SETUP); break;
     case MENU_RESUME_SESSION:
       Session::resumeClock();
       saveCheckpointNow();
@@ -393,6 +394,17 @@ static void handleMenuAction(MenuAction a) {
       break;
     default: break;
   }
+}
+
+static void renderWifiSetup() {
+  Display::clear();
+  Display::center("WI-FI SETUP", 0, 1);
+  Display::text(0, 16, 1, "Join Wi-Fi:");
+  Display::text(8, 26, 1, Cloud::portalApName());
+  Display::text(0, 38, 1, "Then open:");
+  Display::text(8, 48, 1, Cloud::portalIp());
+  Display::center("click = cancel", 56, 1);
+  Display::show();
 }
 
 static void renderDiag() {
@@ -446,6 +458,8 @@ void init() {
                             s_resumeCp.setActive != 0);
     enter(ST_RESUME);
   } else {
+    // Offline-first: always boot to the usable menu. Wi-Fi is opt-in via
+    // Device -> Wi-Fi Setup, so an un-provisioned box runs fully offline.
     enter(ST_IDLE);
   }
 }
@@ -552,7 +566,10 @@ void tick() {
     case ST_RUNNING:
       if (Sensors::faulted()) { enter(ST_ERROR); break; }
       if (Menu::runningActive()) {
-        if (btn == 2) { beginEnd("aborted"); Menu::runningDismiss(); break; }
+        // Long-press inside the overlay = back to the running screen (not abort),
+        // so display toggles can be flipped without ending the session. Abort is
+        // still a long-press on the bare timer (overlay closed) below.
+        if (btn == 2) { Menu::runningDismiss(); s_uiDirty = true; break; }
         MenuAction ra = Menu::runningTick(rot, btn);
         if (rot || btn) s_uiDirty = true;
         handleMenuAction(ra);
@@ -630,6 +647,13 @@ void tick() {
       s_uiDirty = true;
       break;
 
+    case ST_WIFI_SETUP:
+      // Cancel from the box, or auto-return once the portal self-stops (Save/timeout).
+      if (btn == 1 || btn == 2 || clk) { Cloud::stopWifiPortal(); enter(ST_IDLE); }
+      else if (!Cloud::portalActive())  enter(ST_IDLE);
+      s_uiDirty = true;
+      break;
+
     case ST_ERROR:
       if (btn == 2 || clk) { Sensors::clearFault(); enter(ST_IDLE); }
       break;
@@ -640,6 +664,8 @@ void tick() {
   if (shouldRender(now)) {
     if (s_state == ST_DIAG) {
       renderDiag();
+    } else if (s_state == ST_WIFI_SETUP) {
+      renderWifiSetup();
     } else if (s_state == ST_IDLE) {
       Display::renderMenu(Menu::view());
     } else if (s_state == ST_RESUME) {

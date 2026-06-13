@@ -221,7 +221,7 @@ static int itemCount(Screen s) {
       int n = Storage::sessionLogCount();
       return n > 0 ? n : 1;
     }
-    case SCR_DEVICE:   return 3;
+    case SCR_DEVICE:   return 4;
     case SCR_ABOUT:    return 1;
     default:           return 0;
   }
@@ -494,7 +494,8 @@ MenuAction tick(int rotDir, int sideBtn) {
 
     case SCR_DEVICE:
       if (s_cursor == 0) return s_paired ? MENU_SIGN_OUT : MENU_ENTER_PAIRING;
-      if (s_cursor == 1) return MENU_ENTER_DIAGNOSTICS;
+      if (s_cursor == 1) return MENU_ENTER_WIFI_SETUP;
+      if (s_cursor == 2) return MENU_ENTER_DIAGNOSTICS;
       pop();
       Haptics::click();
       break;
@@ -709,7 +710,8 @@ const MenuView& view() {
           } else {
             fillRow(row, "Pair account", nullptr, sel);
           }
-        } else if (idx == 1) fillRow(row, "Diagnostics", nullptr, sel);
+        } else if (idx == 1) fillRow(row, "Wi-Fi Setup", nullptr, sel);
+        else if (idx == 2) fillRow(row, "Diagnostics", nullptr, sel);
         else fillRow(row, "Back", nullptr, sel);
         break;
 
@@ -780,20 +782,24 @@ void runningDismiss() {
 bool runningActive() { return s_runningMenu; }
 
 MenuAction runningTick(int rotDir, int sideBtn) {
+  // Rows: 0 Pause, 1 Show timer (toggle), 2 Haptics (toggle), 3 End.
+  static const int RUN_ROWS = 4;
   if (sideBtn == 2) {
     runningDismiss();
     return MENU_NONE;
   }
   if (rotDir != 0) {
-    s_runCursor += rotDir;
-    if (s_runCursor < 0) s_runCursor = 1;
-    if (s_runCursor > 1) s_runCursor = 0;
+    s_runCursor = (s_runCursor + rotDir + RUN_ROWS) % RUN_ROWS;
     Haptics::click();
     markDirty();
   }
   if (sideBtn != 1) return MENU_NONE;
-  Haptics::tap();
-  return (s_runCursor == 0) ? MENU_PAUSE_SESSION : MENU_END_SESSION;
+  switch (s_runCursor) {
+    case 1: toggleShowTimer(); return MENU_NONE;   // live eyes-off toggle, stay in overlay
+    case 2: toggleHaptics();   return MENU_NONE;   // silence/restore buzzes, stay in overlay
+    case 3: Haptics::tap();    return MENU_END_SESSION;
+    default: Haptics::tap();   return MENU_PAUSE_SESSION;
+  }
 }
 
 const MenuView& runningView() {
@@ -801,8 +807,10 @@ const MenuView& runningView() {
   memset(&v, 0, sizeof(v));
   strncpy(v.title, "SESSION", sizeof(v.title) - 1);
   fillRow(v.rows[0], "Pause", nullptr, s_runCursor == 0);
-  fillRow(v.rows[1], "End", nullptr, s_runCursor == 1);
-  v.rowCount = 2;
+  fillRow(v.rows[1], "Show timer", s_cfg->showTimer ? "ON" : "OFF", s_runCursor == 1);
+  fillRow(v.rows[2], "Haptics", s_cfg->hapticsEnabled ? "ON" : "OFF", s_runCursor == 2);
+  fillRow(v.rows[3], "End", nullptr, s_runCursor == 3);
+  v.rowCount = 4;
   return v;
 }
 

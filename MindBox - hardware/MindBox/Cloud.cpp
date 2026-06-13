@@ -9,6 +9,8 @@
 #if ENABLE_WIFI
 #include <WiFi.h>
 #include <time.h>
+#include <WebServer.h>
+#include <DNSServer.h>
 #endif
 #if ENABLE_CLOUD
 #include <HTTPClient.h>
@@ -130,6 +132,24 @@ static bool     s_wasOnline = false;
 static uint32_t s_lastUploadTry = 0;
 static uint32_t s_uploadBackoffMs = UPLOAD_RETRY_MIN_MS;
 
+// Sessions finished while the box had no clock were queued with epoch-0
+// ("1970-01-01T00:00:00Z") timestamps. The server accepts them but files them
+// under 1970, so they vanish from the app's "today"/recent views. Once NTP is up,
+// stamp them with real time (ended = now, started = now - actualFocusSec) before
+// upload so they land on the correct day. Inaccurate only by the reconnect delay.
+static void patchOfflineTimestamps(String& json) {
+  if (time(nullptr) <= 1700000000L) return;          // no clock yet — leave as-is
+  static const char* PLACE = "1970-01-01T00:00:00Z";
+  if (json.indexOf(PLACE) < 0) return;               // already has real timestamps
+  long focusSec = jInt(json, "actualFocusSec", 0);
+  time_t nowE = time(nullptr);
+  String endIso   = Payload::isoFromEpoch(nowE);
+  String startIso = Payload::isoFromEpoch(nowE - (focusSec > 0 ? focusSec : 0));
+  json.replace(String("\"endedAt\":\"")   + PLACE + "\"", String("\"endedAt\":\"")   + endIso   + "\"");
+  json.replace(String("\"startedAt\":\"") + PLACE + "\"", String("\"startedAt\":\"") + startIso + "\"");
+  Serial.printf("[cloud] stamped offline session -> %s\n", endIso.c_str());
+}
+
 static void drainUploadQueue() {
   if (s_uploadAuthFail) return;
   if (!s_cachedOnline || UploadQueue::pendingCount() == 0) return;
@@ -138,6 +158,7 @@ static void drainUploadQueue() {
   s_lastUploadTry = millis();
   String json;
   if (!UploadQueue::readOldest(json)) return;     // FS read (mutex'd internally)
+  patchOfflineTimestamps(json);                   // give 1970 sessions a real date
 
   String body = "[";
   body += json;
@@ -229,6 +250,94 @@ static bool doUnpair() {
   return true;
 }
 
+// ===========================================================================
+// On-box Wi-Fi setup portal (SoftAP + captive page). Runs entirely on this net
+// task so every Wi-Fi call stays on core 0. Saved creds flow out through the
+// normal s_credsDirty -> manageWifi() reconnect path (no separate connect logic).
+// ===========================================================================
+static WebServer     s_web(80);
+static DNSServer     s_dns;
+static bool          s_portalActive    = false;
+static volatile bool s_portalReq       = false;  // loop -> task: raise portal
+static volatile bool s_portalStopReq   = false;  // loop -> task: tear down now
+static uint32_t      s_portalStopAt    = 0;       // deferred stop after Save (0 = none)
+static uint32_t      s_portalStartedAt = 0;
+static String        s_portalIpStr     = "192.168.4.1";
+
+static const char PORTAL_HTML_HEAD[] PROGMEM =
+  "<!DOCTYPE html><html><head><meta name=viewport content='width=device-width,initial-scale=1'>"
+  "<title>MindBox Wi-Fi</title><style>body{font-family:sans-serif;margin:24px;max-width:420px}"
+  "h2{margin:0 0 16px}label{display:block;margin:12px 0 4px;font-size:14px}"
+  "input,select{width:100%;padding:8px;font-size:16px;box-sizing:border-box}"
+  "button{margin-top:18px;padding:12px;width:100%;font-size:16px;background:#2563eb;color:#fff;border:0;border-radius:6px}"
+  "</style></head><body><h2>MindBox Wi-Fi setup</h2><form method=POST action=/save>";
+
+static void handlePortalRoot() {
+  String page = FPSTR(PORTAL_HTML_HEAD);
+  page += "<label>Network</label><select name=ssid>";
+  int n = WiFi.scanNetworks();
+  for (int i = 0; i < n; i++) {
+    String ss = WiFi.SSID(i);
+    if (!ss.length()) continue;
+    page += "<option value='" + ss + "'>" + ss + " (" + String(WiFi.RSSI(i)) + "dBm)</option>";
+  }
+  WiFi.scanDelete();
+  page += "</select>";
+  page += "<label>Password</label><input name=pass type=password placeholder='Wi-Fi password'>";
+  page += "<label>Server URL (optional)</label><input name=url value='" + Storage::appBaseUrl() + "'>";
+  page += "<button type=submit>Save &amp; connect</button></form></body></html>";
+  s_web.send(200, "text/html", page);
+}
+
+static void handlePortalSave() {
+  String ssid = s_web.arg("ssid");
+  String pass = s_web.arg("pass");
+  String url  = s_web.arg("url");
+  if (ssid.length()) Storage::setWifiSsid(ssid);
+  Storage::setWifiPass(pass);
+  if (url.length())  Storage::setAppBaseUrl(url);
+  String body = "<!DOCTYPE html><html><head><meta name=viewport content='width=device-width,initial-scale=1'>"
+                "<title>MindBox</title></head><body style='font-family:sans-serif;margin:24px'>"
+                "<h2>Saved &mdash; reconnecting&hellip;</h2><p>The MindBox is joining <b>" + ssid +
+                "</b>. You can close this page.</p></body></html>";
+  s_web.send(200, "text/html", body);
+  s_portalStopAt = millis() + 1500;   // let the response flush, then tear down + reconnect
+  Serial.printf("[portal] creds saved for SSID '%s'\n", ssid.c_str());
+}
+
+static void handlePortalRedirect() {
+  // Captive detection: bounce every other path to the root so phones pop the portal.
+  s_web.sendHeader("Location", String("http://") + s_portalIpStr + "/", true);
+  s_web.send(302, "text/plain", "");
+}
+
+static void startPortal() {
+  WiFi.mode(WIFI_AP_STA);              // AP_STA so we can still scan nearby networks
+  WiFi.softAP(WIFI_AP_SSID);
+  IPAddress ip = WiFi.softAPIP();
+  s_portalIpStr = ip.toString();
+  s_dns.start(53, "*", ip);            // wildcard DNS -> captive
+  s_web.on("/", handlePortalRoot);
+  s_web.on("/save", HTTP_POST, handlePortalSave);
+  s_web.onNotFound(handlePortalRedirect);
+  s_web.begin();
+  s_portalActive    = true;
+  s_cachedOnline    = false;
+  s_portalStartedAt = millis();
+  s_portalStopAt    = 0;
+  Serial.printf("[portal] up: join '%s', open http://%s/\n", WIFI_AP_SSID, s_portalIpStr.c_str());
+}
+
+static void stopPortal() {
+  s_web.stop();
+  s_dns.stop();
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_STA);
+  s_portalActive = false;
+  s_credsDirty   = true;               // net task reloads creds + reconnects
+  Serial.println("[portal] down -> reconnecting STA");
+}
+
 static void manageWifi() {
   if (s_credsDirty) {
     s_credsDirty = false;
@@ -263,6 +372,20 @@ static void cloudTask(void*) {
   uint32_t lastTele = 0, lastSync = 0;
   for (;;) {
     esp_task_wdt_reset();
+
+    // Wi-Fi setup portal takes over the radio while up: serve the page, skip all
+    // STA reconnect / telemetry / upload so AP and STA logic never fight.
+    if (s_portalReq && !s_portalActive) { s_portalReq = false; startPortal(); }
+    if (s_portalActive) {
+      s_dns.processNextRequest();
+      s_web.handleClient();
+      bool timedOut = millis() - s_portalStartedAt > PORTAL_TIMEOUT_MS;
+      bool saveDone = s_portalStopAt && (int32_t)(millis() - s_portalStopAt) >= 0;
+      if (s_portalStopReq || timedOut || saveDone) { s_portalStopReq = false; stopPortal(); }
+      vTaskDelay(pdMS_TO_TICKS(10));   // stay responsive while serving the portal
+      continue;
+    }
+
     manageWifi();
     if (s_cachedOnline) {
       if (s_pairPending)   { s_pairPending = false;   doPairing(); }
@@ -298,7 +421,7 @@ void begin() {
 #if ENABLE_CLOUD
   s_mux = xSemaphoreCreateMutex();
   s_cmdQueue = xQueueCreate(8, sizeof(RemoteCmd));
-  xTaskCreatePinnedToCore(cloudTask, "net", 10240, nullptr, 1, nullptr, 0);
+  xTaskCreatePinnedToCore(cloudTask, "net", 16384, nullptr, 1, nullptr, 0);
 #endif
 }
 
@@ -424,6 +547,36 @@ void publishPairingCode(const char* code) {
 void requestUnpair() {
 #if ENABLE_CLOUD
   s_unpairPending = true;
+#endif
+}
+
+void startWifiPortal() {
+#if ENABLE_CLOUD
+  s_portalReq = true;
+#endif
+}
+
+void stopWifiPortal() {
+#if ENABLE_CLOUD
+  s_portalStopReq = true;
+#endif
+}
+
+bool portalActive() {
+#if ENABLE_CLOUD
+  return s_portalActive;
+#else
+  return false;
+#endif
+}
+
+const char* portalApName() { return WIFI_AP_SSID; }
+
+const char* portalIp() {
+#if ENABLE_CLOUD
+  return s_portalIpStr.c_str();
+#else
+  return "192.168.4.1";
 #endif
 }
 

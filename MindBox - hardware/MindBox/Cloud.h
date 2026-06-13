@@ -36,4 +36,12 @@ namespace Cloud {
   void publishPairingCode(const char* code);     // non-blocking: task POSTs it
   void requestUnpair();                          // non-blocking: task POSTs /ingest/unpair
   void provisionFromSerial();                    // 'w' setup (loop; flags creds dirty)
+
+  // On-box Wi-Fi setup: the net task hosts a SoftAP + captive page so a phone can
+  // pick a network/password (no laptop). Saved creds flow through the normal reconnect.
+  void        startWifiPortal();                 // loop -> task: raise the portal
+  void        stopWifiPortal();                  // loop -> task: tear it down
+  bool        portalActive();                    // cached: portal currently up?
+  const char* portalApName();                    // SoftAP SSID, for the OLED screen
+  const char* portalIp();                        // "192.168.4.1", for the OLED screen
 }
