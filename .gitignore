@@ -1,5 +1,5 @@
-ESP32/SECRETS.h
-MindBox - hardware/MindBox/SECRETS.h
+# Firmware credentials — never commit any SECRETS.h, in any folder.
+**/SECRETS.h
 arduino-output
 .vscode/c_cpp_properties.json
 
