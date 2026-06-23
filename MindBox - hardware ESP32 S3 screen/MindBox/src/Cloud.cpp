@@ -31,6 +31,14 @@ static volatile bool s_cachedOnline = false;
 static volatile int  s_rssi = 0;
 static volatile bool s_credsDirty = false;
 
+// On-device Wi-Fi scan (net task scans; UI loop reads the snapshot). Single
+// producer (task) / single consumer (loop); the loop only reads when !s_scanRunning.
+struct ScanItem { char ssid[33]; int8_t rssi; bool secured; };
+static ScanItem      s_scanList[WIFI_SCAN_MAX];
+static volatile int  s_scanN       = 0;
+static volatile bool s_scanReq     = false;   // loop -> task: start a scan
+static volatile bool s_scanRunning = false;   // task busy (results not ready)
+
 static void loadCreds() {
   s_ssid     = Storage::wifiSsid();
   s_pass     = Storage::wifiPass();
@@ -58,6 +66,12 @@ static char              s_pairCode[8] = {0};
 
 static uint32_t s_netSuspendUntil = 0;
 
+// Real reachability of the BACKEND (not just the Wi-Fi link). Updated on every
+// actual HTTP attempt: a positive code = the server answered (reachable, even if
+// 401/404); a non-positive code = connect/timeout (unreachable / port blocked).
+static volatile bool s_serverOk       = false;
+static volatile int  s_lastHttpStatus = 0;
+
 // ---- HTTP core. Returns status (>0) or negative error. Connect/total timeouts
 // are capped and a failure suspends all HTTP briefly so an unreachable server
 // can't stall the task in a tight retry loop. ------------------------------
@@ -83,8 +97,9 @@ static int httpRequest(const char* method, const String& url,
   http.addHeader("content-type", "application/json");
   http.addHeader("x-device-secret", s_secret);
   int code = (strcmp(method, "POST") == 0) ? http.POST(body) : http.GET();
-  if (code > 0) { respBody = http.getString(); s_netSuspendUntil = 0; }
-  else s_netSuspendUntil = millis() + NET_FAIL_BACKOFF_MS;
+  s_lastHttpStatus = code;
+  if (code > 0) { respBody = http.getString(); s_netSuspendUntil = 0; s_serverOk = true; }
+  else { s_netSuspendUntil = millis() + NET_FAIL_BACKOFF_MS; s_serverOk = false; }
   http.end();
   return code;
 }
@@ -293,19 +308,19 @@ static String htmlAttr(const String& s) {
 
 static void handlePortalRoot() {
   String page = FPSTR(PORTAL_HTML_HEAD);
-  // Editable combo: pick a scanned network OR type one (e.g. a phone hotspot that
-  // isn't broadcasting while this phone is on the setup AP, or a hidden SSID).
-  page += "<label>Network</label>";
+  // Editable combo: pick a scanned 2.4 GHz network OR type one (e.g. a phone
+  // hotspot, which can't broadcast while this phone is on the setup AP, or a
+  // hidden SSID). IMPORTANT: never call the blocking WiFi.scanNetworks() here —
+  // this handler runs on the watchdog-fed net task, so a foreground scan trips
+  // the task WDT (panic reboot) and yanks the SoftAP off-channel, dropping the
+  // phone. Render from the async-scan snapshot taken before the portal rose.
+  page += "<label>Network (2.4 GHz)</label>";
   page += "<input name=ssid list=nets autocomplete=off placeholder='Pick, or type a hotspot name'>";
   page += "<datalist id=nets>";
-  int n = WiFi.scanNetworks();
-  for (int i = 0; i < n; i++) {
-    String ss = WiFi.SSID(i);
-    if (!ss.length()) continue;
-    String esc = htmlAttr(ss);
-    page += "<option value=\"" + esc + "\" label=\"" + esc + " (" + String(WiFi.RSSI(i)) + "dBm)\">";
+  for (int i = 0; i < s_scanN; i++) {
+    if (!s_scanList[i].ssid[0]) continue;
+    page += "<option value=\"" + htmlAttr(s_scanList[i].ssid) + "\">";
   }
-  WiFi.scanDelete();
   page += "</datalist>";
   page += "<label>Password</label><input name=pass type=password placeholder='Wi-Fi password'>";
   page += "<label>Server URL (optional)</label><input name=url value='" + Storage::appBaseUrl() + "'>";
@@ -336,7 +351,10 @@ static void handlePortalRedirect() {
 }
 
 static void startPortal() {
-  WiFi.mode(WIFI_AP_STA);              // AP_STA so we can still scan nearby networks
+  WiFi.scanDelete();                   // drop any in-flight on-device scan: the portal
+  s_scanRunning = false;               // loop skips scan-harvest, so it would otherwise
+  s_scanReq     = false;               // latch scanBusy() true forever after the portal
+  WiFi.mode(WIFI_AP_STA);              // AP_STA so the cached scan list stays usable
   WiFi.softAP(WIFI_AP_SSID);
   IPAddress ip = WiFi.softAPIP();
   s_portalIpStr = ip.toString();
@@ -375,6 +393,7 @@ static void manageWifi() {
   bool conn = (WiFi.status() == WL_CONNECTED);
   s_cachedOnline = conn;
   s_rssi = conn ? WiFi.RSSI() : 0;
+  if (!conn) { s_serverOk = false; s_lastHttpStatus = 0; }   // no link -> backend definitely unreachable
   if (!conn) {
     if (s_ssid.length() && millis() - s_lastWifiTry > WIFI_RETRY_MS) {
       s_lastWifiTry = millis();
@@ -408,6 +427,49 @@ static void cloudTask(void*) {
       if (s_portalStopReq || timedOut || saveDone) { s_portalStopReq = false; stopPortal(); }
       vTaskDelay(pdMS_TO_TICKS(10));   // stay responsive while serving the portal
       continue;
+    }
+
+    // On-device Wi-Fi scan (async): kick on request, harvest when complete.
+    if (s_scanReq && !s_scanRunning) {
+      s_scanReq = false;
+      WiFi.scanDelete();
+      // Free the radio first. A pending STA association attempt — e.g. to the stale
+      // default creds ("sen1" from SECRETS.h) when that AP isn't in range — makes
+      // scanNetworks() come back with ZERO networks on the S3. If we're not actually
+      // connected, drop the attempt for the scan; the chosen network is (re)joined
+      // later via saveWifi(). Ensure STA mode, then active-scan all 2.4 GHz channels
+      // with a 300 ms/channel dwell so weaker / distant APs still show up.
+      if (!(WiFi.getMode() & WIFI_MODE_STA)) WiFi.mode(WIFI_STA);
+      if (WiFi.status() != WL_CONNECTED)     WiFi.disconnect(false, false);
+      WiFi.scanNetworks(true /*async*/, false /*hidden*/, false /*passive*/, 300 /*ms/chan*/);
+      s_scanRunning = true;
+    }
+    if (s_scanRunning) {
+      int r = WiFi.scanComplete();
+      if (r >= 0) {
+        int n = 0;
+        for (int i = 0; i < r && n < WIFI_SCAN_MAX; i++) {
+          String ss = WiFi.SSID(i);
+          if (!ss.length()) continue;
+          bool dup = false;
+          for (int j = 0; j < n; j++) if (ss == s_scanList[j].ssid) { dup = true; break; }
+          if (dup) continue;
+          strncpy(s_scanList[n].ssid, ss.c_str(), 32); s_scanList[n].ssid[32] = 0;
+          s_scanList[n].rssi    = (int8_t)WiFi.RSSI(i);
+          s_scanList[n].secured = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
+          n++;
+        }
+        for (int a = 1; a < n; a++) {     // sort by signal, strongest first
+          ScanItem t = s_scanList[a]; int b = a - 1;
+          while (b >= 0 && s_scanList[b].rssi < t.rssi) { s_scanList[b + 1] = s_scanList[b]; b--; }
+          s_scanList[b + 1] = t;
+        }
+        s_scanN = n;
+        WiFi.scanDelete();
+        s_scanRunning = false;          // set last: loop now safe to read snapshot
+      } else if (r == WIFI_SCAN_FAILED) {
+        s_scanN = 0; s_scanRunning = false;
+      }
     }
 
     manageWifi();
@@ -504,6 +566,77 @@ int wifiRssi() {
   return s_rssi;
 #else
   return 0;
+#endif
+}
+
+bool serverReachable() {
+#if ENABLE_CLOUD
+  return s_serverOk;
+#else
+  return false;
+#endif
+}
+int lastHttpStatus() {
+#if ENABLE_CLOUD
+  return s_lastHttpStatus;
+#else
+  return 0;
+#endif
+}
+
+String ssid() {
+#if ENABLE_WIFI
+  return s_cachedOnline ? WiFi.SSID() : String();
+#else
+  return String();
+#endif
+}
+
+String ipString() {
+#if ENABLE_WIFI
+  return s_cachedOnline ? WiFi.localIP().toString() : String();
+#else
+  return String();
+#endif
+}
+
+// --- on-device Wi-Fi scan + save (used by the touchscreen setup flow) -------
+void requestScan() {
+#if ENABLE_WIFI
+  s_scanReq = true;
+#endif
+}
+bool scanBusy()  {
+#if ENABLE_WIFI
+  return s_scanRunning || s_scanReq;
+#else
+  return false;
+#endif
+}
+int  scanCount() {
+#if ENABLE_WIFI
+  return s_scanRunning ? 0 : s_scanN;
+#else
+  return 0;
+#endif
+}
+bool scanResult(int i, char* out, size_t n, int& rssi, bool& secured) {
+#if ENABLE_WIFI
+  if (s_scanRunning || i < 0 || i >= s_scanN || !out || n == 0) return false;
+  strncpy(out, s_scanList[i].ssid, n - 1); out[n - 1] = 0;
+  rssi = s_scanList[i].rssi; secured = s_scanList[i].secured;
+  return true;
+#else
+  (void)i; (void)out; (void)n; (void)rssi; (void)secured; return false;
+#endif
+}
+void saveWifi(const String& ssid, const String& pass) {
+#if ENABLE_WIFI
+  Storage::setWifiSsid(ssid);
+  Storage::setWifiPass(pass);
+  s_credsDirty = true;   // net task reloads creds + reconnects (same path as the portal)
+#else
+  (void)ssid; (void)pass;
 #endif
 }
 
@@ -629,6 +762,7 @@ static String readSerialLine(const char* prompt) {
 void provisionFromSerial() {
 #if ENABLE_WIFI
   Serial.println("\n=== Wi-Fi / cloud provisioning ===");
+  Serial.println("(Tip: you can also set Wi-Fi on the box itself — Device > Wi-Fi Setup.)");
   Serial.println("Set the Serial Monitor line ending to Newline, then enter:");
   String ssid = readSerialLine("Wi-Fi SSID            : ");
   String pass = readSerialLine("Wi-Fi password        : ");

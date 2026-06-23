@@ -2,3 +2,10 @@ ESP32/SECRETS.h
 MindBox - hardware/MindBox/SECRETS.h
 arduino-output
 .vscode/c_cpp_properties.json
+
+# Microsoft Office lock/temp files (created while a doc is open in Word/PowerPoint/Excel).
+# These are locked by the Office process, so git can't read them and the whole commit aborts.
+~$*
+
+# understand-anything generated analysis output (knowledge graph, trash, intermediates)
+.understand-anything/
