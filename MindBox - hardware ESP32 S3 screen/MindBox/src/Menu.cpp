@@ -2,6 +2,7 @@
 #include "config.h"
 #include "Inputs.h"
 #include "Haptics.h"
+#include "Sound.h"
 #include "Storage.h"
 #include "Theme.h"
 #include "Panel.h"
@@ -229,7 +230,7 @@ static int itemCount(Screen s) {
     case SCR_ROOT:     return 5;
     case SCR_MODE:     return 8;   // presets · focus · break · cycles · long-break · every · auto-start
     case SCR_SETTINGS: return 7;   // Presence · Display · Coaching · Stats · Strict · Quiet · Environment
-    case SCR_DISPLAY:  return 6;   // Show timer · Haptics · Strength · Brightness · Theme · Test motor
+    case SCR_DISPLAY:  return 9;   // Show timer · Haptics · Strength · Sound · Volume · Brightness · Theme · Test motor · Test sound
     case SCR_PRESENCE: return 3;
     case SCR_COACHING: return 4;
     case SCR_QUIET:    return 3;   // Enabled · From · To
@@ -368,6 +369,26 @@ static void cycleHapticLevel() {
   Haptics::setLevel(s_cfg->hapticLevel);
   Storage::saveConfig(*s_cfg);
   Haptics::enableTest();        // buzz at the new strength
+  markDirty();
+}
+
+static const char* soundLevelLabel(uint8_t l) {
+  return l == 0 ? "Low" : (l == 1 ? "Med" : "High");
+}
+
+static void toggleSound() {
+  s_cfg->soundEnabled = !s_cfg->soundEnabled;
+  Sound::setEnabled(s_cfg->soundEnabled);
+  Storage::saveConfig(*s_cfg);
+  if (s_cfg->soundEnabled) Sound::test();   // confirm chime when enabled
+  markDirty();
+}
+
+static void cycleSoundLevel() {
+  s_cfg->soundLevel = (s_cfg->soundLevel + 1) % 3;
+  Sound::setVolume(s_cfg->soundLevel);
+  Storage::saveConfig(*s_cfg);
+  Sound::test();                // play a chime at the new volume
   markDirty();
 }
 
@@ -633,11 +654,16 @@ MenuAction tick(int rotDir, int sideBtn) {
       if (s_cursor == 0) toggleShowTimer();
       else if (s_cursor == 1) toggleHaptics();
       else if (s_cursor == 2) cycleHapticLevel();
-      else if (s_cursor == 3) cycleBrightness();
-      else if (s_cursor == 4) toggleTheme();
-      else {
+      else if (s_cursor == 3) toggleSound();
+      else if (s_cursor == 4) cycleSoundLevel();
+      else if (s_cursor == 5) cycleBrightness();
+      else if (s_cursor == 6) toggleTheme();
+      else if (s_cursor == 7) {
         Serial.println("[menu] Test motor selected");
         Haptics::testPulse();
+      } else {
+        Serial.println("[menu] Test sound selected");
+        Sound::test();
       }
       markDirty();
       break;
@@ -872,10 +898,13 @@ const MenuView& view() {
         if (idx == 0) fillRow(row, "Show timer", s_cfg->showTimer ? "ON" : "OFF", sel);
         else if (idx == 1) fillRow(row, "Haptics", s_cfg->hapticsEnabled ? "ON" : "OFF", sel);
         else if (idx == 2) fillRow(row, "Strength", hapticLevelLabel(s_cfg->hapticLevel), sel);
-        else if (idx == 3) { char b[8]; snprintf(b, sizeof(b), "%d%%", s_cfg->brightnessPct);
+        else if (idx == 3) fillRow(row, "Sound", s_cfg->soundEnabled ? "ON" : "OFF", sel);
+        else if (idx == 4) fillRow(row, "Volume", soundLevelLabel(s_cfg->soundLevel), sel);
+        else if (idx == 5) { char b[8]; snprintf(b, sizeof(b), "%d%%", s_cfg->brightnessPct);
                              fillRow(row, "Brightness", b, sel); }
-        else if (idx == 4) fillRow(row, "Theme", Theme::isDark() ? "Dark" : "Light", sel);
-        else fillRow(row, "Test motor", Haptics::isHolding() ? "MAX..." : "press", sel);
+        else if (idx == 6) fillRow(row, "Theme", Theme::isDark() ? "Dark" : "Light", sel);
+        else if (idx == 7) fillRow(row, "Test motor", Haptics::isHolding() ? "MAX..." : "press", sel);
+        else fillRow(row, "Test sound", "press", sel);
         break;
 
       case SCR_QUIET:
@@ -1044,13 +1073,15 @@ void pausedReset(PauseReason reason) {
 MenuAction pausedTick(int rotDir, int sideBtn) {
   if (rotDir != 0) {
     s_pauseCursor += rotDir;
-    if (s_pauseCursor < 0) s_pauseCursor = 1;
-    if (s_pauseCursor > 1) s_pauseCursor = 0;
+    if (s_pauseCursor < 0) s_pauseCursor = 2;
+    if (s_pauseCursor > 2) s_pauseCursor = 0;
     Haptics::click();
   }
   if (sideBtn != 1) return MENU_NONE;
   Haptics::tap();
-  return (s_pauseCursor == 0) ? MENU_RESUME_SESSION : MENU_END_SESSION;
+  if (s_pauseCursor == 0) return MENU_RESUME_SESSION;
+  if (s_pauseCursor == 1) return MENU_SKIP_INTERVAL;
+  return MENU_END_SESSION;
 }
 
 const MenuView& pausedView() {
@@ -1059,8 +1090,9 @@ const MenuView& pausedView() {
   strncpy(v.title, "PAUSED", sizeof(v.title) - 1);
   strncpy(v.infoLine, pauseReasonLine(s_pauseReason), sizeof(v.infoLine) - 1);
   fillRow(v.rows[0], "Resume", nullptr, s_pauseCursor == 0);
-  fillRow(v.rows[1], "End session", nullptr, s_pauseCursor == 1);
-  v.rowCount = 2;
+  fillRow(v.rows[1], "Skip", nullptr, s_pauseCursor == 1);
+  fillRow(v.rows[2], "End session", nullptr, s_pauseCursor == 2);
+  v.rowCount = 3;
   return v;
 }
 

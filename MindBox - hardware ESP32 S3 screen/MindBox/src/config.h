@@ -24,8 +24,11 @@
 #endif
 
 #define USE_SPDT_TOGGLE 0   // physical Work/Break switch
-#define HAS_MIC         1   // analog mic (MAX9814/MAX4466) OUT -> IO2 (ADC1); see docs/WIRING.md §5
-#define HAS_PRESENCE    0   // VL53L1X ToF (not wired on the S3 board yet)
+#define HAS_MIC         0   // legacy ANALOG mic path (retired — board mic is digital I2S; see HAS_I2S_MIC)
+#define HAS_I2S_MIC     0   // TEMP off — boot-current recovery (brownout loop). Re-enable on a solid 5V supply. (ES8311 I2S MEMS mic, DIN=IO8 — board's ONLY mic)
+#define HAS_SPEAKER     0   // Phase 2: enable for event chimes once the box is stable + mic confirmed (ES8311 I2S + FM8002E amp, DOUT=IO6, AMP_EN=IO1)
+#define HAS_ANY_MIC     (HAS_MIC || HAS_I2S_MIC)   // any mic source present (gates noise UI/telemetry)
+#define HAS_PRESENCE    0   // TEMP off — boot-current recovery (brownout loop). Re-enable on a solid 5V supply. (VL53L1X/TOF400C on IO2 SDA / IO14 SCL — NOT the 4-pin touch header)
 #define HAS_LED_RING    0   // WS2812B ring
 #define HAS_LIGHT       1   // Keyes KY-018 photoresistor AO -> IO3 (ADC1); see docs/WIRING.md §5
 #define HAS_TEMP        1   // DHT11 temp/humidity DATA -> IO21 (needs 4.7k–10k pull-up to 3V3)
@@ -69,6 +72,26 @@
 #define TOUCH_OFFSET_ROTATION 0 // bump 0..7 if the touch axes come out swapped/mirrored
 
 // ============================================================================
+// Audio: ES8311 codec + FM8002E amp on I2S  (LCDWIKI ES3C28P/ES3N28P board)
+//   Codec CONTROL is I2C 0x18 on the SAME pins as touch (IO16/IO15). It is done
+//   once at boot via software-I2C (Audio::beginCodec) BEFORE LovyanGFX claims the
+//   bus; at runtime audio is I2S-only (no codec I2C), so no touch-bus contention.
+//   Volume is set by scaling I2S samples in software, never by codec re-writes.
+// ============================================================================
+#define PIN_I2S_MCLK   4         // I2S master clock
+#define PIN_I2S_BCLK   5         // I2S bit clock (SCK)
+#define PIN_I2S_DOUT   6         // I2S data OUT -> speaker (DAC)
+#define PIN_I2S_LRCK   7         // I2S word select (LRC)
+#define PIN_I2S_DIN    8         // I2S data IN  <- mic   (ADC)
+#define PIN_AMP_EN     1         // FM8002E amp enable — ACTIVE-LOW (low=on, high=mute)
+#define ES8311_ADDR    0x18      // codec I2C address (7-bit)
+#define PIN_CODEC_SDA  16        // == PIN_TOUCH_SDA  (shared touch bus, boot-only soft-I2C)
+#define PIN_CODEC_SCL  15        // == PIN_TOUCH_SCL
+#define AUDIO_SAMPLE_RATE 16000  // Hz; 16-bit mono (mic RMS sensing + chime tones)
+// 16-bit mic RMS that normalizes to noise=1.0 (tune on hardware via serial 'm').
+static const float AUDIO_MIC_RMS_FULL = 6000.0f;
+
+// ============================================================================
 // Peripheral pin map (S3 placeholders — gated by HAS_*; see header note)
 //
 // ⚠ On the LCDWIKI ES3C28P/ES3N28P these GPIOs are mostly TAKEN by onboard
@@ -82,8 +105,8 @@
 #define PIN_ENC_CLK    2    // KY-040 A   (HAS_ENCODER) — placeholder, re-pin when wired
 #define PIN_ENC_DT    14    // KY-040 B
 #define PIN_ENC_SW    21    // KY-040 shaft button
-#define PIN_I2C_SDA    2    // ToF / aux I2C bus (HAS_PRESENCE) — placeholder
-#define PIN_I2C_SCL   14
+#define PIN_I2C_SDA    2    // VL53L1X ToF I2C SDA (HAS_PRESENCE) — IO2 free since analog mic retired
+#define PIN_I2C_SCL   14    // VL53L1X ToF I2C SCL — own Wire bus (NOT the touch header IO15/16)
 #define PIN_BUTTON     3    // side tact button (INPUT_PULLUP, ADC1-capable but used digital)
 #define BTN_ACTIVE_LOW 1
 #define PIN_BOOT_BTN   0    // on-board BOOT button -> dark/light theme toggle
@@ -123,6 +146,10 @@ static const unsigned long PRESENCE_END_MS    = 300000UL;
 static const float         NOISE_FULL_SCALE_DEFAULT = 2000.0f;
 static const float         LIGHT_LUX_SCALE_DEFAULT  = 1000.0f;
 static const float         LIGHT_VAR_SCALE_DEFAULT  = 2000.0f;
+// KY-018 AO rises in DARKNESS (LDR in the lower divider leg), so the raw ADC goes
+// UP when covered. Invert it so "lux" tracks brightness (bright = high, dark = low).
+// Set 0 if your module is wired the other way (bright = high raw).
+#define LIGHT_RAW_DARK_HIGH 1
 static const float         TEMP_OFFSET_DEFAULT      = 0.0f;
 static const unsigned long DHT_READ_INTERVAL_MS = 2000UL;
 static const int           FLE_PRESENCE_CAP   = 5;
@@ -143,6 +170,9 @@ static const unsigned long WIFI_STATUS_CACHE_MS = 1000UL;
 #define CLOUD_USE_TLS 0
 #define NTP_SERVER "pool.ntp.org"
 #define WIFI_AP_SSID "MindBox-Setup"
+// Cap Wi-Fi TX power to soften the association current spike that browns out the
+// board on a marginal USB supply (lower = less peak draw). Used in Cloud::begin().
+#define WIFI_TX_POWER WIFI_POWER_8_5dBm
 #define WIFI_SCAN_MAX 16                                   // on-device scan list cap
 static const unsigned long WIFI_CONNECT_TIMEOUT_MS = 15000UL; // on-device join wait
 static const unsigned long PORTAL_TIMEOUT_MS = 300000UL;
@@ -163,6 +193,15 @@ static const unsigned long UPLOAD_RETRY_MIN_MS  = 5000UL;
 static const unsigned long UPLOAD_RETRY_MAX_MS  = 300000UL;
 
 // ---- reliability -----------------------------------------------------------
+// Disable the ESP32-S3 brownout detector at boot. On a marginal supply (e.g. a
+// laptop USB port) the Wi-Fi current spike sags the 5V rail below the brownout
+// threshold and the chip resets in a loop. This stops the AUTO-RESET so the box
+// stays up — it does NOT fix the dip; the real fix is a stronger 5V source.
+// Set 0 to restore the protective reset (recommended once power is solid).
+// REVERTED to 0: the detector is armed by ESP-IDF startup BEFORE setup() runs, so this
+// app-level write can't stop a boot-stage brownout (the "E BOD" loop) — and masking it
+// turns a clean reboot into a dead-dark hang. The real fix is a stronger 5V supply.
+#define DISABLE_BROWNOUT_DETECTOR 0
 static const unsigned long WDT_TIMEOUT_MS = 15000UL;
 static const unsigned long I2C_HEALTH_MS  = 2000UL;
 static const uint16_t      I2C_TIMEOUT_MS = 50;

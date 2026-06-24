@@ -8,6 +8,7 @@
 #include "Keyboard.h"
 #include "Panel.h"
 #include "Haptics.h"
+#include "Sound.h"
 #include "LedRing.h"
 #include "Storage.h"
 #include "Cloud.h"
@@ -150,7 +151,7 @@ static UiModel buildModel() {
   m.sessionInterf  = s_sessionWorst;
   // COMPLETE summary stats come from the just-finished record (set in persistSession).
   m.sessionFocusLoad = s_lastRec.focusLoadAvg;
-  m.sessionNoisePct  = HAS_MIC ? (int)lroundf(s_lastRec.noiseAvg * 100.0f) : -1;
+  m.sessionNoisePct  = HAS_ANY_MIC ? (int)lroundf(s_lastRec.noiseAvg * 100.0f) : -1;
   m.pauseReason    = s_pauseReason;
   m.wifi           = Cloud::online();
   m.present        = Sensors::present();
@@ -269,6 +270,7 @@ static void startSessionMode(Mode m, int durMin) {
   Session::setSamplePeriodMs(sessionSamplePeriodMs());
   saveCheckpointNow();
   Haptics::tap();
+  Sound::start();
   enter(ST_RUNNING);
 }
 
@@ -296,7 +298,7 @@ static uint8_t currentInterference() {
 #if HAS_PRESENCE
   if (s_cfg.alertPresence && !Sensors::present()) return INTERF_AWAY;
 #endif
-#if HAS_MIC
+#if HAS_ANY_MIC
   if (s_cfg.alertNoise && (int)(Sensors::noise() * 100.0f) > s_cfg.noiseMaxPct)
     return INTERF_NOISE_HIGH;
 #endif
@@ -373,6 +375,7 @@ static void beginEnd(const char* status) {
   clearSet();
   if (goalHit && s_cfg.hapticsEnabled) Haptics::complete();
   else Haptics::reset();
+  if (goalHit) Sound::complete();
   enter(ST_COMPLETE);
 }
 
@@ -388,6 +391,7 @@ static void onTimerComplete() {
       s_pendingSetComplete = true;
       Storage::recordSetComplete();
       Haptics::complete();
+      Sound::complete();
       enter(ST_COMPLETE);
       return;
     }
@@ -404,6 +408,7 @@ static void onTimerComplete() {
   }
 
   if (s_cfg.hapticsEnabled) Haptics::complete();
+  Sound::complete();
   enter(ST_COMPLETE);
 }
 
@@ -479,11 +484,17 @@ static void handleMenuAction(MenuAction a) {
       Session::resumeClock();
       saveCheckpointNow();
       Haptics::resume();
+      Sound::resume();
       enter(ST_RUNNING);
       break;
     case MENU_END_SESSION:
       if (strictFocusLock()) break;   // can't end a focus block in strict mode
       beginEnd("interrupted");
+      break;
+    case MENU_SKIP_INTERVAL:
+      if (strictFocusLock()) break;   // strict mode: no early exit of a focus block (same as End)
+      Session::pauseClock();          // freeze elapsed (already paused via the menu; idempotent)
+      onTimerComplete();              // credits ACTUAL focus, advances to the next interval
       break;
     case MENU_ADD_TIME:
       Session::addTime(300);          // +5 min to the current interval
@@ -505,6 +516,7 @@ static void handleMenuAction(MenuAction a) {
     case MENU_PAUSE_SESSION:
       Session::addBreak();
       Haptics::pause();
+      Sound::pause();
       Menu::runningDismiss();
       saveCheckpointNow();
       enterPaused(PAUSE_MANUAL);
@@ -622,6 +634,8 @@ void init() {
   s_bootAt = millis();
   s_cfg = Storage::loadConfig(defaultConfig());
   Haptics::setEnabled(s_cfg.hapticsEnabled);
+  Sound::setEnabled(s_cfg.soundEnabled);
+  Sound::setVolume(s_cfg.soundLevel);
   s_workDur  = Storage::workDurationMin();
   s_breakDur = Storage::breakDurationMin();
   s_cycleCount = Storage::cycleCount();
@@ -675,6 +689,7 @@ void tick() {
     s_quietApplied = quiet;
     Panel::setBrightness(quiet ? 15 : s_cfg.brightnessPct);
     Haptics::setEnabled(quiet ? false : s_cfg.hapticsEnabled);
+    Sound::setEnabled(quiet ? false : s_cfg.soundEnabled);
   }
 
   // Apply settings the net task pulled from the server. Device menu settings
@@ -779,10 +794,17 @@ void tick() {
       }
       // Control circles (touch): gear opens options; transport acts directly.
       { int ta = Inputs::timerAction();
-        if (ta == TimerScreen::TA_MENU) { Menu::runningOpen(); s_uiDirty = true; break; }
+        if (ta == TimerScreen::TA_MENU) {   // gear: opening options is a pause (clock stops here)
+          saveCheckpointNow();
+          enterPaused(PAUSE_MANUAL);
+          s_pausedOverlay = true;           // land on Resume/Skip/End, not the bare paused timer
+          s_uiDirty = true;
+          break;
+        }
         if (ta == TimerScreen::TA_PAUSE) {
           Session::addBreak();
           Haptics::pause();
+          Sound::pause();
           saveCheckpointNow();
           enterPaused(PAUSE_MANUAL);
           break;
@@ -791,11 +813,18 @@ void tick() {
         if (ta == TimerScreen::TA_RESET) { restartCurrentInterval(); break; }
       }
       if (btn == 2) { if (!strictFocusLock()) beginEnd("aborted"); break; }
-      if (btn == 1) { Menu::runningOpen(); s_uiDirty = true; break; }   // empty-space tap = options overlay
+      if (btn == 1) {   // empty-space tap = pause + options (same as the gear)
+        saveCheckpointNow();
+        enterPaused(PAUSE_MANUAL);
+        s_pausedOverlay = true;
+        s_uiDirty = true;
+        break;
+      }
       if (warm && s_cfg.autoPause && !Sensors::present() &&
           Sensors::absentForMs() > pauseMs) {
         Session::addPresenceInterruption();
         Haptics::pause();
+        Sound::pause();
         saveCheckpointNow();
         enterPaused(PAUSE_AWAY);
         break;
@@ -836,6 +865,7 @@ void tick() {
         Session::resumeClock();
         saveCheckpointNow();
         Haptics::resume();
+        Sound::resume();
         enter(ST_RUNNING);
         break;
       }
@@ -852,6 +882,7 @@ void tick() {
           Session::resumeClock();
           saveCheckpointNow();
           Haptics::resume();
+          Sound::resume();
           enter(ST_RUNNING);
           break;
         }
@@ -1024,6 +1055,8 @@ void applyConfig(const DeviceConfig& c) {
   s_cfg = c;
   Haptics::setEnabled(c.hapticsEnabled);
   Haptics::setLevel(c.hapticLevel);
+  Sound::setEnabled(c.soundEnabled);
+  Sound::setVolume(c.soundLevel);
   Panel::setBrightness(c.brightnessPct);
   Storage::saveConfig(c);
   s_uiDirty = true;

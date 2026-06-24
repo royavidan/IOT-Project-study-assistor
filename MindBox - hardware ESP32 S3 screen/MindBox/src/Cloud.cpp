@@ -501,6 +501,8 @@ void begin() {
 #if ENABLE_WIFI
   loadCreds();
   WiFi.mode(WIFI_STA);
+  WiFi.setTxPower(WIFI_TX_POWER);     // soften the association current spike (brownout mitigation)
+  WiFi.setSleep(WIFI_PS_MIN_MODEM);   // modem power-save lowers average radio draw
   WiFi.setAutoReconnect(true);
   if (s_ssid.length()) WiFi.begin(s_ssid.c_str(), s_pass.c_str());
 #endif

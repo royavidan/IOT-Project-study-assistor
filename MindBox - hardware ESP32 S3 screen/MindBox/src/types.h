@@ -70,6 +70,8 @@ struct DeviceConfig {
   uint8_t  noiseMaxPct;        // noise "too high" above this (0..100)
   uint16_t lightMinLux;        // light comfort band (lux)
   uint16_t lightMaxLux;
+  bool     soundEnabled;       // speaker event chimes (ES8311 + FM8002E amp)
+  uint8_t  soundLevel;         // 0=low 1=med 2=high chime volume (software gain)
 };
 
 // Compact offline session log entry (NVS ring buffer, v2 adds utcDay).
@@ -248,6 +250,7 @@ enum MenuAction {
   MENU_ENTER_WIFI_SETUP,
   MENU_RESUME_SESSION,
   MENU_END_SESSION,
+  MENU_SKIP_INTERVAL,        // skip the current work/break interval, credit actual elapsed focus
   MENU_PAUSE_SESSION,
   MENU_RESUME_CHECKPOINT,
   MENU_DISCARD_CHECKPOINT,
@@ -280,7 +283,8 @@ inline DeviceConfig defaultConfig() {
            /*alertTemp*/ true, /*alertNoise*/ true, /*alertLight*/ true,
            /*alertPresence*/ true, /*alertNudge*/ true,
            /*tempMinC*/ 18, /*tempMaxC*/ 26, /*noiseMaxPct*/ 60,
-           /*lightMinLux*/ 50, /*lightMaxLux*/ 1000 };
+           /*lightMinLux*/ 50, /*lightMaxLux*/ 1000,
+           /*soundEnabled*/ true, /*soundLevel*/ 1 };
 }
 
 inline unsigned long presencePauseMs(const DeviceConfig& c) {

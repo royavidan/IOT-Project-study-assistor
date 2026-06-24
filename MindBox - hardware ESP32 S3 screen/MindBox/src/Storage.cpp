@@ -218,6 +218,8 @@ DeviceConfig loadConfig(const DeviceConfig& d) {
   c.noiseMaxPct      = prefs.getUChar("nMax",  d.noiseMaxPct);
   c.lightMinLux      = prefs.getUShort("lMin", d.lightMinLux);
   c.lightMaxLux      = prefs.getUShort("lMax", d.lightMaxLux);
+  c.soundEnabled     = prefs.getBool("sndEn",  d.soundEnabled);
+  c.soundLevel       = prefs.getUChar("sndLvl", d.soundLevel);
   return c;
 }
 
@@ -253,6 +255,8 @@ void saveConfig(const DeviceConfig& c) {
   prefs.putUChar("nMax",  c.noiseMaxPct);
   prefs.putUShort("lMin", c.lightMinLux);
   prefs.putUShort("lMax", c.lightMaxLux);
+  prefs.putBool("sndEn",  c.soundEnabled);
+  prefs.putUChar("sndLvl", c.soundLevel);
 }
 
 bool paired() { return s_paired; }   // RAM mirror

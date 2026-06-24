@@ -1,6 +1,7 @@
 #include "Sensors.h"
 #include "Storage.h"
 #include "config.h"
+#include "Audio.h"
 #include <Wire.h>
 
 #if HAS_TEMP
@@ -46,6 +47,10 @@ static bool refreshDht(bool force) {
   if (!force && now - s_lastDhtRead < DHT_READ_INTERVAL_MS) return s_tempOk;
   s_lastDhtRead = now;
   float t = s_dht.readTemperature();
+  if (isnan(t)) {                       // one forced retry rides out a transient bad read
+    delay(60);
+    t = s_dht.readTemperature(false, true);
+  }
   if (isnan(t)) {
     s_tempOk = false;
     return false;
@@ -74,6 +79,9 @@ static void refreshLightWindow() {
   if (raw > s_lMax) s_lMax = raw;
   if (millis() - s_lWin >= 1000) {
     int mid = (s_lMin + s_lMax) / 2;
+#if LIGHT_RAW_DARK_HIGH
+    mid = 4095 - mid;            // KY-018 reads high in the dark -> invert to brightness
+#endif
     s_lux = (float)mid / 4095.0f * s_lightLuxScale;
     float pp = (float)(s_lMax - s_lMin);
     s_lightVar = clamp01f(pp / s_lightVarScale);
@@ -149,7 +157,12 @@ void init() {
 }
 
 void tick() {
-  // microphone: rolling ~1Hz peak-to-peak, normalized
+#if HAS_I2S_MIC
+  // microphone: the core-0 I2S audio task publishes a rolling RMS (0..1); mirror it.
+  s_noise = Audio::micLevel();
+  s_noiseValid = Audio::micReady();
+#else
+  // analog microphone: rolling ~1Hz peak-to-peak, normalized
   int v = analogRead(PIN_MIC);
   if (v < s_nMin) s_nMin = v;
   if (v > s_nMax) s_nMax = v;
@@ -163,6 +176,7 @@ void tick() {
     s_noise = ppn < 0 ? 0 : (ppn > 1 ? 1 : ppn);
     s_nMin = 4095; s_nMax = 0; s_nWin = millis();
   }
+#endif
 
 #if HAS_LIGHT
   refreshLightWindow();
@@ -215,6 +229,10 @@ float noise()      { return s_noise; }
 // Immediate peak-to-peak probe (doesn't disturb the rolling window). Used by the
 // self-test/diagnostics so a working mic shows a real value right away.
 float noiseProbe(uint16_t windowMs) {
+#if HAS_I2S_MIC
+  (void)windowMs;
+  return Audio::micLevel();              // I2S task already maintains the rolling level
+#else
   uint32_t start = millis();
   int mn = 4095, mx = 0;
   while (millis() - start < windowMs) {
@@ -224,6 +242,7 @@ float noiseProbe(uint16_t windowMs) {
   }
   float pp = (mx - mn) / s_noiseScale;
   return pp < 0 ? 0 : (pp > 1 ? 1 : pp);
+#endif
 }
 
 int   presenceMm() { return s_lastDist; }

@@ -2,6 +2,7 @@
 #include "config.h"
 #include "types.h"
 #include "Sensors.h"
+#include "Audio.h"
 #include "Session.h"
 #include "StateMachine.h"
 #include "Storage.h"
@@ -210,12 +211,16 @@ static const char* resetReasonStr(esp_reset_reason_t r) {
   }
 }
 
+const char* resetReason() { return resetReasonStr(esp_reset_reason()); }
+
 void selfTest() {
   Serial.println();
   Serial.println("==== MindBox self-test ====");
   Serial.printf("firmware : %s\n", FW_VERSION);
   Serial.printf("reset    : %s\n", resetReasonStr(esp_reset_reason()));
   Serial.printf("heap     : %u free / %u total\n", ESP.getFreeHeap(), ESP.getHeapSize());
+  Serial.printf("psram    : %s  %u bytes  (set Arduino PSRAM=\"OPI PSRAM\")\n",
+                psramFound() ? "OPI ok" : "OFF/none", (unsigned)ESP.getPsramSize());
   Serial.printf("device   : %s\n", Storage::deviceId().c_str());
   uint8_t addrs[8];
   int n = Sensors::i2cScan(addrs, 8);
@@ -225,8 +230,9 @@ void selfTest() {
   Serial.println();
   Serial.printf("oled     : %s\n", Display::present() ? Display::driverName() : "NOT FOUND");
   SensorHealth h = Sensors::health();
-  Serial.printf("tof(pres): %s\n", h.tofPresent ? "ok" : "absent");
+  Serial.printf("tof(pres): %s  dist=%dmm\n", h.tofPresent ? "ok" : "absent", Sensors::presenceMm());
   Serial.printf("mic      : %.2f normalized (live probe)\n", Sensors::noiseProbe());
+  Audio::probe();   // ES8311 boot-ACK + raw I2S min/max/RMS (mic bring-up)
   float lux = 0, lvar = 0, tempC = NAN;
   bool hasLux = Sensors::readLight(lux, lvar);
   bool hasTemp = Sensors::readTemp(tempC);
@@ -236,8 +242,10 @@ void selfTest() {
     Serial.printf("light    : %s\n", HAS_LIGHT ? "invalid" : "absent");
   if (hasTemp)
     Serial.printf("temp     : ok  %.1f C\n", tempC);
+  else if (HAS_TEMP)
+    Serial.printf("temp     : invalid  (DHT11: add 4.7k-10k pull-up DATA(IO%d)->3V3; check wiring)\n", PIN_DHT11);
   else
-    Serial.printf("temp     : %s\n", HAS_TEMP ? "invalid" : "absent");
+    Serial.println("temp     : absent");
   Serial.printf("wifi     : %s\n", Cloud::online() ? "connected" : "off");
   Serial.printf("side btn : GPIO%d raw=%d at boot", PIN_BUTTON, Inputs::sideRaw());
 #if BTN_ACTIVE_LOW
@@ -252,7 +260,7 @@ void selfTest() {
   Serial.printf("calib    : noise=%.0f light=%.0f lightvar=%.0f tempOff=%.1f C\n",
                 Storage::noiseFullScale(), Storage::lightLuxScale(),
                 Storage::lightVarScale(), Storage::tempOffsetC());
-  Serial.println("commands : m=monitor  c=calib  b=btn  w=wifi  q=queue  d=dump  h=help");
+  Serial.println("commands : m=monitor  c=calib  a=audio  b=btn  w=wifi  q=queue  d=dump  h=help");
   Serial.println("===========================");
 }
 
@@ -268,7 +276,8 @@ void tick() {
     else if (c == 'q') queueStatus();
     else if (c == 'w') Cloud::provisionFromSerial();
     else if (c == 'c') handleCalibCommand();
-    else if (c == 'h') Serial.println("[diag] m=monitor  c=calib  b=btn  w=wifi  q=queue  d=dump  h=help");
+    else if (c == 'a') Audio::probe();
+    else if (c == 'h') Serial.println("[diag] m=monitor  c=calib  a=audio  b=btn  w=wifi  q=queue  d=dump  h=help");
   }
   if (s_monitor && millis() - s_lastMon > 1000) { s_lastMon = millis(); dump(); }
 }

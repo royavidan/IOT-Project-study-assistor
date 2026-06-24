@@ -3,6 +3,10 @@
 #include "esp_task_wdt.h"
 
 #include "src/config.h"
+#if DISABLE_BROWNOUT_DETECTOR
+#include "soc/rtc_cntl_reg.h"   // RTC_CNTL_BROWN_OUT_REG
+#include "soc/soc.h"            // WRITE_PERI_REG
+#endif
 #include "src/Panel.h"
 #include "src/Display.h"
 #include "src/Theme.h"
@@ -15,6 +19,8 @@
 #include "src/StateMachine.h"
 #include "src/Diagnostics.h"
 #include "src/Haptics.h"
+#include "src/Sound.h"
+#include "src/Audio.h"
 #include "src/LedRing.h"
 #if USE_TOUCH
 #include "src/Touch.h"
@@ -32,7 +38,24 @@
 // Serial @115200: m/c/d/h, w.
 // ============================================================================
 
+// On-screen + serial boot breadcrumb (call only AFTER Display::init()). If boot stalls,
+// the screen freezes on the last step shown; if it reboot-loops, the text keeps resetting
+// to the first step. Turns the opaque white screen into a visible "where did it die".
+static void bootMsg(const char* step) {
+  Serial.printf("[boot] %s\n", step);
+  Display::clear();
+  Display::center("MindBox", 8, 2);
+  Display::center(step, 40, 1);
+  Display::show();
+}
+
 void setup() {
+#if DISABLE_BROWNOUT_DETECTOR
+  // FIRST thing, before the radio/peripherals draw current: stop the brownout
+  // detector from auto-rebooting on a transient Wi-Fi sag (laptop-USB supply).
+  // This masks the reset; it does NOT fix the dip — use a stronger 5V source.
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+#endif
   Serial.begin(115200);
   delay(200);
 
@@ -47,20 +70,37 @@ void setup() {
   digitalWrite(PIN_TFT_BL, HIGH);     // backlight on
   pinMode(PIN_BOOT_BTN, INPUT_PULLUP);
 
+  Serial.println("[boot] storage");
   Storage::begin();
+  // Display FIRST so the panel is up before anything risky. Every step after this paints
+  // an on-screen breadcrumb, so a stall freezes the screen on the step that hung (and a
+  // reboot loop shows the text restarting from the top) — no serial cable needed.
+  Serial.println("[boot] display");
   Display::init();                    // brings up Panel + sprite
   Theme::setDark(Storage::darkTheme());   // restore the last-chosen theme
-  Haptics::init();
-  LedRing::init();
-  Inputs::init();                     // may run one-time touch calibration
-  Sensors::init();
-  UploadQueue::begin();
-  Cloud::begin();
-  StateMachine::init();
+  bootMsg("display ok");
+  // Surface WHY we last reset (brownout / panic / task-wdt) on-screen — no serial cable
+  // needed. If the box reboot-loops, this is the word to read to know power vs. crash.
+  { char line[40];
+    snprintf(line, sizeof(line), "reset: %s", Diagnostics::resetReason());
+    Display::clear();
+    Display::center("MindBox", 8, 2);
+    Display::center(line, 40, 1);
+    Display::show();
+    delay(1200); }
+  bootMsg("audio");    Audio::begin();
+  bootMsg("haptics");  Haptics::init(); Sound::init(); LedRing::init();
+  bootMsg("inputs");   Inputs::init();   // may run one-time touch calibration
+  bootMsg("sensors");  Sensors::init();
+  bootMsg("queue");    UploadQueue::begin();
+  bootMsg("wifi");     Cloud::begin();
+  bootMsg("menu");     StateMachine::init();
 
-  // Apply persisted display/haptic preferences now that config is loaded.
+  // Apply persisted display/haptic/sound preferences now that config is loaded.
   Panel::setBrightness(StateMachine::config().brightnessPct);
   Haptics::setLevel(StateMachine::config().hapticLevel);
+  Sound::setEnabled(StateMachine::config().soundEnabled);
+  Sound::setVolume(StateMachine::config().soundLevel);
 
   Diagnostics::selfTest();
 

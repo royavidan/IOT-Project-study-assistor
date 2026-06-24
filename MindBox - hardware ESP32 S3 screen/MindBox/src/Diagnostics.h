@@ -15,4 +15,5 @@ namespace Diagnostics {
   void tick();
   bool monitorActive();
   void setMonitor(bool on);
+  const char* resetReason();   // human string for the last reset (brownout / panic / task-wdt / …)
 }
