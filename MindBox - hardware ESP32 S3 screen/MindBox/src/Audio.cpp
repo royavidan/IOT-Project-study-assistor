@@ -91,7 +91,10 @@ static void es8311Init() {
   es8311Write(0x01, 0x3F);  // clkmgr: MCLK from pin + all clocks on (incl. ADC)
   es8311Write(0x02, 0x00);  // clkmgr: pre_div=1 / pre_multi=1 (256fs coeff row)
   es8311Write(0x03, 0x10);  // ADC FDMODE / OSR
-  es8311Write(0x16, 0x03);  // ADC gain scale-up +18dB (bits2:0 valid 0..3; was 0x24 = invalid)
+  es8311Write(0x16, 0x02);  // ADC gain scale-up +12dB (bits2:0: 0/6/12/18dB). Dynamic-range balance:
+                            // +18dB (0x03) clipped loud sound (>~80dB, samples pinned at ±32767); 0dB
+                            // floored quiet rooms (30dB SPL fell below 1 LSB, read ~38). +12dB centers
+                            // the window — usable ~35..88dB SPL, the range that matters for focus.
   es8311Write(0x04, 0x10);  // DAC OSR
   es8311Write(0x05, 0x00);  // ADC/DAC clock dividers
   es8311Write(0x06, 0x03);  // SCLK (slave) settings

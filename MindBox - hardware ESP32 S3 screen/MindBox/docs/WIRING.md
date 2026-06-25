@@ -70,6 +70,24 @@ Monitor (115200) press **`c`** to calibrate the noise level and **`m`** to watch
 the **"noise high" interference alert** and the Noise toggle/threshold in Settings → Environment.
 
 *(If IO2 is awkward, IO3 works the same — just set `PIN_MIC 3`.)*
+> ⚠ **Superseded:** the firmware now uses the **onboard I2S mic** (`HAS_I2S_MIC`), and **IO2 is the
+> encoder's CLK** (below). Don't wire an analog mic to IO2 — it would collide with the encoder.
+
+### Rotary encoder (KY‑040)  ← the one you have
+Rotation only — there's no free header pin for the shaft button, and a screen tap already does select/back.
+
+| KY‑040 pin | Connects to | Header |
+|---|---|---|
+| `+` (VCC) | **3.3V** | I2C header, pin 1 |
+| `GND` | **GND** | I2C header, pin 2 |
+| `CLK` | **IO2** | GPIO header, pin 1 |
+| `DT` | **IO14** | GPIO header, pin 3 |
+| `SW` (button) | *leave unconnected* | — (`PIN_ENC_SW -1`) |
+
+Firmware: already set — `HAS_ENCODER 1`, `PIN_ENC_CLK 2`, `PIN_ENC_DT 14`, `PIN_ENC_SW -1` in
+`src/config.h`. Install the **AiEsp32RotaryEncoder** library, reflash. Turn to move the menu cursor; tap
+the screen to select. If rotation runs backwards, swap the CLK/DT wires. The encoder and touch work
+together. *(To add the shaft button you'd have to free IO3 or IO21 by dropping the light or temp sensor.)*
 
 ### Optional add‑ons (not wired yet — for reference)
 | Component | Wire to | config.h | Notes |

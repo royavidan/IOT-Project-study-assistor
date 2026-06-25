@@ -19,6 +19,10 @@ static uint8_t  s_duty = HAPTIC_DUTY;   // current on-duty, scaled by setLevel()
 namespace Haptics {
 
 static void motorWrite(bool on) {
+#if !HAS_HAPTIC
+  // No motor fitted (HAS_HAPTIC=0): never touch PIN_HAPTIC — it's reassigned (encoder SW).
+  (void)on; s_motorOn = false; return;
+#else
   s_motorOn = on;
 #if HAPTIC_USE_PWM
   uint32_t duty = on ? (uint32_t)s_duty : 0;
@@ -32,6 +36,7 @@ static void motorWrite(bool on) {
   }
 #endif
   digitalWrite(PIN_HAPTIC, on ? HIGH : LOW);
+#endif  // HAS_HAPTIC
 }
 
 static void applyStep() {
@@ -59,6 +64,9 @@ static void startBurst(uint16_t onMs, uint16_t gapMs, uint8_t count) {
 
 // Steady full ON — used for Test motor / enable confirm (max firmware power).
 static void holdPower(uint32_t ms) {
+#if !HAS_HAPTIC
+  (void)ms; return;   // no motor — skip the blocking hold so a stray "test" tap can't freeze the UI
+#endif
   stopAll();
   motorWrite(true);
   uint32_t end = millis() + ms;
@@ -67,6 +75,9 @@ static void holdPower(uint32_t ms) {
 }
 
 void init() {
+#if !HAS_HAPTIC
+  return;   // motor removed (HAS_HAPTIC=0): leave PIN_HAPTIC free (reused as encoder SW)
+#else
   pinMode(PIN_HAPTIC, OUTPUT);
   digitalWrite(PIN_HAPTIC, LOW);
 #if defined(ESP32)
@@ -87,6 +98,7 @@ void init() {
   ledcWrite(s_ledcCh, 0);
 #endif
 #endif
+#endif  // HAS_HAPTIC
 }
 
 void setEnabled(bool e) {

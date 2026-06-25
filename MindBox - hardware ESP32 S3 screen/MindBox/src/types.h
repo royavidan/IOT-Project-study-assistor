@@ -284,7 +284,7 @@ inline DeviceConfig defaultConfig() {
            /*alertPresence*/ true, /*alertNudge*/ true,
            /*tempMinC*/ 18, /*tempMaxC*/ 26, /*noiseMaxDb*/ 60,
            /*lightMinLux*/ 50, /*lightMaxLux*/ 1000,
-           /*soundEnabled*/ true, /*soundLevel*/ 1 };
+           /*soundEnabled*/ false, /*soundLevel*/ 1 };
 }
 
 inline unsigned long presencePauseMs(const DeviceConfig& c) {

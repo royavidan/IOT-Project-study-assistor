@@ -13,10 +13,11 @@ not OLED) and **input** (touch ± encoder, not encoder-only); the rest of the fi
 code, copied in.
 
 > **Status:** builds and runs on hardware; UI styling modeled on einoko/Tomato32. **Currently enabled
-> (`config.h`):** TFT + FT6336 touch, `HAS_LIGHT` (KY-018), `HAS_TEMP` (DHT11), `ENABLE_WIFI` +
-> `ENABLE_CLOUD`. **Temporarily OFF for brownout/panic recovery:** `HAS_I2S_MIC`, `HAS_SPEAKER`,
-> `HAS_PRESENCE` (ToF) — re-enable only on a solid 5V supply (see **Power / brownout** below). LED ring,
-> encoder, and battery stay behind their `HAS_*` flags until wired. Wi-Fi/cloud need `src/SECRETS.h` +
+> (`config.h`):** TFT + FT6336 touch, `HAS_ENCODER` (KY-040, coexists with touch), `HAS_I2S_MIC` +
+> `HAS_SPEAKER` (ES8311), `HAS_LIGHT` (KY-018), `HAS_TEMP` (DHT11), `ENABLE_WIFI` + `ENABLE_CLOUD`.
+> **OFF:** `HAS_PRESENCE` (ToF — removed; its IO2/IO14 now feed the encoder), `HAS_HAPTIC` (motor
+> removed), `HAS_LED_RING`, `HAS_BATTERY`. Re-enable mic/
+> speaker only on a solid 5V supply (see **Power / brownout** below). Wi-Fi/cloud need `src/SECRETS.h` +
 > the dev server to do anything. The `HAS_*` flags in `config.h` are the SSOT for what is live — read
 > them before assuming a peripheral is present.
 
@@ -48,8 +49,11 @@ The menu expects `rotationDir()` (−1/0/+1) + `button()` (1=select, 2=back), pr
   tapped row via `Display::rowHitTest`/`selectedRow`, then selects); top-right corner = back; zones are
   the fallback where there are no rows. `Touch.cpp` keeps a persistent corner calibration (NVS) applied
   on boot; **long-press BOOT** recalibrates. If axes are mirrored/rotated, bump `TOUCH_OFFSET_ROTATION`.
-- **Encoder (`HAS_ENCODER`, off):** KY-040 path, pins in `config.h`; needs the AiEsp32RotaryEncoder
-  library only when enabled.
+- **Encoder (`HAS_ENCODER`, ON):** KY-040 on the ex-ToF pins — **CLK=IO2, DT=IO14** (the GPIO header's
+  only free pins). Rotation moves the menu cursor; **select/back is via touch** — the board breaks out no
+  4th header pin for a shaft button, so **SW=-1**. (The shaft press, `knobClicked()`, is only a
+  dead-end-screen escape anyway, not the primary select.) Coexists with touch (`Inputs::poll` reads the
+  encoder first, then touch). Power from **3V3, not 5V**. Requires the **AiEsp32RotaryEncoder** library.
 - **BOOT (GPIO0):** short tap = dark/light theme; long hold = recalibrate touch.
 
 `Keyboard.*` is a separate touch surface (not part of `rotationDir()/button()`): an on-screen QWERTY
@@ -59,18 +63,22 @@ fed absolute tap coords via Inputs' raw-tap mode, used to type a Wi-Fi SSID/pass
 The **wired/onboard pins are confirmed correct** in `config.h` (datasheet CR2025-MI6890):
 - **LCD (SPI2):** CS=10, DC=46, SCK=12, MOSI=11, MISO=13, BL=45; RST tied to chip EN (`PIN_TFT_RST -1`).
 - **Touch (FT6336, I2C):** SDA=16, SCL=15, INT=17, RST=18.
-- **Audio (ES8311 I2S):** MCLK=4, BCLK=5, DOUT=6, LRCK=7, DIN=8, AMP_EN=1 (active-low); codec control
-  is I2C 0x18 on the **touch** SDA/SCL.
+- **Audio (ES8311 I2S):** MCLK=4, BCLK=5, **DOUT=8** (→speaker DAC), LRCK=7, **DIN=6** (←mic ADC),
+  AMP_EN=1 (active-low); codec control is I2C 0x18 on the **touch** SDA/SCL. (DOUT/DIN were swapped
+  early on — IO8=DOUT, IO6=DIN is the corrected/working mapping.)
+- **Encoder (KY-040, `HAS_ENCODER=1`):** CLK=IO2, DT=IO14 (ex-ToF I2C pins, GPIO header). SW disabled
+  (-1) — no free header pin; select via touch.
 - **Other onboard:** BOOT=0, UART0 TX=43/RX=44, USB=19/20, **RGB LED=42** (single-wire WS2812-style),
   **battery ADC=9**, SD card=38/40/39/41/48/47 (firmware uses internal-flash LittleFS, not the SD slot).
 
 The firmware does **not** currently drive the onboard RGB LED (IO42) or read battery (IO9): `LedRing`
-targets an external WS2812B ring and battery is stubbed. **Free GPIO is scarce** (~IO2/3/14/21) and the
-external-peripheral pins in `config.h` are **inert placeholders (`HAS_*`=0)** — several collide with the
-SD-card/I2S pins (`PIN_HAPTIC 48`=SD_D2, `PIN_LED_RING 39`=SD_D0, `PIN_BATTERY_ADC 6`=I2S_DO; real
-battery is IO9). Re-pick a genuinely free pin before wiring. **`docs/WIRING.md` is the S3-accurate
-wiring reference; `docs/HARDWARE.md` §2's inventory still lists the OLED sibling's pins — don't trust it
-for the S3.**
+targets an external WS2812B ring and battery is stubbed. **The board breaks out only 4 GPIO** (GPIO
+header: IO2, IO3, IO14, IO21 — docs/WIRING.md §1): IO2/IO14 = encoder CLK/DT, IO3 = light, IO21 = temp.
+That leaves **no free header pin** for an encoder shaft button (SW=-1; select via touch). The other
+external-peripheral pins in `config.h` are **inert placeholders (`HAS_*`=0)** that map to pins NOT on any
+header — `PIN_HAPTIC 48` (unused, motor removed), `PIN_LED_RING 39`=SD_D0, `PIN_BATTERY_ADC 6`=I2S_DIN;
+real battery is IO9. **`docs/WIRING.md` is the S3-accurate wiring reference; `docs/HARDWARE.md` §2's
+inventory still lists the OLED sibling's pins — don't trust it for the S3.**
 
 ## Build / flash
 Arduino IDE + ESP32 core. **Board settings (from the LCDWIKI datasheet):** Board = **ESP32S3 Dev
@@ -79,9 +87,9 @@ Module** · **USB CDC On Boot = Enabled** · Flash Size = **16MB** · Partition 
 default QSPI setting makes `psramFound()` fail and the full-screen sprite fall back to flickery direct
 draw. The SPIFFS partition is where LittleFS mounts the upload queue.)
 
-**Required libraries** (Library Manager): **LovyanGFX**, **Adafruit VL53L1X**, **Adafruit NeoPixel**,
-**DHT sensor library** + **Adafruit Unified Sensor**, **AiEsp32RotaryEncoder** (only if
-`HAS_ENCODER=1`). FT6336 touch uses LovyanGFX's built-in `Touch_FT5x06` — no extra library.
+**Required libraries** (Library Manager): **LovyanGFX**, **AiEsp32RotaryEncoder** (now required —
+`HAS_ENCODER=1`), **DHT sensor library** + **Adafruit Unified Sensor**, **Adafruit NeoPixel** (LED ring,
+off), **Adafruit VL53L1X** (ToF, off/removed). FT6336 touch uses LovyanGFX's built-in `Touch_FT5x06` — no extra library.
 `CLOUD_USE_TLS` stays 0 (plain HTTP) to keep the build light.
 
 Font note: hero numerals use bundled `FreeSans` as a stand-in for Tomato32's thin Inter — a real Inter

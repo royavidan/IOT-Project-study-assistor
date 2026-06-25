@@ -108,6 +108,7 @@ void setup() {
   Haptics::setLevel(StateMachine::config().hapticLevel);
   Sound::setEnabled(StateMachine::config().soundEnabled);
   Sound::setVolume(StateMachine::config().soundLevel);
+  Sound::test();   // brief boot beep — confirms the speaker/amp are wired (ignores the Sound on/off setting)
 
   Diagnostics::selfTest();
 

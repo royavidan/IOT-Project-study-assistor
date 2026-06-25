@@ -20,16 +20,17 @@
 #define USE_TOUCH 1         // XPT2046 touchscreen UI + navigation (default)
 #endif
 #ifndef HAS_ENCODER
-#define HAS_ENCODER 0       // KY-040 rotary encoder + shaft button (drop-in later)
+#define HAS_ENCODER 1       // KY-040 rotary encoder + shaft button (CLK=IO2, DT=IO14, SW=IO48). Needs the AiEsp32RotaryEncoder library. Coexists with touch.
 #endif
 
 #define USE_SPDT_TOGGLE 0   // physical Work/Break switch
 #define HAS_MIC         0   // legacy ANALOG mic path (retired — board mic is digital I2S; see HAS_I2S_MIC)
 #define HAS_I2S_MIC     1   // ES8311 I2S MEMS mic, DIN=IO6 — board's ONLY mic. (raises boot current — if the box reboot-loops on a weak USB supply, set back to 0)
-#define HAS_SPEAKER     0   // Phase 2: enable for event chimes once the box is stable + mic confirmed (ES8311 I2S + FM8002E amp, DOUT=IO8, AMP_EN=IO1)
+#define HAS_SPEAKER     1   // ES8311 I2S + FM8002E amp -> speaker connector (DOUT=IO8, AMP_EN=IO1 active-low). Boot beep confirms it; session chimes gated by Settings -> Sound.
 #define HAS_ANY_MIC     (HAS_MIC || HAS_I2S_MIC)   // any mic source present (gates noise UI/telemetry)
 #define HAS_PRESENCE    0   // TEMP off — boot-current recovery (brownout loop). Re-enable on a solid 5V supply. (VL53L1X/TOF400C on IO2 SDA / IO14 SCL — NOT the 4-pin touch header)
 #define HAS_LED_RING    0   // WS2812B ring
+#define HAS_HAPTIC      0   // vibration motor — REMOVED. Disables the haptic driver so it never drives PIN_HAPTIC. Set 1 (+ a real free pin) to restore.
 #define HAS_LIGHT       1   // Keyes KY-018 photoresistor AO -> IO3 (ADC1); see docs/WIRING.md §5
 #define HAS_TEMP        1   // DHT11 temp/humidity DATA -> IO21 (needs 4.7k–10k pull-up to 3V3)
 #define HAS_BATTERY     0   // LiPo divider on an ADC pin
@@ -104,17 +105,19 @@ static const float AUDIO_MIC_RMS_FULL = 1000.0f;
 // HAS_*=0). When you actually wire a part, re-pick a genuinely FREE GPIO and
 // avoid the touch pins. Real battery sense, if used, is BAT_ADC = IO9.
 // ============================================================================
-// NOTE: this board exposes very few free GPIO (~2/14/21). The placeholders below
-// reuse those and are INERT (HAS_*=0); pick real free pins when actually wiring.
-#define PIN_ENC_CLK    2    // KY-040 A   (HAS_ENCODER) — placeholder, re-pin when wired
-#define PIN_ENC_DT    14    // KY-040 B
-#define PIN_ENC_SW    21    // KY-040 shaft button
+// This board breaks out ONLY 4 GPIO (GPIO header: IO2, IO3, IO14, IO21 — see docs/WIRING.md §1).
+// The encoder (HAS_ENCODER=1) takes the two freed by removing the ToF (IO2/IO14) for rotation.
+// SW = -1 (no shaft button): there's no 4th free header pin (IO3=light, IO21=temp), and touch already
+// does select/back. To add the shaft press, free IO3 (HAS_LIGHT=0) or IO21 (HAS_TEMP=0) and set it here.
+#define PIN_ENC_CLK    2    // KY-040 A (CLK) — ex-ToF SDA (GPIO header)
+#define PIN_ENC_DT    14    // KY-040 B (DT)  — ex-ToF SCL (GPIO header)
+#define PIN_ENC_SW    -1    // KY-040 shaft button — DISABLED (no free header pin; select via touch tap)
 #define PIN_I2C_SDA    2    // VL53L1X ToF I2C SDA (HAS_PRESENCE) — IO2 free since analog mic retired
 #define PIN_I2C_SCL   14    // VL53L1X ToF I2C SCL — own Wire bus (NOT the touch header IO15/16)
 #define PIN_BUTTON     3    // side tact button (INPUT_PULLUP, ADC1-capable but used digital)
 #define BTN_ACTIVE_LOW 1
 #define PIN_BOOT_BTN   0    // on-board BOOT button -> dark/light theme toggle
-#define PIN_HAPTIC    48    // motor driver base/gate
+#define PIN_HAPTIC    48    // motor driver base/gate — UNUSED (HAS_HAPTIC=0). NB: IO48 is an SD pin, not on any header.
 #define PIN_MIC        2    // analog mic OUT -> IO2 (ADC1). WAS 4 = onboard I2S/speaker pin (bug)
 #define PIN_DHT11     21    // DHT11 DATA -> IO21 (needs 4.7k–10k pull-up)  (HAS_TEMP)
 #define PIN_LIGHT_ADC  3    // KY-018 AO -> IO3 (ADC1)               (HAS_LIGHT)
@@ -149,9 +152,10 @@ static const unsigned long PRESENCE_PAUSE_MS  = 30000UL;
 static const unsigned long PRESENCE_END_MS    = 300000UL;
 static const float         NOISE_FULL_SCALE_DEFAULT = 2000.0f;
 // Maps mic level to an approximate real-world loudness: dB_SPL = 20*log10(acRms/32768) + offset.
-// 100 is a sensible default for this board's ES8311 mic; refine once via serial 'c db <reference dB>'
-// (put a phone sound-meter app next to the box). Tunable range enforced in Storage.
-static const float         NOISE_DB_OFFSET_DEFAULT = 100.0f;
+// 116 pairs with reg 0x16 = +12dB ADC gain (the dynamic-range compromise: +18dB clipped loud sound,
+// 0dB floored quiet rooms). Keeps mid/high readings aligned while lifting the quiet end off the floor.
+// Per-unit sensitivity varies — refine once via serial 'c db <reference dB>' at a mid level (~50-60dB).
+static const float         NOISE_DB_OFFSET_DEFAULT = 116.0f;
 static const float         LIGHT_LUX_SCALE_DEFAULT  = 1000.0f;
 static const float         LIGHT_VAR_SCALE_DEFAULT  = 2000.0f;
 // KY-018 AO rises in DARKNESS (LDR in the lower divider leg), so the raw ADC goes
