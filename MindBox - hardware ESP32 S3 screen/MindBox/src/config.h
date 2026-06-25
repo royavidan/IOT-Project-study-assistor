@@ -25,8 +25,8 @@
 
 #define USE_SPDT_TOGGLE 0   // physical Work/Break switch
 #define HAS_MIC         0   // legacy ANALOG mic path (retired — board mic is digital I2S; see HAS_I2S_MIC)
-#define HAS_I2S_MIC     0   // TEMP off — boot-current recovery (brownout loop). Re-enable on a solid 5V supply. (ES8311 I2S MEMS mic, DIN=IO8 — board's ONLY mic)
-#define HAS_SPEAKER     0   // Phase 2: enable for event chimes once the box is stable + mic confirmed (ES8311 I2S + FM8002E amp, DOUT=IO6, AMP_EN=IO1)
+#define HAS_I2S_MIC     1   // ES8311 I2S MEMS mic, DIN=IO6 — board's ONLY mic. (raises boot current — if the box reboot-loops on a weak USB supply, set back to 0)
+#define HAS_SPEAKER     0   // Phase 2: enable for event chimes once the box is stable + mic confirmed (ES8311 I2S + FM8002E amp, DOUT=IO8, AMP_EN=IO1)
 #define HAS_ANY_MIC     (HAS_MIC || HAS_I2S_MIC)   // any mic source present (gates noise UI/telemetry)
 #define HAS_PRESENCE    0   // TEMP off — boot-current recovery (brownout loop). Re-enable on a solid 5V supply. (VL53L1X/TOF400C on IO2 SDA / IO14 SCL — NOT the 4-pin touch header)
 #define HAS_LED_RING    0   // WS2812B ring
@@ -80,16 +80,20 @@
 // ============================================================================
 #define PIN_I2S_MCLK   4         // I2S master clock
 #define PIN_I2S_BCLK   5         // I2S bit clock (SCK)
-#define PIN_I2S_DOUT   6         // I2S data OUT -> speaker (DAC)
+#define PIN_I2S_DOUT   8         // I2S data OUT -> speaker (DAC).  ngttai BSP GPIO8 (datasheet's "I2S_DI")
 #define PIN_I2S_LRCK   7         // I2S word select (LRC)
-#define PIN_I2S_DIN    8         // I2S data IN  <- mic   (ADC)
+#define PIN_I2S_DIN    6         // I2S data IN  <- MIC (ADC).  ngttai BSP GPIO6 (datasheet's "I2S_DO" =
+                                 //   codec ADC data-OUT = mic). We had this swapped with DOUT, so we were
+                                 //   reading the undriven speaker line on IO8 -> constant 0xFFFF/-1.
 #define PIN_AMP_EN     1         // FM8002E amp enable — ACTIVE-LOW (low=on, high=mute)
 #define ES8311_ADDR    0x18      // codec I2C address (7-bit)
 #define PIN_CODEC_SDA  16        // == PIN_TOUCH_SDA  (shared touch bus, boot-only soft-I2C)
 #define PIN_CODEC_SCL  15        // == PIN_TOUCH_SCL
 #define AUDIO_SAMPLE_RATE 16000  // Hz; 16-bit mono (mic RMS sensing + chime tones)
-// 16-bit mic RMS that normalizes to noise=1.0 (tune on hardware via serial 'm').
-static const float AUDIO_MIC_RMS_FULL = 6000.0f;
+// AC-component RMS (DC bias removed) that maps to noise=1.0. LOWER = more sensitive.
+// 6000 was tuned for the old raw-RMS (DC-included) math and maps real speech to ~0% now.
+// Start sensitive so a working mic is visibly non-zero, then tune via serial 'a'.
+static const float AUDIO_MIC_RMS_FULL = 1000.0f;
 
 // ============================================================================
 // Peripheral pin map (S3 placeholders — gated by HAS_*; see header note)

@@ -2,10 +2,10 @@
 // ============================================================================
 // Audio — onboard ES8311 codec (+ FM8002E amp) on the I2S bus.
 //
-//   • Microphone (ADC, DIN=IO8): a dedicated core-0 task reads I2S frames and
+//   • Microphone (ADC, DIN=IO6): a dedicated core-0 task reads I2S frames and
 //     publishes a rolling ~1 Hz RMS as micLevel() 0..1 — this feeds the existing
 //     Sensors::noise() pipeline (interference alerts, session stats, telemetry).
-//   • Speaker  (DAC, DOUT=IO6 -> FM8002E amp, AMP_EN=IO1 active-low): playChime()
+//   • Speaker  (DAC, DOUT=IO8 -> FM8002E amp, AMP_EN=IO1 active-low): playChime()
 //     enqueues a short synthesized tone sequence; the amp is enabled only while a
 //     chime plays. Volume is software sample-scaling (no codec re-writes).
 //
@@ -27,4 +27,9 @@ namespace Audio {
   void  playChime(uint8_t kind); // enqueue a chime (thread-safe; no-op if no speaker)
   void  setVolume(uint8_t level);// 0=low 1=med 2=high chime volume (software gain)
   void  probe();                 // print mic diagnostics to Serial (codec ACK + raw I2S RMS)
+
+  // On-screen diagnostics (Device -> Diagnostics) — read codec/mic state without a serial cable.
+  bool  codecAcked();            // did the ES8311 ACK over soft-I2C at boot?
+  int   rawPeakToPeak();         // last ~1s window raw (max-min); jumps when sound hits the mic
+  float micRms();                // last ~1s window AC RMS in raw counts (DC removed)
 }

@@ -72,7 +72,14 @@ void setup() {
 
   Serial.println("[boot] storage");
   Storage::begin();
-  // Display FIRST so the panel is up before anything risky. Every step after this paints
+  // Audio BEFORE Display: Audio::begin() configures the ES8311 codec over software-I2C on
+  // the touch pins (IO16/IO15), then releases them. That MUST happen before LovyanGFX claims
+  // those pins for the FT6336 touch in Display::init(). Doing it after (as the on-screen
+  // breadcrumb order tempts) leaves the touch bus wedged and touch comes up dead. This was
+  // latent while the mic was a no-op stub; enabling HAS_I2S_MIC made Audio::begin() real.
+  Serial.println("[boot] audio");
+  Audio::begin();
+  // Display next so the panel is up before anything else risky. Every step after this paints
   // an on-screen breadcrumb, so a stall freezes the screen on the step that hung (and a
   // reboot loop shows the text restarting from the top) — no serial cable needed.
   Serial.println("[boot] display");
@@ -88,7 +95,7 @@ void setup() {
     Display::center(line, 40, 1);
     Display::show();
     delay(1200); }
-  bootMsg("audio");    Audio::begin();
+  bootMsg("audio ok");                 // Audio::begin() already ran pre-Display (for the touch bus)
   bootMsg("haptics");  Haptics::init(); Sound::init(); LedRing::init();
   bootMsg("inputs");   Inputs::init();   // may run one-time touch calibration
   bootMsg("sensors");  Sensors::init();

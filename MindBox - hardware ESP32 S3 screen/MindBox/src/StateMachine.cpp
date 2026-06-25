@@ -9,6 +9,7 @@
 #include "Panel.h"
 #include "Haptics.h"
 #include "Sound.h"
+#include "Audio.h"
 #include "LedRing.h"
 #include "Storage.h"
 #include "Cloud.h"
@@ -616,6 +617,14 @@ static void renderDiag() {
   snprintf(l, sizeof(l), "Mic:%d%%  Btn:%s", (int)(Sensors::noise() * 100),
            Inputs::sideFault() ? "ERR" : (Inputs::sidePressed() ? "DN" : "up"));
   Display::text(0, 28, 1, l);
+#if HAS_I2S_MIC
+  // Raw ES8311/I2S state — the ground truth. ack=codec answered, rdy=I2S data flowing,
+  // pp=last-second raw peak-to-peak (it should JUMP when you talk/clap near the mic).
+  snprintf(l, sizeof(l), "8311:%s rdy:%d pp:%d",
+           Audio::codecAcked() ? "ACK" : "no",
+           Audio::micReady() ? 1 : 0, Audio::rawPeakToPeak());
+  Display::text(0, 46, 1, l);
+#endif
 #if HAS_LIGHT
   snprintf(l, sizeof(l), "Lgt:%d", (int)lux);                          Display::text(0, 37, 1, l);
 #endif

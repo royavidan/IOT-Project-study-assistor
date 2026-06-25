@@ -161,7 +161,7 @@ void tick() {
   // microphone: the core-0 I2S audio task publishes a rolling RMS (0..1); mirror it.
   s_noise = Audio::micLevel();
   s_noiseValid = Audio::micReady();
-#else
+#elif HAS_MIC
   // analog microphone: rolling ~1Hz peak-to-peak, normalized
   int v = analogRead(PIN_MIC);
   if (v < s_nMin) s_nMin = v;
@@ -176,6 +176,10 @@ void tick() {
     s_noise = ppn < 0 ? 0 : (ppn > 1 ? 1 : ppn);
     s_nMin = 4095; s_nMax = 0; s_nWin = millis();
   }
+#else
+  // No microphone present (both mic flags off). Don't sample a floating ADC pin —
+  // IO2 is unconnected on this board and would report phantom ~70-80% noise.
+  s_noise = 0; s_noiseValid = false;
 #endif
 
 #if HAS_LIGHT
@@ -232,7 +236,7 @@ float noiseProbe(uint16_t windowMs) {
 #if HAS_I2S_MIC
   (void)windowMs;
   return Audio::micLevel();              // I2S task already maintains the rolling level
-#else
+#elif HAS_MIC
   uint32_t start = millis();
   int mn = 4095, mx = 0;
   while (millis() - start < windowMs) {
@@ -242,6 +246,9 @@ float noiseProbe(uint16_t windowMs) {
   }
   float pp = (mx - mn) / s_noiseScale;
   return pp < 0 ? 0 : (pp > 1 ? 1 : pp);
+#else
+  (void)windowMs;
+  return 0;                             // no microphone present
 #endif
 }
 

@@ -24,6 +24,7 @@ static QueueHandle_t     s_chimeQ   = nullptr;
 static volatile bool     s_codecAcked = false;
 static volatile int      s_rawMin = 0, s_rawMax = 0;
 static volatile float    s_rawRms = 0.0f;
+static volatile float    s_rawDc  = 0.0f;   // mean (DC bias) of the last mic window
 
 static const int   FRAMES   = 256;         // samples per I2S block (~16 ms @16 kHz)
 static const float TWO_PI_F = 6.28318531f;
@@ -75,17 +76,22 @@ static bool es8311Write(uint8_t reg, uint8_t val) {
   return ok;
 }
 
-// Conventional ES8311 mono init for MCLK=256·fs, 16-bit I2S, mic ADC + DAC out.
-// ⚠ Clock/gain values are the standard set and may need tuning on hardware
-// (verify live mic via serial 'm'; adjust ADC gain reg 0x16/volume 0x17 if quiet).
+// ES8311 mono init for MCLK=256·fs, 16-bit I2S, mic ADC (+ DAC out). Register values
+// follow Espressif's esp-bsp es8311_init for analog-mic capture. Verify on hardware via
+// Device -> Diagnostics ("8311:ACK rdy:1 pp:" should jump on sound) or serial 'a'; if the
+// mic is quiet/loud, adjust ADC gain reg 0x16 (0..3) / digital volume reg 0x17.
 static void es8311Init() {
-  s_codecAcked = es8311Write(0x00, 0x1F);  // reset core + CSM; remember if the codec ACKed
+  s_codecAcked = es8311Write(0x00, 0x1F);  // reset all + CSM off; remember if the codec ACKed
   delay(20);
+  es8311Write(0x00, 0x00);  // clear reset / enable state machine (esp-bsp reset sequence)
   es8311Write(0x45, 0x00);  // general
-  es8311Write(0x01, 0x30);  // clkmgr: MCLK from MCLK pin, clocks on
-  es8311Write(0x02, 0x10);  // clkmgr: pre-divider / multiplier (256fs)
+  // ⚠ THE mic-silence fix: 0x30 left the ADC clocks OFF (CLKADC_ON bit3 + ANACLKADC_ON bit1
+  // clear), so the codec ACKed and I2S streamed frames but the ADC never converted -> flat
+  // samples (pp~0). 0x3F = MCLK from pin + ALL clocks on (matches esp-bsp es8311_init).
+  es8311Write(0x01, 0x3F);  // clkmgr: MCLK from pin + all clocks on (incl. ADC)
+  es8311Write(0x02, 0x00);  // clkmgr: pre_div=1 / pre_multi=1 (256fs coeff row)
   es8311Write(0x03, 0x10);  // ADC FDMODE / OSR
-  es8311Write(0x16, 0x24);  // ADC OSR
+  es8311Write(0x16, 0x03);  // ADC gain scale-up +18dB (bits2:0 valid 0..3; was 0x24 = invalid)
   es8311Write(0x04, 0x10);  // DAC OSR
   es8311Write(0x05, 0x00);  // ADC/DAC clock dividers
   es8311Write(0x06, 0x03);  // SCLK (slave) settings
@@ -109,7 +115,7 @@ static void es8311Init() {
   es8311Write(0x14, 0x1A);  // select mic input + PGA gain
   es8311Write(0x37, 0x08);  // ADC ramp
   es8311Write(0x32, 0xBF);  // DAC volume (~0 dB)
-  es8311Write(0x17, 0xBF);  // ADC volume (~0 dB)
+  es8311Write(0x17, 0xC8);  // ADC digital volume (esp-bsp level, +headroom; was 0xBF ~0 dB)
   sdaHi(); sclHi();         // release the bus for LovyanGFX touch
 }
 
@@ -186,7 +192,7 @@ static bool fillTx(int16_t* buf, int frames) {
 static void audioTask(void*) {
   static int16_t rxbuf[FRAMES];
   static int16_t txbuf[FRAMES];
-  double acc = 0; uint32_t accN = 0;
+  double acc = 0, accSum = 0; uint32_t accN = 0;   // Σv² and Σv (Σv removes the DC bias)
   int wmin = 32767, wmax = -32768;
 
   for (;;) {
@@ -198,16 +204,25 @@ static void audioTask(void*) {
         int v = rxbuf[i];
         if (v < wmin) wmin = v;
         if (v > wmax) wmax = v;
-        acc += (double)v * v;
+        acc    += (double)v * v;
+        accSum += v;
       }
       accN += n;
       if (accN >= (uint32_t)AUDIO_SAMPLE_RATE) {           // ~1 s window
-        float rms = sqrtf((float)(acc / accN));
+        // Loudness is the AC component only. An I2S mic carries a large constant DC
+        // bias, so sqrt(mean(v²)) ≈ |DC| and would sit high in silence and barely
+        // move with speech. Subtract the mean (variance = mean(v²) − mean(v)²) so
+        // silence → ~0 and the level actually tracks sound.
+        double mean   = accSum / accN;
+        double var    = acc / accN - mean * mean;
+        if (var < 0) var = 0;                              // guard FP rounding near silence
+        float rms = sqrtf((float)var);
         float lvl = rms / AUDIO_MIC_RMS_FULL;
         s_micLevel = lvl < 0 ? 0 : (lvl > 1 ? 1 : lvl);
         s_micReady = true;
-        s_rawRms = rms; s_rawMin = wmin; s_rawMax = wmax;  // for Audio::probe()
-        acc = 0; accN = 0; wmin = 32767; wmax = -32768;
+        s_rawRms = rms; s_rawDc = (float)mean;             // for Audio::probe()
+        s_rawMin = wmin; s_rawMax = wmax;
+        acc = 0; accSum = 0; accN = 0; wmin = 32767; wmax = -32768;
       }
     }
 #endif
@@ -231,16 +246,23 @@ static void audioTask(void*) {
 namespace Audio {
 
 void begin() {
-#if HAS_SPEAKER
+#if (HAS_SPEAKER || HAS_I2S_MIC)
+  // Hold the FM8002E amp muted (active-low ⇒ HIGH = off). With the mic on we also run the I2S
+  // TX channel (for MCLK, see below); muting the amp keeps that idle silence off the speaker.
   pinMode(PIN_AMP_EN, OUTPUT);
-  digitalWrite(PIN_AMP_EN, HIGH);                          // amp muted until a chime plays
+  digitalWrite(PIN_AMP_EN, HIGH);
 #endif
 
   // 1) Bring up I2S (master) so MCLK/BCLK/WS run while we configure the codec.
   //    Every step is checked: an I2S failure disables audio but NEVER bricks boot.
   i2s_chan_config_t chan_cfg = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_0, I2S_ROLE_MASTER);
+  chan_cfg.auto_clear = true;                              // unfed TX clocks out silence
+  // Allocate FULL-DUPLEX (TX + RX) whenever the mic is on. An RX-only std master channel can
+  // fail to generate MCLK on IO4, leaving the ES8311 ADC unclocked: it tri-states ASDOUT and
+  // DIN floats high, so the mic reads a constant 0xFFFF/-1. A TX handle keeps MCLK/BCLK/WS
+  // running so the codec drives real ADC data on DIN.
   esp_err_t err = i2s_new_channel(&chan_cfg,
-#if HAS_SPEAKER
+#if (HAS_SPEAKER || HAS_I2S_MIC)
                   &s_tx,
 #else
                   NULL,
@@ -264,7 +286,7 @@ void begin() {
       .mclk = (gpio_num_t)PIN_I2S_MCLK,
       .bclk = (gpio_num_t)PIN_I2S_BCLK,
       .ws   = (gpio_num_t)PIN_I2S_LRCK,
-      .dout = AUDIO_DOUT_GPIO,
+      .dout = (gpio_num_t)PIN_I2S_DOUT,   // real DOUT so the TX (MCLK-keeper) channel is well-formed
       .din  = AUDIO_DIN_GPIO,
       .invert_flags = { .mclk_inv = false, .bclk_inv = false, .ws_inv = false },
     },
@@ -293,6 +315,10 @@ void begin() {
 float micLevel() { return s_micLevel; }
 bool  micReady() { return s_micReady; }
 
+bool  codecAcked()    { return s_codecAcked; }
+int   rawPeakToPeak() { int d = s_rawMax - s_rawMin; return d < 0 ? 0 : d; }
+float micRms()        { return s_rawRms; }
+
 void playChime(uint8_t kind) {
 #if HAS_SPEAKER
   if (s_chimeQ) xQueueSend(s_chimeQ, &kind, 0);
@@ -304,9 +330,9 @@ void playChime(uint8_t kind) {
 void setVolume(uint8_t level) { s_volume = level > 2 ? 2 : level; }
 
 void probe() {
-  Serial.printf("[audio] ES8311 @0x%02X boot-ack=%s | mic raw min/max=%d/%d rms=%.0f level=%.2f ready=%d vol=%u\n",
+  Serial.printf("[audio] ES8311 @0x%02X boot-ack=%s | mic raw min/max=%d/%d dc=%.0f ac-rms=%.0f level=%.2f ready=%d vol=%u\n",
                 ES8311_ADDR, s_codecAcked ? "YES" : "NO",
-                s_rawMin, s_rawMax, (double)s_rawRms, (double)s_micLevel,
+                s_rawMin, s_rawMax, (double)s_rawDc, (double)s_rawRms, (double)s_micLevel,
                 s_micReady ? 1 : 0, (unsigned)s_volume);
 }
 
@@ -321,6 +347,9 @@ namespace Audio {
   void  playChime(uint8_t) {}
   void  setVolume(uint8_t) {}
   void  probe() { Serial.println("[audio] disabled"); }
+  bool  codecAcked() { return false; }
+  int   rawPeakToPeak() { return 0; }
+  float micRms() { return 0.0f; }
 }
 
 #endif
