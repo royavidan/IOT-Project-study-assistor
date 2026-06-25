@@ -13,6 +13,7 @@ namespace Sensors {
   void tick();                 // sample mic (~1Hz) + refresh presence distance
 
   float noise();               // normalized 0..1 (rolling, updated ~1Hz)
+  float noiseDb();             // approx loudness in dB SPL (calibrated; see Storage::noiseDbOffset)
   float noiseProbe(uint16_t windowMs = 50);  // immediate blocking measure (diagnostics)
   int   presenceMm();          // last ToF distance, -1 if unknown
   bool  present();             // within PRESENCE_NEAR_MM (true if no ToF)

@@ -148,6 +148,10 @@ static const int           PRESENCE_NEAR_MM   = 700;
 static const unsigned long PRESENCE_PAUSE_MS  = 30000UL;
 static const unsigned long PRESENCE_END_MS    = 300000UL;
 static const float         NOISE_FULL_SCALE_DEFAULT = 2000.0f;
+// Maps mic level to an approximate real-world loudness: dB_SPL = 20*log10(acRms/32768) + offset.
+// 100 is a sensible default for this board's ES8311 mic; refine once via serial 'c db <reference dB>'
+// (put a phone sound-meter app next to the box). Tunable range enforced in Storage.
+static const float         NOISE_DB_OFFSET_DEFAULT = 100.0f;
 static const float         LIGHT_LUX_SCALE_DEFAULT  = 1000.0f;
 static const float         LIGHT_VAR_SCALE_DEFAULT  = 2000.0f;
 // KY-018 AO rises in DARKNESS (LDR in the lower divider leg), so the raw ADC goes

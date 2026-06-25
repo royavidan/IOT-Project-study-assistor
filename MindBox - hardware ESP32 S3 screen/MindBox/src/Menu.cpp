@@ -451,9 +451,9 @@ static void cycleTempMax() {  // 24..30 step 2
   int v = s_cfg->tempMaxC + 2; if (v > 30) v = 24;
   s_cfg->tempMaxC = (int8_t)v; saveCfgClick();
 }
-static void cycleNoiseMax() { // 40..80 step 10
-  int v = s_cfg->noiseMaxPct + 10; if (v > 80) v = 40;
-  s_cfg->noiseMaxPct = (uint8_t)v; saveCfgClick();
+static void cycleNoiseMax() { // 40..80 dB step 10
+  int v = s_cfg->noiseMaxDb + 10; if (v > 80) v = 40;
+  s_cfg->noiseMaxDb = (uint8_t)v; saveCfgClick();
 }
 static void cycleLightMin() { // 0..200 step 50
   int v = s_cfg->lightMinLux + 50; if (v > 200) v = 0;
@@ -922,7 +922,7 @@ const MenuView& view() {
           case 1: snprintf(b, sizeof(b), "%dC", s_cfg->tempMinC); fillRow(row, "Temp min", b, sel); break;
           case 2: snprintf(b, sizeof(b), "%dC", s_cfg->tempMaxC); fillRow(row, "Temp max", b, sel); break;
           case 3: fillRow(row, "Noise", s_cfg->alertNoise ? "ON" : "OFF", sel); break;
-          case 4: snprintf(b, sizeof(b), "%d%%", s_cfg->noiseMaxPct); fillRow(row, "Noise max", b, sel); break;
+          case 4: snprintf(b, sizeof(b), "%ddB", s_cfg->noiseMaxDb); fillRow(row, "Noise max", b, sel); break;
           case 5: fillRow(row, "Light", s_cfg->alertLight ? "ON" : "OFF", sel); break;
           case 6: snprintf(b, sizeof(b), "%dlx", s_cfg->lightMinLux); fillRow(row, "Light min", b, sel); break;
           case 7: snprintf(b, sizeof(b), "%dlx", s_cfg->lightMaxLux); fillRow(row, "Light max", b, sel); break;

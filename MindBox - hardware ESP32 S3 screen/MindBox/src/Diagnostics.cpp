@@ -92,6 +92,8 @@ static void printCalibration() {
   Serial.println("[cal] Sensor calibration (NVS):");
   Serial.printf("  noise scale : %.0f  (ADC p-p -> 1.0; default %.0f)\n",
                 Storage::noiseFullScale(), NOISE_FULL_SCALE_DEFAULT);
+  Serial.printf("  noise dBoff : %.1f  (-> dB SPL; default %.1f; live %.0f dB)\n",
+                Storage::noiseDbOffset(), NOISE_DB_OFFSET_DEFAULT, Sensors::noiseDb());
   Serial.printf("  light lux   : %.0f  (ADC -> lux; default %.0f)\n",
                 Storage::lightLuxScale(), LIGHT_LUX_SCALE_DEFAULT);
   Serial.printf("  light var   : %.0f  (ADC p-p -> FLE; default %.0f)\n",
@@ -105,7 +107,7 @@ static void printCalibration() {
   Sensors::readTemp(tempC);
   if (isnan(tempC)) Serial.println("--");
   else Serial.printf("%.1f C\n", tempC);
-  Serial.println("[cal] Set: c noise 1800 | c light 1200 | c lightvar 2000 | c temp -1.5 | c reset");
+  Serial.println("[cal] Set: c noise 1800 | c db 55 | c light 1200 | c lightvar 2000 | c temp -1.5 | c reset");
   Serial.println();
 }
 
@@ -119,7 +121,7 @@ static void applyCalibrationArgs(const String& args) {
   }
   int sp = args.indexOf(' ');
   if (sp < 0) {
-    Serial.println("[cal] usage: c noise|light|lightvar|temp <value>  |  c reset");
+    Serial.println("[cal] usage: c noise|db|light|lightvar|temp <value>  |  c reset");
     return;
   }
   String key = args.substring(0, sp);
@@ -133,6 +135,13 @@ static void applyCalibrationArgs(const String& args) {
     Sensors::reloadCalibration();
     Serial.printf("[cal] noise scale -> %.0f (live %.2f)\n",
                   Storage::noiseFullScale(), Sensors::noiseProbe(50));
+  } else if (key == "db") {
+    // Calibrate dB SPL: shift the offset so the live reading matches the reference level the user
+    // measured with a phone sound-meter app next to the box. val = that reference level in dB.
+    float err = val - Sensors::noiseDb();
+    Storage::setNoiseDbOffset(Storage::noiseDbOffset() + err);
+    Serial.printf("[cal] noise dB offset -> %.1f (now reads ~%.0f dB)\n",
+                  Storage::noiseDbOffset(), Sensors::noiseDb());
   } else if (key == "light") {
     Storage::setLightLuxScale(val);
     Sensors::reloadCalibration();
@@ -154,7 +163,7 @@ static void applyCalibrationArgs(const String& args) {
     Serial.printf("[cal] temp offset -> %.1f C (live %.1f C)\n",
                   Storage::tempOffsetC(), isnan(tempC) ? 0.0f : tempC);
   } else {
-    Serial.println("[cal] unknown key — use noise, light, lightvar, temp, or reset");
+    Serial.println("[cal] unknown key — use noise, db, light, lightvar, temp, or reset");
   }
 }
 

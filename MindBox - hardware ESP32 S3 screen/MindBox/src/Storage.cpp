@@ -215,7 +215,7 @@ DeviceConfig loadConfig(const DeviceConfig& d) {
   c.alertNudge       = prefs.getBool("alNudge", d.alertNudge);
   c.tempMinC         = (int8_t)prefs.getChar("tMin", d.tempMinC);
   c.tempMaxC         = (int8_t)prefs.getChar("tMax", d.tempMaxC);
-  c.noiseMaxPct      = prefs.getUChar("nMax",  d.noiseMaxPct);
+  c.noiseMaxDb       = prefs.getUChar("nMax",  d.noiseMaxDb);
   c.lightMinLux      = prefs.getUShort("lMin", d.lightMinLux);
   c.lightMaxLux      = prefs.getUShort("lMax", d.lightMaxLux);
   c.soundEnabled     = prefs.getBool("sndEn",  d.soundEnabled);
@@ -252,7 +252,7 @@ void saveConfig(const DeviceConfig& c) {
   prefs.putBool("alNudge", c.alertNudge);
   prefs.putChar("tMin", (int8_t)c.tempMinC);
   prefs.putChar("tMax", (int8_t)c.tempMaxC);
-  prefs.putUChar("nMax",  c.noiseMaxPct);
+  prefs.putUChar("nMax",  c.noiseMaxDb);
   prefs.putUShort("lMin", c.lightMinLux);
   prefs.putUShort("lMax", c.lightMaxLux);
   prefs.putBool("sndEn",  c.soundEnabled);
@@ -574,6 +574,7 @@ void clearCheckpoint() { NvsLock lock; prefs.putBool("ckActive", false); }
 bool hasCheckpoint()   { NvsLock lock; return prefs.getBool("ckActive", false); }
 
 static bool validNoiseScale(float v)   { return v >= 100.0f && v <= 20000.0f; }
+static bool validNoiseDbOffset(float v) { return v >= 40.0f && v <= 160.0f; }
 static bool validLightLuxScale(float v) { return v >= 50.0f && v <= 10000.0f; }
 static bool validLightVarScale(float v) { return v >= 50.0f && v <= 20000.0f; }
 static bool validTempOffset(float v)    { return v >= -15.0f && v <= 15.0f; }
@@ -587,6 +588,17 @@ void setNoiseFullScale(float v) {
   if (!validNoiseScale(v)) return;
   NvsLock lock;
   prefs.putFloat("noiseScale", v);
+}
+
+float noiseDbOffset() {
+  NvsLock lock;
+  return prefs.getFloat("noiseDbOff", NOISE_DB_OFFSET_DEFAULT);
+}
+
+void setNoiseDbOffset(float v) {
+  if (!validNoiseDbOffset(v)) return;
+  NvsLock lock;
+  prefs.putFloat("noiseDbOff", v);
 }
 
 float lightLuxScale() {
@@ -625,6 +637,7 @@ void setTempOffsetC(float v) {
 void resetSensorCalibration() {
   NvsLock lock;
   prefs.putFloat("noiseScale", NOISE_FULL_SCALE_DEFAULT);
+  prefs.putFloat("noiseDbOff", NOISE_DB_OFFSET_DEFAULT);
   prefs.putFloat("lightLux",   LIGHT_LUX_SCALE_DEFAULT);
   prefs.putFloat("lightVar",   LIGHT_VAR_SCALE_DEFAULT);
   prefs.putFloat("tempOff",    TEMP_OFFSET_DEFAULT);

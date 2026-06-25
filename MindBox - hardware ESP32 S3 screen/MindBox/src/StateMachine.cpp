@@ -300,7 +300,7 @@ static uint8_t currentInterference() {
   if (s_cfg.alertPresence && !Sensors::present()) return INTERF_AWAY;
 #endif
 #if HAS_ANY_MIC
-  if (s_cfg.alertNoise && (int)(Sensors::noise() * 100.0f) > s_cfg.noiseMaxPct)
+  if (s_cfg.alertNoise && (int)lroundf(Sensors::noiseDb()) > s_cfg.noiseMaxDb)
     return INTERF_NOISE_HIGH;
 #endif
 #if HAS_TEMP
@@ -614,7 +614,7 @@ static void renderDiag() {
   snprintf(l, sizeof(l), "OLED:%s", Display::driverName());            Display::text(0, 10, 1, l);
   snprintf(l, sizeof(l), "ToF:%s %dmm", h.tofPresent ? "ok" : "--", Sensors::presenceMm());
   Display::text(0, 19, 1, l);
-  snprintf(l, sizeof(l), "Mic:%d%%  Btn:%s", (int)(Sensors::noise() * 100),
+  snprintf(l, sizeof(l), "Noise:%ddB Btn:%s", (int)lroundf(Sensors::noiseDb()),
            Inputs::sideFault() ? "ERR" : (Inputs::sidePressed() ? "DN" : "up"));
   Display::text(0, 28, 1, l);
 #if HAS_I2S_MIC

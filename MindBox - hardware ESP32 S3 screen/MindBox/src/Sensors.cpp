@@ -3,6 +3,7 @@
 #include "config.h"
 #include "Audio.h"
 #include <Wire.h>
+#include <math.h>
 
 #if HAS_TEMP
 #include <DHT.h>
@@ -229,6 +230,20 @@ void tick() {
 }
 
 float noise()      { return s_noise; }
+
+// Approximate loudness in dB SPL. dBFS = 20*log10(acRms / full-scale) is exact from the digital
+// signal; adding the NVS calibration offset maps it to real-world dB (rough — these MEMS mics
+// aren't lab instruments, and very loud sound clips). Calibrate once via serial 'c db <ref>'.
+float noiseDb() {
+#if HAS_I2S_MIC
+  float rms = Audio::micRms();              // raw AC-RMS counts (DC removed), unclamped
+#else
+  float rms = s_noise * s_noiseScale;       // best-effort from the normalized level (analog path)
+#endif
+  if (rms < 1.0f) rms = 1.0f;               // floor: avoid log(0) on dead silence
+  float dbfs = 20.0f * log10f(rms / 32768.0f);   // 16-bit full scale; <= 0
+  return dbfs + Storage::noiseDbOffset();        // -> approx dB SPL
+}
 
 // Immediate peak-to-peak probe (doesn't disturb the rolling window). Used by the
 // self-test/diagnostics so a working mic shows a real value right away.

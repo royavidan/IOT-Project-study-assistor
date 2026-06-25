@@ -67,7 +67,7 @@ struct DeviceConfig {
   bool     alertNudge;         // haptic + flash when an alert persists
   int8_t   tempMinC;           // comfort band (°C)
   int8_t   tempMaxC;
-  uint8_t  noiseMaxPct;        // noise "too high" above this (0..100)
+  uint8_t  noiseMaxDb;         // noise "too high" above this many dB SPL (local-only; not server-synced)
   uint16_t lightMinLux;        // light comfort band (lux)
   uint16_t lightMaxLux;
   bool     soundEnabled;       // speaker event chimes (ES8311 + FM8002E amp)
@@ -282,7 +282,7 @@ inline DeviceConfig defaultConfig() {
            /*brightnessPct*/ 100, /*hapticLevel*/ 2,
            /*alertTemp*/ true, /*alertNoise*/ true, /*alertLight*/ true,
            /*alertPresence*/ true, /*alertNudge*/ true,
-           /*tempMinC*/ 18, /*tempMaxC*/ 26, /*noiseMaxPct*/ 60,
+           /*tempMinC*/ 18, /*tempMaxC*/ 26, /*noiseMaxDb*/ 60,
            /*lightMinLux*/ 50, /*lightMaxLux*/ 1000,
            /*soundEnabled*/ true, /*soundLevel*/ 1 };
 }

@@ -76,6 +76,8 @@ namespace Storage {
   // Per-desk sensor calibration (NVS; adjust over serial — Diagnostics 'c' command).
   float noiseFullScale();
   void  setNoiseFullScale(float v);
+  float noiseDbOffset();               // dBFS -> dB SPL calibration offset
+  void  setNoiseDbOffset(float v);
   float lightLuxScale();
   void  setLightLuxScale(float v);
   float lightVarScale();
