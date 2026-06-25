@@ -30,5 +30,6 @@ namespace Panel {
   bool usingSprite();
   lgfx::LovyanGFX* canvas();     // draw target: &spr if available, else &lcd
   void push();                   // present the sprite (no-op if drawing direct)
+  bool spriteInPsram();          // true = sprite fell back to PSRAM (slower per-pixel draw)
   void setBrightness(uint8_t pct); // backlight 0..100% (PWM via Light_PWM)
 }

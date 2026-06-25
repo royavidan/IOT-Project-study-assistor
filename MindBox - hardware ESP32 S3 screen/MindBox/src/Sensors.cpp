@@ -4,6 +4,11 @@
 #include "Audio.h"
 #include <Wire.h>
 #include <math.h>
+#if HAS_PRESENCE
+#include "driver/gpio.h"        // gpio_set_direction / pull
+#include "esp_rom_gpio.h"       // esp_rom_gpio_connect_*_signal
+#include "soc/gpio_sig_map.h"   // I2CEXT0_*_IDX (port-0 I2C signal indices)
+#endif
 
 #if HAS_TEMP
 #include <DHT.h>
@@ -48,12 +53,13 @@ static bool refreshDht(bool force) {
   if (!force && now - s_lastDhtRead < DHT_READ_INTERVAL_MS) return s_tempOk;
   s_lastDhtRead = now;
   float t = s_dht.readTemperature();
-  if (isnan(t)) {                       // one forced retry rides out a transient bad read
-    delay(60);
+  if (isnan(t) && force) {              // retry ONLY on the on-demand readTemp() path; the 2s
+    delay(60);                          // background tick must not block the loop (encoder hitch)
     t = s_dht.readTemperature(false, true);
   }
   if (isnan(t)) {
-    s_tempOk = false;
+    if (!force) return s_tempOk;        // background tick: keep last good value, don't flap to invalid
+    s_tempOk = false;                   // on-demand read genuinely failed
     return false;
   }
   t += Storage::tempOffsetC();
@@ -93,6 +99,24 @@ static void refreshLightWindow() {
 }
 #endif
 
+#if HAS_PRESENCE
+// The ToF shares the touch I2C pads (IO16/IO15) with the FT6336 (LovyanGFX, I2C port 1), which
+// re-routes those pads to itself on EVERY getTouch(). Before the ToF talks on Wire (port 0), re-point
+// the pads to port 0 — open-drain + pullup, mirroring LovyanGFX's own set_pin(). The loop is
+// single-threaded (all ToF I2C in Sensors::tick, all touch I2C in Inputs::poll), so touch reclaims
+// the pads on its next getTouch(). Without this, touch keeps the bus and the ToF never ACKs.
+static void tofClaimBus() {
+  gpio_set_direction((gpio_num_t)PIN_I2C_SDA, GPIO_MODE_INPUT_OUTPUT_OD);
+  gpio_set_direction((gpio_num_t)PIN_I2C_SCL, GPIO_MODE_INPUT_OUTPUT_OD);
+  gpio_set_pull_mode((gpio_num_t)PIN_I2C_SDA, GPIO_PULLUP_ONLY);
+  gpio_set_pull_mode((gpio_num_t)PIN_I2C_SCL, GPIO_PULLUP_ONLY);
+  esp_rom_gpio_connect_out_signal(PIN_I2C_SDA, I2CEXT0_SDA_OUT_IDX, false, false);
+  esp_rom_gpio_connect_in_signal (PIN_I2C_SDA, I2CEXT0_SDA_IN_IDX,  false);
+  esp_rom_gpio_connect_out_signal(PIN_I2C_SCL, I2CEXT0_SCL_OUT_IDX, false, false);
+  esp_rom_gpio_connect_in_signal (PIN_I2C_SCL, I2CEXT0_SCL_IN_IDX,  false);
+}
+#endif
+
 // I2C bus recovery: clock out a slave that's holding SDA low, issue STOP, then
 // re-init the bus (+ ToF). Returns true if SDA was released. Wire.setTimeOut()
 // keeps individual transactions from hanging; this unwedges a stuck bus.
@@ -113,6 +137,7 @@ static bool i2cRecover() {
   Wire.setClock(400000);
   Wire.setTimeOut(I2C_TIMEOUT_MS);
 #if HAS_PRESENCE
+  tofClaimBus();
   if (vl53.begin(0x29, &Wire)) {
     vl53.VL53L1X_SetDistanceMode(2);
     vl53.setTimingBudget(50);
@@ -146,6 +171,10 @@ void init() {
   refreshDht(true);
 #endif
 #if HAS_PRESENCE
+  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);   // ToF on the shared touch pads (port 0); started here, after
+  Wire.setClock(400000);                  // Display::init() so the FT6336 touch (port 1) owns them first
+  Wire.setTimeOut(I2C_TIMEOUT_MS);
+  tofClaimBus();                          // re-point IO16/15 to port 0 for the ToF probe
   if (vl53.begin(0x29, &Wire)) {
     vl53.VL53L1X_SetDistanceMode(2);   // long range
     vl53.setTimingBudget(50);
@@ -196,6 +225,7 @@ void tick() {
   static uint32_t s_lastTofPoll = 0;
   if (s_tofPresent && millis() - s_lastTofPoll >= TOF_POLL_MS) {
     s_lastTofPoll = millis();
+    tofClaimBus();                              // re-claim the shared pads for port 0 before the read
     if (vl53.dataReady()) {
       int16_t d = vl53.distance();
       vl53.clearInterrupt();
@@ -207,6 +237,7 @@ void tick() {
   // fault. A dead ToF with a healthy bus only degrades (presence disabled).
   if (s_tofPresent && millis() - s_lastBusCheck >= I2C_HEALTH_MS) {
     s_lastBusCheck = millis();
+    tofClaimBus();
     Wire.beginTransmission(0x29);
     if (Wire.endTransmission() == 0) {
       s_busFailStreak = 0;
@@ -375,6 +406,9 @@ String healthJson() {
 }
 
 int i2cScan(uint8_t* out, int maxOut) {
+#if HAS_PRESENCE
+  tofClaimBus();   // scan the shared touch bus (port 0) so the ToF (0x29) shows up
+#endif
   int n = 0;
   for (uint8_t a = 1; a < 127; a++) {
     Wire.beginTransmission(a);

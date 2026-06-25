@@ -59,12 +59,8 @@ void setup() {
   Serial.begin(115200);
   delay(200);
 
-#if HAS_PRESENCE
-  // Aux I2C (ToF) only — the FT6336 touch owns its own I2C port/pins (config.h).
-  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
-  Wire.setClock(400000);
-  Wire.setTimeOut(I2C_TIMEOUT_MS);
-#endif
+  // ToF I2C (Wire/port 0) is brought up later in Sensors::init() — AFTER Display::init() so the
+  // FT6336 touch (port 1) claims the shared IO16/15 pads first; the ToF then re-claims per read.
 
   pinMode(PIN_TFT_BL, OUTPUT);
   digitalWrite(PIN_TFT_BL, HIGH);     // backlight on
@@ -151,5 +147,5 @@ void loop() {
   Sensors::tick();
   StateMachine::tick();   // inputs -> FSM -> render -> publish to net task
   Diagnostics::tick();
-  delay(5);
+  delay(1);               // poll/redraw promptly (snappy encoder/touch); still yields to FreeRTOS
 }

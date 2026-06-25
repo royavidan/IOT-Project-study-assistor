@@ -171,12 +171,20 @@ void poll() {
   s_rotated = enc.encoderChanged();
   if (s_rotated) {
     int v = enc.readEncoder();
-    if (v > s_lastEnc)      s_rotDir = 1;
-    else if (v < s_lastEnc) s_rotDir = -1;
-    s_lastEnc = v;
-    if (s_mode == INPUT_DURATION) s_minutes = v * DUR_STEP_MIN;
+    int delta = v - s_lastEnc;          // detents since last poll (signed) — keep the MAGNITUDE,
+    s_lastEnc = v;                      // not just the sign, so fast/multi-step turns aren't dropped
+    if (delta >  20) delta =  20;       // clamp wild jumps (noise / boundary saturation)
+    if (delta < -20) delta = -20;
+    s_rotDir = delta;                   // consumers already scale by rotDir (moveCursor / val*STEP)
+    if (s_mode == INPUT_DURATION) s_minutes = v * DUR_STEP_MIN;   // absolute — unchanged
   }
-  s_clicked = enc.isEncoderButtonClicked();
+#if PIN_ENC_SW >= 0
+  s_clicked = enc.isEncoderButtonClicked();   // real shaft button wired
+#else
+  // No shaft button (PIN_ENC_SW < 0): the library reads the invalid pin as "held" and busy-waits
+  // its full ~330ms release-timeout EVERY call — that stalled the whole loop. Skip it entirely.
+  s_clicked = false;
+#endif
 #else
   s_clicked = false;
 #endif

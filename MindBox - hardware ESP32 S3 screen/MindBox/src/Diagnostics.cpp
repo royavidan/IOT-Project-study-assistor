@@ -7,6 +7,7 @@
 #include "StateMachine.h"
 #include "Storage.h"
 #include "Display.h"
+#include "Panel.h"
 #include "Cloud.h"
 #include "UploadQueue.h"
 #include "Inputs.h"
@@ -230,6 +231,11 @@ void selfTest() {
   Serial.printf("heap     : %u free / %u total\n", ESP.getFreeHeap(), ESP.getHeapSize());
   Serial.printf("psram    : %s  %u bytes  (set Arduino PSRAM=\"OPI PSRAM\")\n",
                 psramFound() ? "OPI ok" : "OFF/none", (unsigned)ESP.getPsramSize());
+  Serial.printf("render   : %s\n", !Panel::usingSprite()
+                ? "DIRECT DRAW (sprite alloc failed - slow)"
+                : Panel::spriteInPsram()
+                  ? "SPRITE in PSRAM (internal RAM was full - slower draw)"
+                  : "SPRITE in internal RAM (fast)");
   Serial.printf("device   : %s\n", Storage::deviceId().c_str());
   uint8_t addrs[8];
   int n = Sensors::i2cScan(addrs, 8);

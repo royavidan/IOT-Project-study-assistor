@@ -28,7 +28,7 @@
 #define HAS_I2S_MIC     1   // ES8311 I2S MEMS mic, DIN=IO6 — board's ONLY mic. (raises boot current — if the box reboot-loops on a weak USB supply, set back to 0)
 #define HAS_SPEAKER     1   // ES8311 I2S + FM8002E amp -> speaker connector (DOUT=IO8, AMP_EN=IO1 active-low). Boot beep confirms it; session chimes gated by Settings -> Sound.
 #define HAS_ANY_MIC     (HAS_MIC || HAS_I2S_MIC)   // any mic source present (gates noise UI/telemetry)
-#define HAS_PRESENCE    0   // TEMP off — boot-current recovery (brownout loop). Re-enable on a solid 5V supply. (VL53L1X/TOF400C on IO2 SDA / IO14 SCL — NOT the 4-pin touch header)
+#define HAS_PRESENCE    1   // VL53L1X/TOF400C ToF on the SHARED touch I2C header (IO16 SDA / IO15 SCL, Wire=port 0; touch is port 1 on the same pads — see Sensors.cpp tofClaimBus). Adds boot current; needs a solid 5V supply.
 #define HAS_LED_RING    0   // WS2812B ring
 #define HAS_HAPTIC      0   // vibration motor — REMOVED. Disables the haptic driver so it never drives PIN_HAPTIC. Set 1 (+ a real free pin) to restore.
 #define HAS_LIGHT       1   // Keyes KY-018 photoresistor AO -> IO3 (ADC1); see docs/WIRING.md §5
@@ -112,8 +112,8 @@ static const float AUDIO_MIC_RMS_FULL = 1000.0f;
 #define PIN_ENC_CLK    2    // KY-040 A (CLK) — ex-ToF SDA (GPIO header)
 #define PIN_ENC_DT    14    // KY-040 B (DT)  — ex-ToF SCL (GPIO header)
 #define PIN_ENC_SW    -1    // KY-040 shaft button — DISABLED (no free header pin; select via touch tap)
-#define PIN_I2C_SDA    2    // VL53L1X ToF I2C SDA (HAS_PRESENCE) — IO2 free since analog mic retired
-#define PIN_I2C_SCL   14    // VL53L1X ToF I2C SCL — own Wire bus (NOT the touch header IO15/16)
+#define PIN_I2C_SDA   16    // VL53L1X ToF I2C SDA — SHARES the touch header pad IO16 (Wire/port 0; touch is port 1)
+#define PIN_I2C_SCL   15    // VL53L1X ToF I2C SCL — SHARES the touch header pad IO15; re-routed to port 0 each ToF op (tofClaimBus), touch reclaims on its next getTouch
 #define PIN_BUTTON     3    // side tact button (INPUT_PULLUP, ADC1-capable but used digital)
 #define BTN_ACTIVE_LOW 1
 #define PIN_BOOT_BTN   0    // on-board BOOT button -> dark/light theme toggle

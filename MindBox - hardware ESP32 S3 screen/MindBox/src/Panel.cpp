@@ -4,7 +4,15 @@
 LGFX_Hosyond_S3_28::LGFX_Hosyond_S3_28() {
   { // SPI bus for the panel
     auto cfg = _bus_instance.config();
-    cfg.spi_host = TFT_SPI_HOST;
+    cfg.spi_host    = TFT_SPI_HOST;
+    cfg.spi_mode    = 0;
+    // LovyanGFX defaults freq_write to 16 MHz with no DMA, so a full 320x240x16bpp push takes
+    // ~80 ms — that is the input->screen lag (and why fast taps get dropped: touch is only sampled
+    // once per slow frame). 40 MHz + DMA cuts the push to ~30 ms. Bump to 80 MHz if the panel stays
+    // clean (short traces on this board usually tolerate it).
+    cfg.freq_write  = 40000000;
+    cfg.freq_read   = 16000000;
+    cfg.dma_channel = SPI_DMA_CH_AUTO;   // DMA the sprite push instead of CPU-bound byte-banging
     cfg.pin_sclk = PIN_TFT_SCLK;
     cfg.pin_mosi = PIN_TFT_MOSI;
     cfg.pin_miso = PIN_TFT_MISO;
@@ -59,6 +67,7 @@ LGFX_Sprite        spr(&lcd);
 namespace Panel {
 
 static bool s_useSprite = false;
+static bool s_spritePsram = false;   // true = sprite fell back to PSRAM (slow draw)
 
 void begin() {
 #if USE_TOUCH
@@ -71,11 +80,23 @@ void begin() {
   lcd.init();
   lcd.setRotation(SCR_ROTATION);
   lcd.setColorDepth(16);
-  if (psramFound()) { spr.setColorDepth(16); spr.setPsram(true); }
-  s_useSprite = (spr.createSprite(SCR_W, SCR_H) != nullptr);
+  spr.setColorDepth(16);
+  // Draw into INTERNAL RAM, not PSRAM. Drawing a full frame into a PSRAM-backed sprite is ~10x
+  // slower — every glyph/shape pixel is a high-latency PSRAM read-modify-write (that was the
+  // ~340ms/frame stall; the DMA push itself was only ~34ms). This runs before Cloud::begin()
+  // brings up Wi-Fi, so the ~150KB internal block is usually still free.
+  spr.setPsram(false);
+  s_useSprite   = (spr.createSprite(SCR_W, SCR_H) != nullptr);
+  s_spritePsram = false;
+  if (!s_useSprite && psramFound()) {     // didn't fit in internal RAM -> PSRAM fallback (slower, but works)
+    spr.setPsram(true);
+    s_useSprite   = (spr.createSprite(SCR_W, SCR_H) != nullptr);
+    s_spritePsram = s_useSprite;
+  }
 }
 
-bool usingSprite() { return s_useSprite; }
+bool usingSprite()   { return s_useSprite; }
+bool spriteInPsram() { return s_spritePsram; }
 
 lgfx::LovyanGFX* canvas() {
   return s_useSprite ? (lgfx::LovyanGFX*)&spr : (lgfx::LovyanGFX*)&lcd;
