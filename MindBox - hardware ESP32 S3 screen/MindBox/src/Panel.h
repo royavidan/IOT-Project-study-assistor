@@ -15,9 +15,9 @@ class LGFX_Hosyond_S3_28 : public lgfx::LGFX_Device {
   lgfx::Panel_ILI9341 _panel_instance;
   lgfx::Bus_SPI       _bus_instance;
   lgfx::Light_PWM     _light_instance;
-#if USE_TOUCH
-  lgfx::Touch_FT5x06  _touch_instance;   // FT5x06-family driver covers FT6336
-#endif
+  // NB: no LovyanGFX touch instance. The FT6336 is read directly over Arduino Wire in Touch.cpp so it shares
+  // ONE I2C master with the VL53L1X ToF (no two-master pad contention). LovyanGFX must NOT also drive touch
+  // on a second I2C port, or the pins fight — see Touch.cpp / Sensors.cpp.
 public:
   LGFX_Hosyond_S3_28();
 };

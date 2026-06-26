@@ -16,8 +16,8 @@ static inline bool isLongBreak(const UiModel& m) {
 }
 
 #if USE_TOUCH
-// --- Touch build: "Nothing" centred layout — dot-matrix timer, dotted progress,
-// thin-outline controls. The single red accent appears only on progress/active.
+// --- Touch build: centred dot-matrix numerals inside a dotted progress RING, coloured by phase
+// (focus=red, short break=teal, long break=blue). No on-screen chrome — a tap anywhere opens the menu.
 struct Btn { int cx, cy, r; int action; };
 static const Btn kButtons[4] = {
   { 108, 212, 16, TA_RESET },  // restart interval
@@ -37,70 +37,84 @@ int hitTest(int x, int y) {
 
 void render(const UiModel& m) {
   lgfx::LovyanGFX* g = Panel::canvas();
-  const Palette&   pal = Theme::palette();
+  const Palette&  pal = Theme::palette();
+  const bool      paused = (m.state == ST_PAUSED);
+  const bool      lb = isLongBreak(m);
+  // The colour lives in the RING on a calm dark face (Apple's HIG: Activity rings live on black, never a
+  // fully-tinted screen — that's what fatigues the eye). Paused dims the ring to muted so it reads as "held".
+  const uint16_t  ring  = paused ? pal.muted   : phaseColor(m.mode, lb);
+  const uint16_t  track = paused ? pal.segment : phaseTrack(m.mode, lb);
   g->fillScreen(pal.bg);
   g->setTextSize(1);
-  const bool paused = (m.state == ST_PAUSED);
-  const int  cx = 160;
+  const int cx = 160, cy = 110, rOut = 88, rIn = 74;
 
-  // Phase label — small, muted, lowercase (sparse).
-  g->setTextDatum(middle_center);
-  g->setFont(FONT_S);
-  g->setTextColor(pal.muted, pal.bg);
-  g->drawString(paused ? "paused" : phaseName(m.mode, isLongBreak(m)), cx, 26);
-
-  // Dot-matrix timer (Nothing signature) — or a single dot in eyes-off mode.
-  if (m.showTimer) {
-    int s = m.remainingSec < 0 ? 0 : m.remainingSec;
-    char t[8]; snprintf(t, sizeof(t), "%02d:%02d", s / 60, s % 60);
-    DotFont::drawCentered(g, t, cx, 92, 3, 7, pal.text, pal.segment);
-  } else {
-    g->fillCircle(cx, 92, 5, pal.text);   // eyes-off: running, no time shown
-  }
-
-  // Dotted progress bar — lit (red) up to elapsed fraction.
+  // Professional progress RING: an always-visible subtle TRACK (full circle) + a vivid phase-coloured PROGRESS
+  // arc sweeping clockwise from 12 o'clock with SHARP, crisp flat ends — no soft anti-aliased caps (those band
+  // and look fuzzy at 8-bit). fillArc 0deg = 3 o'clock, clockwise on screen, so 12 o'clock = 270deg; split at
+  // the 0/360 seam. fillArc draws solid hard edges, so the fill stays crisp.
   {
     float f = (m.targetSec > 0) ? 1.0f - (float)m.remainingSec / m.targetSec : 0;
     if (f < 0) f = 0; if (f > 1) f = 1;
-    const int N = 21, step = 10, x0 = cx - (N - 1) * step / 2, y = 140;
-    for (int i = 0; i < N; i++)
-      g->fillCircle(x0 + i * step, y, 2,
-                    ((float)i / (N - 1) <= f) ? C_ACCENT : pal.divider);
+    g->fillArc(cx, cy, rIn, rOut, 0, 360, track);                  // full track, always visible
+    if (f > 0.0f) {
+      float endA = 270.0f + 360.0f * f;                            // start at top (270), sweep clockwise
+      if (endA <= 360.0f) {
+        g->fillArc(cx, cy, rIn, rOut, 270.0f, endA, ring);
+      } else {                                                     // wrapped past the 0/360 seam -> two spans
+        g->fillArc(cx, cy, rIn, rOut, 270.0f, 360.0f, ring);
+        g->fillArc(cx, cy, rIn, rOut, 0.0f, endA - 360.0f, ring);
+      }
+    }
   }
 
-  // Cycle dots — filled red when done, thin outline when pending.
-  if (m.setCycleTotal > 1) {
+  // Phase label — small, muted, centred above the numerals.
+  g->setTextDatum(middle_center);
+  g->setFont(FONT_S);
+  g->setTextColor(pal.muted, pal.bg);
+  g->drawString(paused ? "paused" : phaseName(m.mode, lb), cx, cy - 40);
+
+  // Hero numerals — a real bold bundled font (FreeMonoBold24pt7b), not the pixel dot-matrix. Phone-style
+  // "M:SS"; for >=100 min fall back to FONT_L so "120:00" still fits inside the ring hole.
+  if (m.showTimer) {
+    int s = m.remainingSec < 0 ? 0 : m.remainingSec;
+    int mins = s / 60;
+    char t[8]; snprintf(t, sizeof(t), "%d:%02d", mins, s % 60);
+    g->setFont(mins >= 100 ? FONT_L : FONT_XL);
+    g->setTextDatum(middle_center);
+    g->setTextColor(pal.text, pal.bg);
+    g->drawString(t, cx, cy);
+  } else {
+    g->fillSmoothCircle(cx, cy, 6, pal.text);   // eyes-off: running, no time shown
+  }
+
+  // Cycle pips BELOW the ring (running only) — done = ring colour, pending = muted outline.
+  if (!paused && m.setCycleTotal > 1) {
     const int n = m.setCycleTotal, r = 3, step = 16;
-    const int x0 = cx - (n - 1) * step / 2, y = 165;
+    const int x0 = cx - (n - 1) * step / 2, y = 212;
     for (int i = 0; i < n; i++) {
       int x = x0 + i * step;
-      if (i < m.setFocusDone) g->fillCircle(x, y, r, C_ACCENT);
+      if (i < m.setFocusDone) g->fillCircle(x, y, r, ring);
       else                    g->drawCircle(x, y, r, pal.muted);
     }
   }
 
-  // Environment interference — the one red warning line (nothing when all clear).
-  if (m.interference != INTERF_NONE) {
+  // Environment interference — warm amber alert below the ring (distinct from any ring hue).
+  if (!paused && m.interference != INTERF_NONE) {
+    g->setTextDatum(middle_center);
     g->setFont(FONT_S);
-    g->setTextColor(C_ACCENT, pal.bg);
-    g->drawString(interferenceLabel(m.interference), cx, 188);
+    g->setTextColor(C_ALERT, pal.bg);
+    g->drawString(interferenceLabel(m.interference), cx, m.setCycleTotal > 1 ? 228 : 212);
   }
 
-  // Bottom affordance. PAUSED: a play triangle + "tap to resume" — ANY tap resumes (StateMachine ST_PAUSED).
-  // RUNNING: a gear + "tap for options" — ANY tap opens the Pause/Skip/End menu.
-  g->setTextDatum(middle_center);
-  g->setFont(FONT_S);
+  // PAUSED affordance: a play triangle + "tap to resume" — ANY tap resumes (StateMachine ST_PAUSED). RUNNING
+  // has NO chrome — tapping anywhere opens the Pause/Skip/End/Settings menu (gear + hint removed).
   if (paused) {
-    const int py = 196;
-    g->fillTriangle(cx - 7, py - 9, cx - 7, py + 9, cx + 10, py, pal.text);   // play / resume glyph
+    const int py = 210;
+    g->fillTriangle(cx - 7, py - 9, cx - 7, py + 9, cx + 10, py, pal.text);    // play / resume glyph
+    g->setTextDatum(middle_center);
+    g->setFont(FONT_S);
     g->setTextColor(pal.muted, pal.bg);
-    g->drawString("tap to resume", cx, 218);
-  } else {
-    const Btn& gear = kButtons[3];   // TA_MENU
-    g->drawCircle(gear.cx, gear.cy, gear.r, pal.muted);
-    Icons::drawMenuIcon(g, MI_SETTINGS, gear.cx, gear.cy, pal.muted);
-    g->setTextColor(pal.muted, pal.bg);
-    g->drawString("tap for options", cx, 212);
+    g->drawString("tap to resume", cx, 228);
   }
 
   Panel::push();
