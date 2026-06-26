@@ -54,3 +54,21 @@ export interface LeaderboardEntry {
   streak: number;
   is_you: boolean;
 }
+
+export type HomeworkStatus = "pending" | "submitted" | "graded";
+
+export interface HomeworkAssignment {
+  id: string;
+  courseCode: string | null;
+  title: string;
+  description: string | null;
+  dueDate: string;
+  status: HomeworkStatus;
+  fileUrl: string | null;
+  fileName: string | null;
+  fileSizeBytes: number | null;
+  grade: number | null;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
