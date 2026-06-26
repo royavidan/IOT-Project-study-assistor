@@ -31,8 +31,11 @@ static const uint8_t CAL_MAGIC = 0xC2;
 static Cal s_cal = { 0, 0, 0, 4095, 0, 4095 };
 
 static bool s_down = false;
+static uint32_t s_downMs = 0;        // when the current press started (for long-press timing)
+static bool s_longSent = false;      // long-press already delivered this press -> suppress the release tap
 static int  s_downX = 0, s_downY = 0, s_lastX = 0, s_lastY = 0;
 static const int DRAG_THRESH = 44;   // px of vertical travel => a drag (forgiving, so taps aren't misread)
+static const uint32_t LONG_PRESS_MS = 500;  // finger held still this long => long-press (mapped to Back)
 
 // ---- FT6336 raw read over Wire. Returns true if a finger is present; rx/ry = 12-bit native coords. ------
 // Registers: 0x02 = touch count; point-1 X = (0x03[3:0]<<8)|0x04, Y = (0x05[3:0]<<8)|0x06.
@@ -148,14 +151,26 @@ Gesture poll(int& x, int& y) {
   if (touched) rawToScreen(rx, ry, sx, sy);
 
   if (touched) {
-    if (!s_down) { s_down = true; s_downX = sx; s_downY = sy; s_lastX = sx; s_lastY = sy; }
+    if (!s_down) { s_down = true; s_downMs = millis(); s_longSent = false;
+                   s_downX = sx; s_downY = sy; s_lastX = sx; s_lastY = sy; }
     // Accept only plausible motion — a >100px jump between samples is a glitch, not a finger.
     else if (abs(sx - s_lastX) < 100 && abs(sy - s_lastY) < 100) { s_lastX = sx; s_lastY = sy; }
-    return G_NONE;                       // wait for release before deciding
+
+    // Long-press: a finger held STILL (not dragging) past LONG_PRESS_MS fires once, mid-hold.
+    // If it has already wandered past the drag threshold it's a scroll, never a long-press.
+    if (!s_longSent &&
+        abs(s_lastX - s_downX) <= DRAG_THRESH && abs(s_lastY - s_downY) <= DRAG_THRESH &&
+        (millis() - s_downMs) >= LONG_PRESS_MS) {
+      s_longSent = true;
+      x = s_downX; y = s_downY;
+      return G_LONG_PRESS;
+    }
+    return G_NONE;                       // otherwise wait for release before deciding
   }
 
   if (s_down) {                          // released -> classify
     s_down = false;
+    if (s_longSent) return G_NONE;       // long-press already delivered; the release is a no-op
     int dy = s_lastY - s_downY;
     int dx = s_lastX - s_downX;
     Gesture g;

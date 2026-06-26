@@ -14,10 +14,13 @@
 // Inputs (S3) — produces the same rotationDir()/button() the Menu/StateMachine
 // expect, from EITHER a KY-040 encoder (HAS_ENCODER) and/or the touchscreen.
 //
-// Touch is mapped to synthetic encoder/button events via screen zones (no menu
-// cursor knowledge needed, so Menu/StateMachine stay untouched):
-//   top-right corner -> back (2)   top third -> up (-1)
-//   bottom third     -> down (+1)  middle    -> select (1)
+// Touch is a plain click, NOT a position picker: the encoder (or a vertical
+// swipe) moves the menu highlight, and touch only confirms:
+//   short tap     -> select the currently-highlighted item (button 1)
+//   long press    -> back (button 2)
+//   swipe up/down -> move the highlight (same as an encoder detent)
+// Selection is independent of WHERE you tap, so a slightly-off touch calibration
+// can't land on the wrong row (which it did under the old row-hit-test).
 // ============================================================================
 
 static bool s_rotated = false, s_clicked = false;
@@ -131,33 +134,29 @@ static void pollTouch() {
   Touch::Gesture g = Touch::poll(x, y);
   if (g == Touch::G_NONE) return;
 
-  // Raw-tap mode (keyboard): latch the tap point; swipes still scroll.
+  // Raw-tap mode (keyboard): latch the tap point; a long-press counts as a tap too; swipes scroll.
   if (s_rawTouch) {
-    if (g == Touch::G_TAP) { s_tapped = true; s_tapX = x; s_tapY = y; }
+    if (g == Touch::G_TAP || g == Touch::G_LONG_PRESS) { s_tapped = true; s_tapX = x; s_tapY = y; }
     else if (g == Touch::G_DRAG_UP)   { s_rotDir =  1; s_rotated = true; }
     else if (g == Touch::G_DRAG_DOWN) { s_rotDir = -1; s_rotated = true; }
     return;
   }
 
-  // On the bare timer screen ANY tap opens the session menu (deterministic) — the old tiny transport
-  // circles split taps between two overlays and mostly missed; now one tap = one menu. Swipes do nothing.
+  // On the bare timer screen ANY touch opens the session menu (deterministic) — the old tiny transport
+  // circles split taps between two overlays and mostly missed; now one touch = one menu. Swipes do nothing.
   if (s_timerScreen) {
-    if (g == Touch::G_TAP) s_timerAction = TimerScreen::TA_MENU;
+    if (g == Touch::G_TAP || g == Touch::G_LONG_PRESS) s_timerAction = TimerScreen::TA_MENU;
     return;
   }
 
-  // Swipe = move the highlight (scroll / value step); never selects.
-  if (g == Touch::G_DRAG_UP)   { s_rotDir =  1; s_rotated = true; return; }
-  if (g == Touch::G_DRAG_DOWN) { s_rotDir = -1; s_rotated = true; return; }
-
-  // --- tap --- select the row the finger actually hit; never fall back to the highlighted row, so
-  // aiming for "End" can't accidentally trigger the highlighted "Pause". A miss on a list does nothing.
-  if (Display::backHit(x, y)) { s_button = 2; return; }   // visible Back button
-  int cur = Display::selectedRow();                       // >=0 only on a row-list menu
-  int hit = Display::rowHitTest(x, y);                    // visible row under the finger, or -1
-  if (cur >= 0 && hit < 0) return;                        // row menu, tapped a gap/margin -> ignore
-  if (cur >= 0 && hit != cur) { s_rotDir = hit - cur; s_rotated = true; }  // walk the cursor onto it
-  s_button = 1;   // select the tapped row (or confirm on a screen with no rows, e.g. value pickers)
+  // Menu: the encoder (or a swipe) moves the highlight; TOUCH is just the click.
+  //   long press -> back;  swipe -> move highlight;  short tap -> select the highlighted item.
+  // Selection no longer depends on WHERE you tap, so an off touch calibration can't pick the
+  // wrong row (the old row-hit-test is why aiming at "Mode" landed on "Start").
+  if (g == Touch::G_LONG_PRESS) { s_button = 2; return; }                     // back
+  if (g == Touch::G_DRAG_UP)    { s_rotDir =  1; s_rotated = true; return; }  // scroll the highlight
+  if (g == Touch::G_DRAG_DOWN)  { s_rotDir = -1; s_rotated = true; return; }
+  if (g == Touch::G_TAP)        { s_button = 1; return; }                     // select highlighted item
 }
 #endif
 
