@@ -19,6 +19,7 @@ namespace Session {
   bool finished();             // remaining <= 0
   void addBreak();
   void addPresenceInterruption();
+  void setAway(bool away);     // real away state each tick -> accrues away duration
 
   int  remainingMs();
   int  remainingSec();
@@ -27,6 +28,7 @@ namespace Session {
   int  actualFocusMin();
   int  breaks();
   int  presenceInterruptions();
+  uint32_t awayMs();           // total away time this session (ms)
   int  lastFle();              // most recent sampled estimate (Story 16)
 
   const Sample* samples();

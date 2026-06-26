@@ -42,6 +42,7 @@ String sessionJson(const SessionRecord& r, const Sample* samples, int n,
   j += "\"status\":";               j += jstr(r.status);                       j += ",";
   j += "\"breaks\":";               j += String(r.breaks);                     j += ",";
   j += "\"presenceInterruptions\":";j += String(r.presenceInterruptions);      j += ",";
+  j += "\"awayMs\":";               j += String((unsigned long)r.awayMs);      j += ",";
 
   j += "\"env\":{";
   j += "\"noiseAvg\":";   j += num(r.noiseAvg);     j += ",";

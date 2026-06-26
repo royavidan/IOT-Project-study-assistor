@@ -28,6 +28,7 @@ namespace Cloud {
   int    lastHttpStatus();      // last HTTP code (>0) or transport error (<=0)
   bool   haveClock();           // NTP synced (a proxy for "internet reachable")
   time_t nowEpoch();            // 0 until NTP
+  bool   localTimeHHMM(char* buf, size_t n);   // "HH:MM" local time if synced, else "" (returns false)
   String ssid();                // connected network SSID ("" if offline), for Device info
   String ipString();            // local IP as text ("" if offline)
 

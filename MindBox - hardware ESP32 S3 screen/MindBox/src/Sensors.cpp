@@ -161,8 +161,15 @@ void init() {
     vl53.setTimingBudget(50);
     vl53.startRanging();
     s_tofPresent = true;
+    Serial.println("[tof] VL53L1X init OK @0x29 - ranging");
   } else {
     s_tofPresent = false;              // degrade gracefully (no auto-pause)
+    // Make the failure visible: probe 0x29 so the log says WHY. No ACK => wiring / XSHUT held low /
+    // wrong sensor (a VL53L0X will NOT init with this VL53L1X library). ACK => sensor's there, init failed.
+    Wire.beginTransmission(0x29);
+    bool ack = (Wire.endTransmission() == 0);
+    Serial.printf("[tof] VL53L1X init FAILED (0x29 %s) - presence disabled\n",
+                  ack ? "ACKs: library/init issue" : "no ACK: check wiring/XSHUT/sensor model");
   }
 #endif
 }
@@ -208,11 +215,16 @@ void tick() {
   static uint32_t s_lastTofPoll = 0;
   if (s_tofPresent && millis() - s_lastTofPoll >= TOF_POLL_MS) {
     s_lastTofPoll = millis();
-    if (vl53.dataReady()) {
-      int16_t d = vl53.distance();
-      vl53.clearInterrupt();
-      if (d > 0 && d < 4000) s_lastDist = d;   // ignore implausible readings (Story 18)
-    }
+    bool rdy = vl53.dataReady();
+    int16_t d = rdy ? vl53.distance() : -1;
+    if (rdy) vl53.clearInterrupt();
+    if (rdy && d > 0 && d < 4000) s_lastDist = d;   // ignore implausible readings (Story 18)
+#if TOF_DEBUG
+    // Pinpoints a STUCK reading: ready=0 => not re-arming (clearInterrupt/dataReady failing on the shared bus);
+    // ready=1 + status!=0 => sensor returns a value but the range is invalid; ready=1 + raw constant => optics
+    // (pointed at a fixed surface); raw outside (0,4000) => the clamp is rejecting it. status 0 = valid range.
+    Serial.printf("[tof] ready=%d raw=%d status=%u kept=%d\n", rdy, d, (unsigned)vl53.vl_status, s_lastDist);
+#endif
   }
   // I2C watchdog: the ToF is our bus canary. If it stops ACKing, recover the bus.
   // SDA still held after recovery = wedged bus (also kills the screen) -> critical

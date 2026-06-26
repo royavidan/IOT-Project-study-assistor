@@ -117,6 +117,40 @@ void render(const UiModel& m) {
     g->drawString("tap to resume", cx, 228);
   }
 
+  // Local time, top-left corner (online only) — clear of the centered env-icon row.
+  if (m.clockStr[0]) {
+    g->setTextDatum(top_left);
+    g->setFont(FONT_S);
+    g->setTextColor(pal.muted, pal.bg);
+    g->drawString(m.clockStr, 8, 8);
+  }
+
+  // Live environment status row (top): temp / noise / away icons — lit (accent) when active now, else dim.
+  {
+    const int iy = 14, step = 30;
+    int n = 0;
+#if HAS_TEMP
+    n++;
+#endif
+#if HAS_ANY_MIC
+    n++;
+#endif
+#if HAS_PRESENCE
+    n++;
+#endif
+    int ex = cx - (n - 1) * step / 2;
+#if HAS_TEMP
+    Icons::drawMenuIcon(g, MI_TEMP,     ex, iy, m.envHot  ? C_ACCENT : pal.muted); ex += step;
+#endif
+#if HAS_ANY_MIC
+    Icons::drawMenuIcon(g, MI_NOISE,    ex, iy, m.envLoud ? C_ACCENT : pal.muted); ex += step;
+#endif
+#if HAS_PRESENCE
+    Icons::drawMenuIcon(g, MI_PRESENCE, ex, iy, m.envAway ? C_ACCENT : pal.muted); ex += step;
+#endif
+    (void)ex;
+  }
+
   Panel::push();
 }
 

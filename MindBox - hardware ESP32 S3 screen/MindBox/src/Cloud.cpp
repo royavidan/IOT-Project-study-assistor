@@ -462,7 +462,8 @@ static void manageWifi() {
     }
   } else {
     if (!s_ntpStarted) {
-      configTime(0, 0, NTP_SERVER);
+      configTime(0, 0, NTP_SERVER);              // keep the system clock in UTC...
+      setenv("TZ", TIMEZONE_TZ, 1); tzset();     // ...but make localtime_r() return local time (also fixes quiet hours)
       // Cap the SNTP poll to 12h. At the default (~1h, and FAR more often when pool.ntp.org is
       // unreachable on a LAN) the background re-sync reopens a DNS/UDP socket on the tcpip thread while
       // the net task is mid-HTTP -> the lwip pbuf double-free panic. 12h drift is seconds, irrelevant here.
@@ -764,6 +765,18 @@ time_t nowEpoch() {
 #else
   return 0;
 #endif
+}
+
+// "HH:MM" local time into buf when the clock is synced; empty + false otherwise (caller hides the clock).
+bool localTimeHHMM(char* buf, size_t n) {
+  if (!buf || n == 0) return false;
+  buf[0] = 0;
+  if (!haveClock()) return false;
+  time_t ep = nowEpoch();
+  struct tm lt;
+  localtime_r(&ep, &lt);                 // local thanks to the TZ set at SNTP init
+  snprintf(buf, n, "%02d:%02d", lt.tm_hour, lt.tm_min);
+  return true;
 }
 
 bool uploadSession(const SessionRecord& r, const Sample* samples, int n) {

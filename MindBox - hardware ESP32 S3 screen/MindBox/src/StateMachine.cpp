@@ -153,12 +153,36 @@ static UiModel buildModel() {
   // COMPLETE summary stats come from the just-finished record (set in persistSession).
   m.sessionFocusLoad = s_lastRec.focusLoadAvg;
   m.sessionNoisePct  = HAS_ANY_MIC ? (int)lroundf(s_lastRec.noiseAvg * 100.0f) : -1;
+  m.sessionTempC     = s_lastRec.tempC;
+#if HAS_TEMP
+  m.sessionTempHot   = !isnan(s_lastRec.tempC) &&
+                       (s_lastRec.tempC > s_cfg.tempMaxC || s_lastRec.tempC < s_cfg.tempMinC);
+#else
+  m.sessionTempHot   = false;
+#endif
   m.pauseReason    = s_pauseReason;
   m.wifi           = Cloud::online();
   m.present        = Sensors::present();
+  // Live env-status icons (running screen): light when the condition is active right now.
+#if HAS_PRESENCE
+  m.envAway = !m.present;
+#else
+  m.envAway = false;
+#endif
+#if HAS_ANY_MIC
+  m.envLoud = (int)lroundf(Sensors::noiseDb()) > s_cfg.noiseMaxDb;
+#else
+  m.envLoud = false;
+#endif
+#if HAS_TEMP
+  { float c; m.envHot = Sensors::readTemp(c) && (c > s_cfg.tempMaxC || c < s_cfg.tempMinC); }
+#else
+  m.envHot = false;
+#endif
   m.paired         = Storage::paired();
   m.deviceId       = s_devShort.c_str();
   m.pairCode       = s_pairCode;
+  Cloud::localTimeHHMM(m.clockStr, sizeof(m.clockStr));   // "HH:MM" when online, else ""
   return m;
 }
 
@@ -258,6 +282,8 @@ static unsigned long sessionSamplePeriodMs() {
   return SAMPLE_PERIOD_MS;
 }
 
+static bool s_wasAway = false;   // edge tracker: an away event is counted once per present->away transition
+
 static void startSessionMode(Mode m, int durMin) {
   s_mode = m;
   s_lastCoachAt = 0;
@@ -266,6 +292,7 @@ static void startSessionMode(Mode m, int durMin) {
   s_curInterf = INTERF_NONE;
   s_sessionWorst = INTERF_NONE;
   s_interfNudged = false;
+  s_wasAway = false;
   time_t st = Cloud::haveClock() ? Cloud::nowEpoch() : 0;
   Session::start(m, durMin, st);
   Session::setSamplePeriodMs(sessionSamplePeriodMs());
@@ -831,17 +858,25 @@ void tick() {
         s_uiDirty = true;
         break;
       }
-      if (warm && s_cfg.autoPause && !Sensors::present() &&
-          Sensors::absentForMs() > pauseMs) {
-        Session::addPresenceInterruption();
-        Haptics::pause();
-        Sound::pause();
-        saveCheckpointNow();
-        enterPaused(PAUSE_AWAY);
-        break;
+      {
+        // Away handling, decoupled: record the away event + duration ALWAYS (for data), but PAUSE only if the
+        // user enabled auto-pause. With auto-pause off the clock keeps running (away counts as elapsed) and the
+        // away duration is recorded separately, so the dashboard can show true focus = elapsed - away.
+        bool present = Sensors::present();
+        bool awayNow = warm && !present && Sensors::absentForMs() > pauseMs;
+        if (awayNow && !s_wasAway) Session::addPresenceInterruption();   // count once per away edge
+        s_wasAway = awayNow;
+        Session::setAway(warm && !present);                             // accrue away duration (raw presence)
+        if (s_cfg.autoPause && awayNow) {
+          Haptics::pause();
+          Sound::pause();
+          saveCheckpointNow();
+          enterPaused(PAUSE_AWAY);
+          break;
+        }
+        Session::setSamplePeriodMs(sessionSamplePeriodMs());
+        Session::tick(s_cfg.autoPause ? present : true);   // auto-pause OFF -> clock never freezes on away
       }
-      Session::setSamplePeriodMs(sessionSamplePeriodMs());
-      Session::tick(Sensors::present());
       tickAdaptiveCoaching(now);
       // Environment interference: track the current alert, remember it, nudge if it persists.
       {

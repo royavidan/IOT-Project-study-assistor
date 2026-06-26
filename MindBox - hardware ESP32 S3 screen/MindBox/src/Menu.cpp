@@ -808,6 +808,7 @@ const MenuView& view() {
     formatTodayShort(v.statusWord, sizeof(v.statusWord));
   else
     strncpy(v.statusWord, connWord(), sizeof(v.statusWord) - 1);
+  Cloud::localTimeHHMM(v.clockStr, sizeof(v.clockStr));   // "HH:MM" when synced, else ""
 
   char buf[16];
   int count = itemCount(s_screen);

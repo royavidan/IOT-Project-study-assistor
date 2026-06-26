@@ -22,10 +22,15 @@ static esp_timer_handle_t s_clockTimer = nullptr;
 static volatile bool s_clockActive = false;
 static volatile bool s_clockPaused = false;
 static volatile bool s_presentFlag = true;
+static volatile bool s_awayFlag = false;   // real "away" state (drives away-duration accrual, separate from clock gating)
+static volatile uint32_t s_awayMs = 0;     // total away time this session
 
 static void onClockTimer(void* arg) {
   (void)arg;
-  if (!s_clockActive || s_clockPaused || !s_presentFlag) return;
+  if (!s_clockActive || s_clockPaused) return;
+  if (s_awayFlag) s_awayMs += SESSION_CLOCK_MS;   // accrue away time whenever the clock is live — even when the
+                                                  // focus clock keeps running because auto-pause is OFF
+  if (!s_presentFlag) return;
   s_remainingMs -= (int32_t)SESSION_CLOCK_MS;
   s_actualMs += SESSION_CLOCK_MS;
 }
@@ -77,6 +82,8 @@ void start(Mode m, int durationMin, time_t epoch) {
   s_noiseSum = 0; s_noisePeak = 0; s_noiseN = 0; s_lastFle = 0;
   s_samplePeriodMs = SAMPLE_PERIOD_MS;
   s_presentFlag = true;
+  s_awayFlag = false;
+  s_awayMs = 0;
   startClockTimer();
 }
 
@@ -119,6 +126,7 @@ void addTime(int sec) {
 bool finished() { return s_remainingMs <= 0; }
 void addBreak() { s_breaks++; }
 void addPresenceInterruption() { s_presInt++; }
+void setAway(bool away) { s_awayFlag = away; }   // fed the real presence each running tick
 
 int remainingMs()    { return s_remainingMs; }
 int remainingSec()   { int s = s_remainingMs / 1000; return s < 0 ? 0 : s; }
@@ -127,6 +135,7 @@ int actualFocusSec() { return (int)(s_actualMs / 1000); }
 int actualFocusMin() { return (int)(s_actualMs / 60000); }
 int breaks()               { return s_breaks; }
 int presenceInterruptions(){ return s_presInt; }
+uint32_t awayMs()          { return s_awayMs; }
 int lastFle()        { return s_lastFle; }
 
 const Sample* samples() { return s_samples; }
@@ -154,6 +163,8 @@ void restore(const SessionCheckpoint& cp) {
   s_noiseN = cp.noiseN;
   s_lastFle = tailN > 0 ? cp.tail[tailN - 1].fle : 0;
   s_presentFlag = true;
+  s_awayFlag = false;
+  s_awayMs = 0;   // away duration isn't persisted in the checkpoint; restart the accumulator on resume
   ensureClockTimer();
   s_clockActive = true;
   s_clockPaused = true;
@@ -206,6 +217,7 @@ SessionRecord finish(const char* status, time_t endEpoch, uint32_t seq) {
   r.status = status;
   r.breaks = s_breaks;
   r.presenceInterruptions = s_presInt;
+  r.awayMs = s_awayMs;
 
   long fleSum = 0;
   double tempSum = 0;  int tempN = 0;

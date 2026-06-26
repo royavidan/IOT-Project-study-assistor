@@ -109,6 +109,16 @@ inline void drawMenuIcon(lgfx::LovyanGFX* g, uint8_t icon, int cx, int cy, uint1
     case MI_BACK:                                    // left chevron
       g->fillTriangle(cx + 4, cy - 7, cx + 4, cy + 7, cx - 5, cy, col);
       break;
+    case MI_TEMP:                                    // thermometer: filled stem + bulb
+      g->fillRect(cx - 2, cy - 8, 4, 11, col);
+      g->fillCircle(cx, cy + 5, 4, col);
+      break;
+    case MI_NOISE:                                   // sound level: four equaliser bars
+      g->fillRect(cx - 8, cy + 1, 3, 6, col);
+      g->fillRect(cx - 3, cy - 5, 3, 12, col);
+      g->fillRect(cx + 2, cy - 2, 3, 9, col);
+      g->fillRect(cx + 7, cy + 3, 3, 4, col);
+      break;
     default: break;                                  // MI_NONE
   }
 }

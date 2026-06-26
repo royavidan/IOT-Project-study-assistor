@@ -132,6 +132,7 @@ struct SessionRecord {
   const char* status;        // "completed" | "interrupted" | "aborted"
   int         breaks;
   int         presenceInterruptions;
+  uint32_t    awayMs;        // total away time during the session (so server can show true focus = elapsed - away)
   float       noiseAvg, noisePeak, tempC, lightLux;
   int         focusLoadAvg;
 };
@@ -160,6 +161,11 @@ struct UiModel {
   int         coachingFle;       // live focus-load estimate (0..100), telemetry only
   int         sessionFocusLoad;  // COMPLETE summary: avg focus load, or -1
   int         sessionNoisePct;   // COMPLETE summary: avg noise %, or -1 if n/a
+  float       sessionTempC;      // COMPLETE summary: avg temp °C (NaN if no temp samples)
+  bool        sessionTempHot;    // COMPLETE summary: avg temp out of comfort band -> light the icon
+  bool        envHot;            // live (running): temp out of comfort band right now
+  bool        envLoud;           // live (running): noise above comfort right now
+  bool        envAway;           // live (running): ToF says away right now
   uint8_t     interference;      // live Interference shown on the running screen
   uint8_t     sessionInterf;     // worst Interference this session (DONE summary)
   PauseReason pauseReason;
@@ -168,6 +174,7 @@ struct UiModel {
   bool        paired;        // linked to a user account (via config downlink)
   const char* deviceId;      // short id (no "mindbox-" prefix), for home/pairing
   const char* pairCode;      // 6-digit code while ST_PAIRING, else ""
+  char        clockStr[8];   // "HH:MM" local time when online, else "" (running-screen corner)
 };
 
 // Minimal telemetry heartbeat payload (Story 15/17).
@@ -214,7 +221,8 @@ struct RemoteCmd {
 enum MenuIcon {
   MI_NONE = 0, MI_START, MI_MODE, MI_SETTINGS, MI_PRESENCE, MI_DISPLAY,
   MI_COACHING, MI_STATS, MI_HISTORY, MI_GOAL, MI_DEVICE, MI_PAIR, MI_WIFI,
-  MI_DIAG, MI_ABOUT, MI_BACK
+  MI_DIAG, MI_ABOUT, MI_BACK,
+  MI_TEMP, MI_NOISE   // env-status glyphs (lit when hot / loud); MI_PRESENCE reused for away
 };
 
 // Pointer-menu row for Display::renderMenu (cursor + scroll lists).
@@ -231,6 +239,7 @@ struct MenuRow {
 struct MenuView {
   char     title[16];
   char     statusWord[12];
+  char     clockStr[8];     // "HH:MM" local time when online, else "" (drawn top-right in the header)
   bool     showBrand;       // root screen: "MindBox" header instead of title
   MenuRow  rows[MENU_VISIBLE_ROWS];
   uint8_t  rowCount;
@@ -275,7 +284,7 @@ inline const char* pauseReasonLine(PauseReason r) {
 inline DeviceConfig defaultConfig() {
   return { /*showTimer*/ true, /*haptics*/ true, /*adaptive*/ false,
            /*nudgeScr*/ true, /*nudgeHap*/ true, /*coachPause*/ false,
-           /*nudges*/ true, /*autoPause*/ true, /*pauseIdx*/ 0, /*endIdx*/ 0,
+           /*nudges*/ true, /*autoPause*/ false, /*pauseIdx*/ 0, /*endIdx*/ 0,
            /*quietStart*/ 0xFFFF, /*quietEnd*/ 0xFFFF,
            /*dailyGoal*/ 180,
            /*longBreakEnabled*/ true, /*longBreakEvery*/ 4, /*longBreakMin*/ 15,

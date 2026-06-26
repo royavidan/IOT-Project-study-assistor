@@ -108,6 +108,12 @@ void renderMenu(const MenuView& m) {
     g->setTextColor(pal.muted, pal.bg);
     g->drawString(m.statusWord, SCR_W - 12, 16);
   }
+  if (m.clockStr[0]) {                         // local time top-right, above the status word (online only)
+    g->setTextDatum(top_right);
+    g->setFont(FONT_S);
+    g->setTextColor(pal.muted, pal.bg);
+    g->drawString(m.clockStr, SCR_W - 12, 2);
+  }
   g->drawFastHLine(0, 40, SCR_W, pal.divider);
 
   // Full-screen duration spinner — dot-matrix number + dotted progress.
@@ -233,6 +239,17 @@ static void statRow(lgfx::LovyanGFX* g, const Palette& pal, int y,
   g->drawFastHLine(40, y + 16, SCR_W - 80, pal.divider);
 }
 
+// Same row, but a lit/dim icon instead of a text label — for the sensor stats (temp/noise/away).
+static void statRowIcon(lgfx::LovyanGFX* g, const Palette& pal, int y,
+                        uint8_t icon, bool active, const char* value) {
+  Icons::drawMenuIcon(g, icon, 48, y, active ? C_ACCENT : pal.muted);
+  g->setFont(FONT_M);
+  g->setTextDatum(middle_right);
+  g->setTextColor(pal.text, pal.bg);
+  g->drawString(value, SCR_W - 40, y);
+  g->drawFastHLine(40, y + 16, SCR_W - 80, pal.divider);
+}
+
 static void sComplete(const UiModel& m) {
   lgfx::LovyanGFX* g = G();
   const Palette& pal = Theme::palette();
@@ -262,12 +279,18 @@ static void sComplete(const UiModel& m) {
   }
 #if HAS_PRESENCE
   snprintf(b, sizeof(b), "%d", m.sessionPresInt);
-  statRow(g, pal, y, "away", b); y += step;
+  statRowIcon(g, pal, y, MI_PRESENCE, m.sessionPresInt > 0, b); y += step;   // away icon lit if you stepped away
 #endif
-#if HAS_MIC
+#if HAS_ANY_MIC
   if (m.sessionNoisePct >= 0) {
     snprintf(b, sizeof(b), "%d%%", m.sessionNoisePct);
-    statRow(g, pal, y, "noise", b); y += step;
+    statRowIcon(g, pal, y, MI_NOISE, m.sessionNoisePct >= 50, b); y += step;   // noise icon lit when notably loud
+  }
+#endif
+#if HAS_TEMP
+  if (m.sessionTempC > -100.0f) {   // real reading (NaN compares false) -> show the temperature
+    snprintf(b, sizeof(b), "%.0fC", m.sessionTempC);
+    statRowIcon(g, pal, y, MI_TEMP, m.sessionTempHot, b); y += step;
   }
 #endif
   Panel::push();

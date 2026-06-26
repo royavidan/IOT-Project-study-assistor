@@ -178,6 +178,7 @@ static const unsigned long TELEMETRY_PERIOD_MS = 60000UL;
 static const unsigned long TELEMETRY_MIN_GAP_MS = 3000UL;
 static const unsigned long SESSION_CLOCK_MS    = 10UL;
 static const unsigned long TOF_POLL_MS         = 500UL;   // ToF ranging period (shares the bus with touch; modest rate)
+#define TOF_DEBUG 1   // 1 = print per-poll ToF diagnostics (ready/raw/status) to serial to debug a stuck reading; set 0 once confirmed
 static const unsigned long WIFI_STATUS_CACHE_MS = 1000UL;
 
 // ============================================================================
@@ -185,6 +186,7 @@ static const unsigned long WIFI_STATUS_CACHE_MS = 1000UL;
 // ============================================================================
 #define CLOUD_USE_TLS 0
 #define NTP_SERVER "pool.ntp.org"
+#define TIMEZONE_TZ "IST-2IDT,M3.4.4/26,M10.5.0"   // Israel (IST/IDT) POSIX TZ — auto DST; makes localtime_r() local
 #define WIFI_AP_SSID "MindBox-Setup"
 // Cap Wi-Fi TX power to soften the association current spike that browns out the
 // board on a marginal USB supply (lower = less peak draw). Used in Cloud::begin().
