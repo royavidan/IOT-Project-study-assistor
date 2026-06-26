@@ -141,14 +141,18 @@ void restore(const SessionCheckpoint& cp) {
   s_startEpoch = cp.startEpoch;
   s_breaks = cp.breaks;
   s_presInt = cp.presInt;
-  s_count = cp.tailCount;
-  for (int i = 0; i < cp.tailCount; i++)
+  // Clamp the restored tail length: cp.tail[] holds at most CHECKPOINT_TAIL_MAX. A corrupted-NVS tailCount
+  // would otherwise drive an OOB read of cp.tail[] and an OOB write into s_samples[]. Storage clamps on load
+  // too, so this is belt-and-suspenders — but it's free and closes a real latent buffer overflow.
+  int tailN = cp.tailCount > CHECKPOINT_TAIL_MAX ? CHECKPOINT_TAIL_MAX : cp.tailCount;
+  s_count = tailN;
+  for (int i = 0; i < tailN; i++)
     s_samples[i] = cp.tail[i];
   s_lastSample = cp.lastSampleMs;
   s_noiseSum = cp.noiseSum;
   s_noisePeak = cp.noisePeak;
   s_noiseN = cp.noiseN;
-  s_lastFle = cp.tailCount > 0 ? cp.tail[cp.tailCount - 1].fle : 0;
+  s_lastFle = tailN > 0 ? cp.tail[tailN - 1].fle : 0;
   s_presentFlag = true;
   ensureClockTimer();
   s_clockActive = true;

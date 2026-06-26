@@ -207,6 +207,7 @@ DeviceConfig loadConfig(const DeviceConfig& d) {
   c.autoStartCycle   = prefs.getBool("autoStart", d.autoStartCycle);
   c.strictMode       = prefs.getBool("strict",  d.strictMode);
   c.brightnessPct    = prefs.getUChar("bright",  d.brightnessPct);
+  c.autoBrightness   = prefs.getBool("autoBri",  d.autoBrightness);
   c.hapticLevel      = prefs.getUChar("hapLvl",  d.hapticLevel);
   c.alertTemp        = prefs.getBool("alTemp",  d.alertTemp);
   c.alertNoise       = prefs.getBool("alNoise", d.alertNoise);
@@ -244,6 +245,7 @@ void saveConfig(const DeviceConfig& c) {
   prefs.putBool("autoStart", c.autoStartCycle);
   prefs.putBool("strict",  c.strictMode);
   prefs.putUChar("bright",  c.brightnessPct);
+  prefs.putBool("autoBri",  c.autoBrightness);
   prefs.putUChar("hapLvl",  c.hapticLevel);
   prefs.putBool("alTemp",  c.alertTemp);
   prefs.putBool("alNoise", c.alertNoise);

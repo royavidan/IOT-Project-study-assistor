@@ -28,7 +28,8 @@
 #define HAS_I2S_MIC     1   // ES8311 I2S MEMS mic, DIN=IO6 — board's ONLY mic. (raises boot current — if the box reboot-loops on a weak USB supply, set back to 0)
 #define HAS_SPEAKER     1   // ES8311 I2S + FM8002E amp -> speaker connector (DOUT=IO8, AMP_EN=IO1 active-low). Boot beep confirms it; session chimes gated by Settings -> Sound.
 #define HAS_ANY_MIC     (HAS_MIC || HAS_I2S_MIC)   // any mic source present (gates noise UI/telemetry)
-#define HAS_PRESENCE    1   // VL53L1X/TOF400C ToF on the SHARED touch I2C header (IO16 SDA / IO15 SCL, Wire=port 0; touch is port 1 on the same pads — see Sensors.cpp tofClaimBus). Adds boot current; needs a solid 5V supply.
+#define HAS_PRESENCE    0   // VL53L1X/TOF400C ToF on the SHARED touch I2C header (IO16 SDA / IO15 SCL, Wire=port 0; touch is port 1 on the same pads — see Sensors.cpp tofClaimBus). Adds boot current; needs a solid 5V supply.
+                            // TEMP-OFF: the ToF (Wire/port0) and FT6336 touch (LovyanGFX/port1) are two I2C masters fighting the same pads — the ToF corrupts almost every touch read, killing touch. Off until both run off ONE master (read FT6336 over Wire too). See Touch.cpp off-screen filter.
 #define HAS_LED_RING    0   // WS2812B ring
 #define HAS_HAPTIC      0   // vibration motor — REMOVED. Disables the haptic driver so it never drives PIN_HAPTIC. Set 1 (+ a real free pin) to restore.
 #define HAS_LIGHT       1   // Keyes KY-018 photoresistor AO -> IO3 (ADC1); see docs/WIRING.md §5
@@ -111,10 +112,10 @@ static const float AUDIO_MIC_RMS_FULL = 1000.0f;
 // does select/back. To add the shaft press, free IO3 (HAS_LIGHT=0) or IO21 (HAS_TEMP=0) and set it here.
 #define PIN_ENC_CLK    2    // KY-040 A (CLK) — ex-ToF SDA (GPIO header)
 #define PIN_ENC_DT    14    // KY-040 B (DT)  — ex-ToF SCL (GPIO header)
-#define PIN_ENC_SW    -1    // KY-040 shaft button — DISABLED (no free header pin; select via touch tap)
+#define PIN_ENC_SW    -1    // KY-040 shaft button is NOT read via the encoder lib (its isEncoderButtonClicked() busy-waits ~330ms). The SW wires to IO21 and is handled by pollSideButton (PIN_BUTTON). Keep -1.
 #define PIN_I2C_SDA   16    // VL53L1X ToF I2C SDA — SHARES the touch header pad IO16 (Wire/port 0; touch is port 1)
 #define PIN_I2C_SCL   15    // VL53L1X ToF I2C SCL — SHARES the touch header pad IO15; re-routed to port 0 each ToF op (tofClaimBus), touch reclaims on its next getTouch
-#define PIN_BUTTON     3    // side tact button (INPUT_PULLUP, ADC1-capable but used digital)
+#define PIN_BUTTON    21    // encoder shaft button (SW) — SHARES IO21 with the DHT11 (active-low; the DHT's pull-up holds it high). Was IO3, where it collided with the light ADC. Read by pollSideButton: short=select, long=back.
 #define BTN_ACTIVE_LOW 1
 #define PIN_BOOT_BTN   0    // on-board BOOT button -> dark/light theme toggle
 #define PIN_HAPTIC    48    // motor driver base/gate — UNUSED (HAS_HAPTIC=0). NB: IO48 is an SD pin, not on any header.
@@ -172,6 +173,10 @@ static const int           MAX_SAMPLES        = 120;
 static const float         TEMP_MIN_VALID     = -20.0f;
 static const float         TEMP_MAX_VALID     = 60.0f;
 static const unsigned long TELEMETRY_PERIOD_MS = 60000UL;
+// Min spacing between transition-triggered telemetry POSTs. A session fires a POST on every pause/resume/
+// skip; coalescing rapid taps to one POST per this window cuts the back-to-back sockets that widen the
+// lwip pbuf-double-free race. The 60s heartbeat (TELEMETRY_PERIOD_MS) is unaffected.
+static const unsigned long TELEMETRY_MIN_GAP_MS = 3000UL;
 static const unsigned long SESSION_CLOCK_MS    = 10UL;
 static const unsigned long TOF_POLL_MS         = 200UL;
 static const unsigned long WIFI_STATUS_CACHE_MS = 1000UL;
@@ -185,6 +190,11 @@ static const unsigned long WIFI_STATUS_CACHE_MS = 1000UL;
 // Cap Wi-Fi TX power to soften the association current spike that browns out the
 // board on a marginal USB supply (lower = less peak draw). Used in Cloud::begin().
 #define WIFI_TX_POWER WIFI_POWER_8_5dBm
+// Wi-Fi modem power-save. 0 = radio always ON (WIFI_PS_NONE) — keeps the link solid so periodic HTTP
+// doesn't stall and trip the task watchdog (the "reboots every few minutes while connected" bug). 1 =
+// WIFI_PS_MIN_MODEM (lower average current). Use 1 ONLY if disabling it browns out the board on a weak
+// 5V/USB supply (on-screen reset flips to "brownout"); the durable fix for that is a stronger supply.
+#define WIFI_MODEM_SLEEP 0
 #define WIFI_SCAN_MAX 16                                   // on-device scan list cap
 static const unsigned long WIFI_CONNECT_TIMEOUT_MS = 15000UL; // on-device join wait
 static const unsigned long PORTAL_TIMEOUT_MS = 300000UL;
@@ -214,7 +224,11 @@ static const unsigned long UPLOAD_RETRY_MAX_MS  = 300000UL;
 // app-level write can't stop a boot-stage brownout (the "E BOD" loop) — and masking it
 // turns a clean reboot into a dead-dark hang. The real fix is a stronger 5V supply.
 #define DISABLE_BROWNOUT_DETECTOR 0
-static const unsigned long WDT_TIMEOUT_MS = 15000UL;
+// 30s (was 15s): the net task does blocking HTTPClient calls whose setConnectTimeout/setTimeout are NOT a
+// hard bound on arduino-esp32 — a stalled/half-open socket can block ~18-20s. The WDT must out-wait that
+// worst case so one unlucky request can't reboot the box. The loop task feeds the WDT every ~1ms, so the
+// wider margin doesn't weaken its protection.
+static const unsigned long WDT_TIMEOUT_MS = 30000UL;
 static const unsigned long I2C_HEALTH_MS  = 2000UL;
 static const uint16_t      I2C_TIMEOUT_MS = 50;
 

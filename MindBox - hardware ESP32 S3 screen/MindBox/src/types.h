@@ -57,7 +57,8 @@ struct DeviceConfig {
   uint16_t longBreakMin;       // long break duration (minutes)
   bool     autoStartCycle;     // start next interval automatically (skip NEXT prompt)
   bool     strictMode;         // block End/Skip during a focus block
-  uint8_t  brightnessPct;      // screen backlight 0..100
+  uint8_t  brightnessPct;      // screen backlight 0..100 (manual; used when autoBrightness is off)
+  bool     autoBrightness;     // drive the backlight from the KY-018 light sensor (overrides brightnessPct)
   uint8_t  hapticLevel;        // 0=low 1=med 2=high motor strength
   // Environment interference alerts (each fires only if its HAS_* sensor is wired AND enabled).
   bool     alertTemp;          // warn on temperature out of comfort band
@@ -279,7 +280,7 @@ inline DeviceConfig defaultConfig() {
            /*dailyGoal*/ 180,
            /*longBreakEnabled*/ true, /*longBreakEvery*/ 4, /*longBreakMin*/ 15,
            /*autoStartCycle*/ false, /*strictMode*/ false,
-           /*brightnessPct*/ 100, /*hapticLevel*/ 2,
+           /*brightnessPct*/ 100, /*autoBrightness*/ false, /*hapticLevel*/ 2,
            /*alertTemp*/ true, /*alertNoise*/ true, /*alertLight*/ true,
            /*alertPresence*/ true, /*alertNudge*/ true,
            /*tempMinC*/ 18, /*tempMaxC*/ 26, /*noiseMaxDb*/ 60,

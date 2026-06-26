@@ -116,7 +116,7 @@ static void enter(SysState s) {
 static void enterPaused(PauseReason reason) {
   s_pauseReason = reason;
 #if USE_TOUCH
-  s_pausedOverlay = false;   // touch: start on the bare paused timer (play button)
+  s_pausedOverlay = false;   // touch: paused always shows the bare timer; ANY tap resumes (see ST_PAUSED)
 #else
   s_pausedOverlay = true;    // no-touch: straight to the Resume/End menu (unchanged)
 #endif
@@ -284,13 +284,6 @@ static void startSession() {
 // (re-runs Session::start for the same mode/duration and re-enters ST_RUNNING).
 static void restartCurrentInterval() {
   startSessionMode(s_mode, activeDur());
-}
-
-// Strict mode: while a FOCUS block is active (running or paused) the user can't
-// End or Skip — only pause/restart/add-time. Enforces finishing the block.
-static bool strictFocusLock() {
-  return s_cfg.strictMode && s_mode == MODE_WORK &&
-         (s_state == ST_RUNNING || s_state == ST_PAUSED);
 }
 
 // Evaluate live environment interference vs comfort thresholds. Only sensors that
@@ -489,11 +482,11 @@ static void handleMenuAction(MenuAction a) {
       enter(ST_RUNNING);
       break;
     case MENU_END_SESSION:
-      if (strictFocusLock()) break;   // can't end a focus block in strict mode
+      Menu::runningDismiss();         // close the SESSION overlay before leaving the running state
       beginEnd("interrupted");
       break;
     case MENU_SKIP_INTERVAL:
-      if (strictFocusLock()) break;   // strict mode: no early exit of a focus block (same as End)
+      Menu::runningDismiss();         // close the overlay so the NEXT interval shows the timer, not the menu
       Session::pauseClock();          // freeze elapsed (already paused via the menu; idempotent)
       onTimerComplete();              // credits ACTUAL focus, advances to the next interval
       break;
@@ -701,6 +694,19 @@ void tick() {
     Sound::setEnabled(quiet ? false : s_cfg.soundEnabled);
   }
 
+  // Auto-brightness: drive the backlight from the KY-018 light sensor (~1Hz, with hysteresis).
+  // Yields to quiet hours (dims to 15) and to manual mode (autoBrightness off keeps brightnessPct).
+#if HAS_LIGHT
+  static uint32_t s_lastAutoBri = 0;
+  static int      s_autoBriPct  = -1;
+  if (s_cfg.autoBrightness && !quiet && now - s_lastAutoBri > 1000) {
+    s_lastAutoBri = now;
+    float lux = 0, var = 0; Sensors::readLight(lux, var);
+    int pct = map(constrain((int)lux, 0, 1000), 0, 1000, 20, 100);  // dark -> 20%, bright -> 100%
+    if (abs(pct - s_autoBriPct) >= 5) { s_autoBriPct = pct; Panel::setBrightness((uint8_t)pct); }
+  }
+#endif
+
   // Apply settings the net task pulled from the server. Device menu settings
   // live in NVS and survive power cycles — routine config polls must NOT
   // overwrite them (only seed once on first account link).
@@ -792,10 +798,9 @@ void tick() {
     case ST_RUNNING:
       if (Sensors::faulted()) { enter(ST_ERROR); break; }
       if (Menu::runningActive()) {
-        // Long-press inside the overlay = back to the running screen (not abort),
-        // so display toggles can be flipped without ending the session. Abort is
-        // still a long-press on the bare timer (overlay closed) below.
-        if (btn == 2) { Menu::runningDismiss(); s_uiDirty = true; break; }
+        // Back (long-press) is handled inside runningTick: in the Settings sub-list it steps back to the
+        // top overlay; in the top overlay it dismisses (back to the running timer). The session never
+        // ends here — End is an explicit row; abort is a long-press on the bare timer below.
         MenuAction ra = Menu::runningTick(rot, btn);
         if (rot || btn) s_uiDirty = true;
         handleMenuAction(ra);
@@ -803,10 +808,8 @@ void tick() {
       }
       // Control circles (touch): gear opens options; transport acts directly.
       { int ta = Inputs::timerAction();
-        if (ta == TimerScreen::TA_MENU) {   // gear: opening options is a pause (clock stops here)
-          saveCheckpointNow();
-          enterPaused(PAUSE_MANUAL);
-          s_pausedOverlay = true;           // land on Resume/Skip/End, not the bare paused timer
+        if (ta == TimerScreen::TA_MENU) {   // tap: open the SESSION menu (Pause/Skip/End/Settings) — clock keeps running
+          Menu::runningOpen();
           s_uiDirty = true;
           break;
         }
@@ -818,14 +821,13 @@ void tick() {
           enterPaused(PAUSE_MANUAL);
           break;
         }
-        if (ta == TimerScreen::TA_SKIP)  { if (!strictFocusLock()) { Session::pauseClock(); onTimerComplete(); } break; }
+        if (ta == TimerScreen::TA_SKIP)  { Session::pauseClock(); onTimerComplete(); break; }
         if (ta == TimerScreen::TA_RESET) { restartCurrentInterval(); break; }
       }
-      if (btn == 2) { if (!strictFocusLock()) beginEnd("aborted"); break; }
-      if (btn == 1) {   // empty-space tap = pause + options (same as the gear)
+      if (btn == 2) { beginEnd("aborted"); break; }
+      if (btn == 1) {   // physical click = pause (touch taps open the options menu via the gear path)
         saveCheckpointNow();
         enterPaused(PAUSE_MANUAL);
-        s_pausedOverlay = true;
         s_uiDirty = true;
         break;
       }
@@ -883,34 +885,27 @@ void tick() {
         break;
       }
 #if USE_TOUCH
-      if (!s_pausedOverlay) {
-        // Bare paused timer: gear opens options; transport circles act directly.
-        int ta = Inputs::timerAction();
-        if (ta == TimerScreen::TA_MENU) { s_pausedOverlay = true; s_uiDirty = true; break; }
-        if (ta == TimerScreen::TA_PAUSE) {   // play = resume
-          Session::resumeClock();
-          saveCheckpointNow();
-          Haptics::resume();
-          Sound::resume();
-          enter(ST_RUNNING);
-          break;
-        }
-        if (ta == TimerScreen::TA_RESET) { restartCurrentInterval(); break; }
-        if (ta == TimerScreen::TA_SKIP)  { Session::pauseClock(); onTimerComplete(); break; }
-        if (btn == 2) { beginEnd("interrupted"); break; }   // physical long-press = end
+      // Paused timer (touch): ANY tap resumes — no paused menu. A long-press (encoder/side button)
+      // ends the session as a fallback. Skip/End during a session are done from the running options menu.
+      if (Inputs::timerAction() != TimerScreen::TA_NONE || btn == 1) {
+        Session::resumeClock();
+        saveCheckpointNow();
+        Haptics::resume();
+        Sound::resume();
+        enter(ST_RUNNING);
         break;
       }
-      // Options overlay open: back closes it to the bare paused timer.
-      if (btn == 2) { s_pausedOverlay = false; s_uiDirty = true; break; }
+      if (btn == 2) { beginEnd("interrupted"); break; }   // physical long-press = end (fallback)
+      break;
 #else
       if (btn == 2) { beginEnd("interrupted"); break; }
-#endif
       {
         MenuAction pa = Menu::pausedTick(rot, btn);
         if (rot || btn) s_uiDirty = true;
         handleMenuAction(pa);
       }
       break;
+#endif
 
     case ST_COMPLETE:
       if (now - s_stateAt >= 2000) {

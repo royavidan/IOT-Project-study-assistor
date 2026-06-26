@@ -139,13 +139,10 @@ static void pollTouch() {
     return;
   }
 
-  // On the bare timer screen, a tap on a control circle dispatches directly
-  // (transport or the gear=options button); swipes and empty-space taps do
-  // nothing, so a near-miss can't accidentally open the options overlay.
+  // On the bare timer screen ANY tap opens the session menu (deterministic) — the old tiny transport
+  // circles split taps between two overlays and mostly missed; now one tap = one menu. Swipes do nothing.
   if (s_timerScreen) {
-    if (g != Touch::G_TAP) return;
-    int ta = TimerScreen::hitTest(x, y);
-    if (ta != TimerScreen::TA_NONE) s_timerAction = ta;
+    if (g == Touch::G_TAP) s_timerAction = TimerScreen::TA_MENU;
     return;
   }
 
@@ -153,9 +150,14 @@ static void pollTouch() {
   if (g == Touch::G_DRAG_UP)   { s_rotDir =  1; s_rotated = true; return; }
   if (g == Touch::G_DRAG_DOWN) { s_rotDir = -1; s_rotated = true; return; }
 
-  // --- tap ---
+  // --- tap --- select the row the finger actually hit; never fall back to the highlighted row, so
+  // aiming for "End" can't accidentally trigger the highlighted "Pause". A miss on a list does nothing.
   if (Display::backHit(x, y)) { s_button = 2; return; }   // visible Back button
-  s_button = 1;   // one tap anywhere = enter the currently-highlighted row
+  int cur = Display::selectedRow();                       // >=0 only on a row-list menu
+  int hit = Display::rowHitTest(x, y);                    // visible row under the finger, or -1
+  if (cur >= 0 && hit < 0) return;                        // row menu, tapped a gap/margin -> ignore
+  if (cur >= 0 && hit != cur) { s_rotDir = hit - cur; s_rotated = true; }  // walk the cursor onto it
+  s_button = 1;   // select the tapped row (or confirm on a screen with no rows, e.g. value pickers)
 }
 #endif
 

@@ -1,6 +1,7 @@
 #define LGFX_USE_V1
 #include <Wire.h>
 #include "esp_task_wdt.h"
+#include "esp_heap_caps.h"
 
 #include "src/config.h"
 #if DISABLE_BROWNOUT_DETECTOR
@@ -49,6 +50,19 @@ static void bootMsg(const char* step) {
   Display::show();
 }
 
+// Heap OOM tripwire: the instant ANY allocation fails, print the size + remaining internal heap, so an
+// out-of-memory panic (the net task does String-heavy HTTP on a tight internal heap) names itself in
+// Serial instead of just rebooting as a generic "panic/crash". Costs nothing until an alloc fails.
+static void onAllocFail(size_t size, uint32_t caps, const char* fn) {
+  // Use a stack buffer + Serial.write, NOT Serial.printf — printf heap-allocates a temp buffer, which
+  // would itself fail in this exact OOM context. snprintf into a fixed buffer allocates nothing.
+  char buf[128];
+  int n = snprintf(buf, sizeof(buf), "[heap] ALLOC FAILED %u bytes caps=0x%x free_internal=%u in %s\n",
+                   (unsigned)size, (unsigned)caps,
+                   (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), fn ? fn : "?");
+  if (n > 0) Serial.write((const uint8_t*)buf, n < (int)sizeof(buf) ? n : (int)sizeof(buf) - 1);
+}
+
 void setup() {
 #if DISABLE_BROWNOUT_DETECTOR
   // FIRST thing, before the radio/peripherals draw current: stop the brownout
@@ -58,6 +72,7 @@ void setup() {
 #endif
   Serial.begin(115200);
   delay(200);
+  heap_caps_register_failed_alloc_callback(onAllocFail);   // OOM tripwire (see above)
 
   // ToF I2C (Wire/port 0) is brought up later in Sensors::init() — AFTER Display::init() so the
   // FT6336 touch (port 1) claims the shared IO16/15 pads first; the ToF then re-claims per read.

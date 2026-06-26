@@ -1,5 +1,6 @@
 #include "Panel.h"
 #include <Arduino.h>
+#include "esp_heap_caps.h"
 
 LGFX_Hosyond_S3_28::LGFX_Hosyond_S3_28() {
   { // SPI bus for the panel
@@ -80,11 +81,13 @@ void begin() {
   lcd.init();
   lcd.setRotation(SCR_ROTATION);
   lcd.setColorDepth(16);
-  spr.setColorDepth(16);
-  // Draw into INTERNAL RAM, not PSRAM. Drawing a full frame into a PSRAM-backed sprite is ~10x
-  // slower — every glyph/shape pixel is a high-latency PSRAM read-modify-write (that was the
-  // ~340ms/frame stall; the DMA push itself was only ~34ms). This runs before Cloud::begin()
-  // brings up Wi-Fi, so the ~150KB internal block is usually still free.
+  // 8-bit (RGB332) sprite: the UI is near-monochrome (charcoal + white + one red), so 16-bit colour is
+  // wasted. 8bpp HALVES the buffer 150KB->75KB, freeing ~75KB of INTERNAL RAM for the Wi-Fi/HTTP stack
+  // (which was running the heap out -> OOM panics). LovyanGFX converts RGB332->RGB565 on pushSprite.
+  spr.setColorDepth(8);
+  // Keep the buffer in INTERNAL RAM, not PSRAM. A PSRAM-backed sprite is ~10x slower to draw into (every
+  // pixel a high-latency read-modify-write — the old ~340ms/frame stall); at 75KB it now fits comfortably
+  // alongside Wi-Fi. This runs before Cloud::begin() brings up Wi-Fi.
   spr.setPsram(false);
   s_useSprite   = (spr.createSprite(SCR_W, SCR_H) != nullptr);
   s_spritePsram = false;
@@ -93,6 +96,13 @@ void begin() {
     s_useSprite   = (spr.createSprite(SCR_W, SCR_H) != nullptr);
     s_spritePsram = s_useSprite;
   }
+  // Heap breadcrumb: confirms the 8-bit buffer landed in internal RAM and how much internal heap is left
+  // (was ~62KB with the old 16-bit buffer; should be ~137KB now). 'largest' flags any fragmentation.
+  Serial.printf("[panel] sprite %s %s  free internal=%u largest=%u\n",
+                s_useSprite ? "8bpp" : "DIRECT",
+                s_spritePsram ? "PSRAM" : "INTERNAL",
+                (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
 }
 
 bool usingSprite()   { return s_useSprite; }

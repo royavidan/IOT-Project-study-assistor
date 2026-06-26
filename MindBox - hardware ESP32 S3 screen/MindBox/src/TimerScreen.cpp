@@ -86,20 +86,21 @@ void render(const UiModel& m) {
     g->drawString(interferenceLabel(m.interference), cx, 188);
   }
 
-  // Thin-outline controls; only the centre (play/pause) carries the red ring.
-  for (auto& bt : kButtons) {
-    uint16_t ring = (bt.action == TA_PAUSE) ? C_ACCENT
-                  : (bt.action == TA_MENU)  ? pal.muted : pal.text;
-    g->drawCircle(bt.cx, bt.cy, bt.r, ring);
-    switch (bt.action) {
-      case TA_RESET: Icons::skipPrev(g, bt.cx, bt.cy, pal.text); break;
-      case TA_PAUSE:
-        if (paused) Icons::play(g, bt.cx, bt.cy, pal.text);
-        else        Icons::pause(g, bt.cx, bt.cy, pal.text);
-        break;
-      case TA_SKIP:  Icons::skipNext(g, bt.cx, bt.cy, pal.text); break;
-      case TA_MENU:  Icons::drawMenuIcon(g, MI_SETTINGS, bt.cx, bt.cy, pal.muted); break;
-    }
+  // Bottom affordance. PAUSED: a play triangle + "tap to resume" — ANY tap resumes (StateMachine ST_PAUSED).
+  // RUNNING: a gear + "tap for options" — ANY tap opens the Pause/Skip/End menu.
+  g->setTextDatum(middle_center);
+  g->setFont(FONT_S);
+  if (paused) {
+    const int py = 196;
+    g->fillTriangle(cx - 7, py - 9, cx - 7, py + 9, cx + 10, py, pal.text);   // play / resume glyph
+    g->setTextColor(pal.muted, pal.bg);
+    g->drawString("tap to resume", cx, 218);
+  } else {
+    const Btn& gear = kButtons[3];   // TA_MENU
+    g->drawCircle(gear.cx, gear.cy, gear.r, pal.muted);
+    Icons::drawMenuIcon(g, MI_SETTINGS, gear.cx, gear.cy, pal.muted);
+    g->setTextColor(pal.muted, pal.bg);
+    g->drawString("tap for options", cx, 212);
   }
 
   Panel::push();

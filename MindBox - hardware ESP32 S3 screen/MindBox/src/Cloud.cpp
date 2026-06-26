@@ -5,10 +5,12 @@
 #include "UploadQueue.h"
 #include <ESP.h>
 #include "esp_task_wdt.h"
+#include "esp_heap_caps.h"
 
 #if ENABLE_WIFI
 #include <WiFi.h>
 #include <time.h>
+#include <esp_sntp.h>     // sntp_set_sync_interval / sntp_restart — stop the periodic re-sync racing HTTP
 #include <WebServer.h>
 #include <DNSServer.h>
 #endif
@@ -29,6 +31,9 @@ static bool          s_ntpStarted = false;
 static uint32_t      s_lastWifiTry = 0;
 static volatile bool s_cachedOnline = false;
 static volatile int  s_rssi = 0;
+static char          s_ssidCache[33] = {0};   // SSID/IP snapshots written by the net task (core 0) and
+static char          s_ipCache[16]   = {0};   // read by the UI getters (core 1). Never call WiFi.* from
+                                              // core 1 — a concurrent radio mutation panics (LoadProhibited).
 static volatile bool s_credsDirty = false;
 
 // On-device Wi-Fi scan (net task scans; UI loop reads the snapshot). Single
@@ -65,12 +70,30 @@ static volatile bool     s_unpairPending = false;
 static char              s_pairCode[8] = {0};
 
 static uint32_t s_netSuspendUntil = 0;
+static const int HTTP_MAX_BODY = 4096;   // cap on the response body we read; trusted /ingest JSON is tiny
+
+// After a (re)connect, let lwIP settle before the FIRST HTTP request. Starting SNTP (configTime opens a
+// UDP socket + async DNS) and opening the first TCP socket in the SAME task pass races the lwip core and
+// double-frees a pbuf (panic: "assert failed: pbuf_free ... p->ref > 0"). This quiet gap keeps SNTP/DNS
+// setup and the first connect in separate iterations. See manageWifi()/cloudTask().
+static const uint32_t FIRST_NET_SETTLE_MS = 500;
+static uint32_t       s_firstOnlineMs     = 0;   // millis() of the latest offline->online transition
 
 // Real reachability of the BACKEND (not just the Wi-Fi link). Updated on every
 // actual HTTP attempt: a positive code = the server answered (reachable, even if
 // 401/404); a non-positive code = connect/timeout (unreachable / port blocked).
 static volatile bool s_serverOk       = false;
 static volatile int  s_lastHttpStatus = 0;
+
+// Persistent keep-alive HTTP connection. ONE HTTPClient + WiFiClient reused across all /ingest/* requests
+// (they all hit the same host:port = s_baseUrl) instead of constructing and tearing down a fresh socket per
+// call. TCP teardown is exactly where the arduino-esp32 lwip pbuf double-free ("pbuf_free p->ref > 0") lives,
+// so setReuse(true) — which keeps the socket open between requests — collapses the connect/teardown churn
+// (~2 sockets/min) to near-zero and stops TIME_WAIT/PCB accumulation. Persisting the WiFiClient is the key
+// part: a stack-local client's destructor would close the socket every call, defeating reuse.
+static HTTPClient s_http;
+static WiFiClient s_plain;
+static bool       s_httpReuseInit = false;
 
 // ---- HTTP core. Returns status (>0) or negative error. Connect/total timeouts
 // are capped and a failure suspends all HTTP briefly so an unreachable server
@@ -79,28 +102,50 @@ static int httpRequest(const char* method, const String& url,
                        const String& body, String& respBody) {
   if (s_baseUrl.length() == 0 || s_secret.length() == 0) return -1;
   if ((int32_t)(millis() - s_netSuspendUntil) < 0) return -99;
-  HTTPClient http;
-  WiFiClient plain;
+  if (!s_httpReuseInit) { s_http.setReuse(true); s_httpReuseInit = true; }
   bool https = url.startsWith("https:");
   bool ok;
 #if CLOUD_USE_TLS
-  WiFiClientSecure secure;
-  if (https) { secure.setInsecure(); ok = http.begin(secure, url); }
-  else       { ok = http.begin(plain, url); }
+  // TLS path stays per-call (TLS is off by default; a persistent secure socket would dangle on the
+  // stack-local WiFiClientSecure between calls). The plain path below uses the shared keep-alive client.
+  HTTPClient tlsHttp; WiFiClientSecure secure;
+  HTTPClient* hp;
+  if (https) { secure.setInsecure(); ok = tlsHttp.begin(secure, url); hp = &tlsHttp; }
+  else       { ok = s_http.begin(s_plain, url); hp = &s_http; }
 #else
   if (https) { Serial.println("[cloud] https URL needs CLOUD_USE_TLS=1 in config.h"); return -3; }
-  ok = http.begin(plain, url);
+  ok = s_http.begin(s_plain, url);
+  HTTPClient* hp = &s_http;
 #endif
   if (!ok) return -2;
+  HTTPClient& http = *hp;
   http.setConnectTimeout(HTTP_CONNECT_TIMEOUT_MS);
   http.setTimeout(HTTP_TIMEOUT_MS);
   http.addHeader("content-type", "application/json");
   http.addHeader("x-device-secret", s_secret);
   int code = (strcmp(method, "POST") == 0) ? http.POST(body) : http.GET();
   s_lastHttpStatus = code;
-  if (code > 0) { respBody = http.getString(); s_netSuspendUntil = 0; s_serverOk = true; }
-  else { s_netSuspendUntil = millis() + NET_FAIL_BACKOFF_MS; s_serverOk = false; }
+  if (code > 0) {
+    // Bound the body read: the /ingest responses are small trusted JSON. An unbounded getString() on a
+    // slow or large body would stretch this call toward the 15s task-WDT and spike heap on the 16KB net
+    // task (a likely OOM-panic source given the low free heap). getSize() is Content-Length, or -1 when
+    // unknown/chunked (the read timeout still bounds that case).
+    respBody = (http.getSize() <= HTTP_MAX_BODY) ? http.getString() : String();
+    s_netSuspendUntil = 0; s_serverOk = true;
+  } else {
+    s_netSuspendUntil = millis() + NET_FAIL_BACKOFF_MS; s_serverOk = false;
+  }
+  // With setReuse(true) on the plain client, end() drains the body but keeps the TCP socket open for the
+  // next same-host request (no FIN/teardown — so no pbuf-free for the next pass to double). A negative code
+  // path leaves a dead socket; the next begin() reconnects.
   http.end();
+  // Feed the task watchdog around EVERY HTTP call. cloudTask() feeds it once per loop iteration, but one
+  // iteration can fire up to four back-to-back blocking requests (pair/telemetry/config/upload); on a slow
+  // server 4x~4.5s exceeds the 15s WDT -> panic. Resetting here keeps any burst of calls safe.
+  esp_task_wdt_reset();
+  // Give lwIP a beat to finish any pbuf housekeeping from this request before the next socket op on the
+  // net task — shrinks the residual double-free window. Cheap: this is the net task, not the UI loop.
+  vTaskDelay(pdMS_TO_TICKS(20));
   return code;
 }
 
@@ -230,7 +275,17 @@ static void pushTelemetry() {
 static void syncDownlink() {
   String resp;
   int code = httpRequest("GET", s_baseUrl + "/ingest/config?deviceId=" + s_deviceId, "", resp);
-  if (code != 200) return;
+  if (code != 200) {
+    // Don't fail silently — "no server" was undiagnosable without this. Prints the code AND the exact
+    // URL the box is dialing (catches a stale NVS IP). -1=refused -11=timeout -99=in back-off
+    // 401=secret mismatch 404=wrong route. Rate-limited so it doesn't spam.
+    static uint32_t s_lastSyncLog = 0;
+    if (millis() - s_lastSyncLog > 5000) {
+      s_lastSyncLog = millis();
+      Serial.printf("[cloud] config sync failed (%d) url=%s\n", code, s_baseUrl.c_str());
+    }
+    return;
+  }
   CloudSettings cs;
   cs.paired           = jBool(resp, "paired", false);
   cs.showTimer        = jBool(resp, "showTimer", true);
@@ -393,18 +448,36 @@ static void manageWifi() {
   bool conn = (WiFi.status() == WL_CONNECTED);
   s_cachedOnline = conn;
   s_rssi = conn ? WiFi.RSSI() : 0;
+  if (conn) {   // snapshot SSID/IP here (core 0) so the UI getters never call WiFi.* on core 1
+    WiFi.SSID().toCharArray(s_ssidCache, sizeof(s_ssidCache));
+    WiFi.localIP().toString().toCharArray(s_ipCache, sizeof(s_ipCache));
+  } else { s_ssidCache[0] = 0; s_ipCache[0] = 0; }
   if (!conn) { s_serverOk = false; s_lastHttpStatus = 0; }   // no link -> backend definitely unreachable
   if (!conn) {
+    s_firstOnlineMs = millis();   // keep the settle gate fresh so the FIRST request after a (re)connect
+                                  // waits 500ms and can't share a task pass with the netif rebuild
     if (s_ssid.length() && millis() - s_lastWifiTry > WIFI_RETRY_MS) {
       s_lastWifiTry = millis();
       WiFi.begin(s_ssid.c_str(), s_pass.c_str());
     }
   } else {
-    if (!s_ntpStarted) { configTime(0, 0, NTP_SERVER); s_ntpStarted = true; }
+    if (!s_ntpStarted) {
+      configTime(0, 0, NTP_SERVER);
+      // Cap the SNTP poll to 12h. At the default (~1h, and FAR more often when pool.ntp.org is
+      // unreachable on a LAN) the background re-sync reopens a DNS/UDP socket on the tcpip thread while
+      // the net task is mid-HTTP -> the lwip pbuf double-free panic. 12h drift is seconds, irrelevant here.
+      sntp_set_sync_interval(12UL * 60 * 60 * 1000);
+      sntp_restart();   // apply the new interval now, not after the old one elapses
+      s_ntpStarted = true;
+    }
     if (!s_wasOnline) {
+      s_firstOnlineMs = millis();   // gate the first HTTP burst (below) so it doesn't race SNTP startup
       s_uploadBackoffMs = UPLOAD_RETRY_MIN_MS;
       s_uploadSoon = true;
       s_configNow = true;    // learn paired state + settings without waiting 60 s
+      Serial.printf("[net] online: free internal=%u largest=%u\n",   // headroom AFTER Wi-Fi's ~45KB
+                    (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                    (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
     }
   }
   s_wasOnline = conn;
@@ -412,9 +485,32 @@ static void manageWifi() {
 
 static void cloudTask(void*) {
   esp_task_wdt_add(nullptr);
+  // Bring the radio up HERE (core 0) — not in Cloud::begin(), which runs in setup() on core 1. Touching
+  // WiFi.* on core 1 and then driving the stack from this task opens a cross-core association window that
+  // can corrupt lwip pbufs. Keeping every WiFi.* call on this one task removes that window.
+  WiFi.mode(WIFI_STA);
+  WiFi.setTxPower(WIFI_TX_POWER);     // soften the association current spike (brownout mitigation)
+  // Modem sleep OFF by default (WIFI_MODEM_SLEEP=0): power-save naps drop packets / sleep mid-handshake,
+  // stalling periodic HTTP long enough to trip the task watchdog. Always-on keeps the link solid.
+  WiFi.setSleep(WIFI_MODEM_SLEEP ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE);
+  // NB: deliberately NOT WiFi.setAutoReconnect(true). Auto-reconnect runs in the arduino-esp32 Wi-Fi EVENT
+  // task, which would re-associate / rebuild the netif concurrently with this net task's in-flight HTTP
+  // socket -> a cross-actor lwip pbuf double-free window. Reconnection is instead serialized onto THIS task:
+  // manageWifi() re-begins every WIFI_RETRY_MS while the link is down. Keeps 100% of socket lifecycle here.
+  if (s_ssid.length()) WiFi.begin(s_ssid.c_str(), s_pass.c_str());
   uint32_t lastTele = 0, lastSync = 0;
   for (;;) {
     esp_task_wdt_reset();
+
+    // Heap trend (rate-limited ~30s): if free heap drifts down over minutes while connected, a per-request
+    // socket/TIME_WAIT leak is also in play; flat heap means the reboots are purely the network stall.
+    static uint32_t s_lastHeapLog = 0;
+    if (millis() - s_lastHeapLog > 30000) {
+      s_lastHeapLog = millis();
+      Serial.printf("[net] heap free=%u internal=%u\n",
+                    (unsigned)ESP.getFreeHeap(),
+                    (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    }
 
     // Wi-Fi setup portal takes over the radio while up: serve the page, skip all
     // STA reconnect / telemetry / upload so AP and STA logic never fight.
@@ -473,22 +569,30 @@ static void cloudTask(void*) {
     }
 
     manageWifi();
-    if (s_cachedOnline) {
-      if (s_pairPending)   { s_pairPending = false;   doPairing(); }
-      // Unpair BEFORE the config fetch below so the server releases ownership
-      // and the same/next downlink can't re-report paired:true. Retry until it
-      // lands (only clear the flag on success) so a transient error can't leave
-      // the box locally signed out but still linked server-side.
-      if (s_unpairPending && doUnpair()) s_unpairPending = false;
-      if (s_pushNow || millis() - lastTele > TELEMETRY_PERIOD_MS) {
+    // Gate the first HTTP burst until lwIP settles after connect (SNTP/DNS started in manageWifi must not
+    // share a task pass with the first TCP connect — that double-frees a pbuf and panics).
+    //
+    // ONE network request per pass (else-if chain): each blocking HTTPClient call can stall ~18-20s if a
+    // socket goes half-open (the connect/read timeouts are NOT hard-bounded on arduino-esp32). Firing
+    // several back-to-back stacks those worst cases inside one watchdog window -> task-WDT reboot. The WDT
+    // is fed at the top of every pass, so spacing them one-per-iteration keeps a single stall survivable
+    // and cuts socket churn. The next due request just runs on the following pass (NET_TASK_PERIOD_MS later).
+    if (s_cachedOnline && millis() - s_firstOnlineMs > FIRST_NET_SETTLE_MS) {
+      if (s_pairPending)        { s_pairPending = false; doPairing(); }
+      // Unpair BEFORE the config fetch so the server releases ownership and the next downlink can't
+      // re-report paired:true. Retry until it lands (clear the flag only on success).
+      else if (s_unpairPending) { if (doUnpair()) s_unpairPending = false; }
+      // A transition POST (s_pushNow) is honored only once per TELEMETRY_MIN_GAP_MS, so a rapid
+      // pause->resume->skip burst collapses to one POST instead of several back-to-back sockets (each an
+      // lwip double-free window). If gated, s_pushNow stays set and fires on a later pass. 60s heartbeat as-is.
+      else if ((s_pushNow && millis() - lastTele > TELEMETRY_MIN_GAP_MS)
+               || millis() - lastTele > TELEMETRY_PERIOD_MS) {
         s_pushNow = false; lastTele = millis(); pushTelemetry();
       }
-      if (s_configNow || millis() - lastSync > CONFIG_FETCH_MS) {
-        s_configNow = false;
-        lastSync = millis();
-        syncDownlink();
+      else if (s_configNow || millis() - lastSync > CONFIG_FETCH_MS) {
+        s_configNow = false; lastSync = millis(); syncDownlink();
       }
-      drainUploadQueue();
+      else drainUploadQueue();
     }
     vTaskDelay(pdMS_TO_TICKS(NET_TASK_PERIOD_MS));
   }
@@ -500,16 +604,20 @@ namespace Cloud {
 void begin() {
 #if ENABLE_WIFI
   loadCreds();
-  WiFi.mode(WIFI_STA);
-  WiFi.setTxPower(WIFI_TX_POWER);     // soften the association current spike (brownout mitigation)
-  WiFi.setSleep(WIFI_PS_MIN_MODEM);   // modem power-save lowers average radio draw
-  WiFi.setAutoReconnect(true);
-  if (s_ssid.length()) WiFi.begin(s_ssid.c_str(), s_pass.c_str());
 #endif
 #if ENABLE_CLOUD
   s_mux = xSemaphoreCreateMutex();
   s_cmdQueue = xQueueCreate(8, sizeof(RemoteCmd));
+  // NOTE: the radio is brought up at the top of cloudTask() (core 0), NOT here — Cloud::begin() runs in
+  // setup() on core 1, and touching WiFi.* there before handing the stack to the net task races lwip.
   xTaskCreatePinnedToCore(cloudTask, "net", 16384, nullptr, 1, nullptr, 0);
+#elif ENABLE_WIFI
+  // Wi-Fi without the cloud net task (unusual build): no task to own the radio, so bring it up here.
+  WiFi.mode(WIFI_STA);
+  WiFi.setTxPower(WIFI_TX_POWER);     // soften the association current spike (brownout mitigation)
+  WiFi.setSleep(WIFI_MODEM_SLEEP ? WIFI_PS_MIN_MODEM : WIFI_PS_NONE);
+  WiFi.setAutoReconnect(true);
+  if (s_ssid.length()) WiFi.begin(s_ssid.c_str(), s_pass.c_str());
 #endif
 }
 
@@ -588,7 +696,7 @@ int lastHttpStatus() {
 
 String ssid() {
 #if ENABLE_WIFI
-  return s_cachedOnline ? WiFi.SSID() : String();
+  return String(s_ssidCache);     // cached snapshot from the net task — no cross-core WiFi.* call
 #else
   return String();
 #endif
@@ -596,7 +704,7 @@ String ssid() {
 
 String ipString() {
 #if ENABLE_WIFI
-  return s_cachedOnline ? WiFi.localIP().toString() : String();
+  return String(s_ipCache);       // cached snapshot from the net task — no cross-core WiFi.* call
 #else
   return String();
 #endif
@@ -765,14 +873,21 @@ void provisionFromSerial() {
 #if ENABLE_WIFI
   Serial.println("\n=== Wi-Fi / cloud provisioning ===");
   Serial.println("(Tip: you can also set Wi-Fi on the box itself — Device > Wi-Fi Setup.)");
-  Serial.println("Set the Serial Monitor line ending to Newline, then enter:");
+  // Show what's actually in NVS first — it overrides SECRETS.h, so a stale URL here (e.g. an old
+  // laptop IP) is the usual reason "it worked before" stops working. Blank entries below keep each.
+  Serial.println("Current stored config (NVS overrides SECRETS.h):");
+  Serial.printf ("  Wi-Fi SSID : %s\n", Storage::wifiSsid().c_str());
+  Serial.printf ("  App URL    : %s\n", Storage::appBaseUrl().c_str());
+  Serial.printf ("  Secret     : %s\n", Storage::deviceSecret().length() ? "set" : "(none)");
+  Serial.printf ("  Device id  : %s\n", Storage::deviceId().c_str());
+  Serial.println("Set the Serial Monitor line ending to Newline, then enter (blank = keep current):");
   String ssid = readSerialLine("Wi-Fi SSID            : ");
   String pass = readSerialLine("Wi-Fi password        : ");
   String url  = readSerialLine("App base URL          : ");   // e.g. http://192.168.1.50:8080
   String sec  = readSerialLine("Device secret         : ");   // == server DEVICE_INGEST_SECRET
 
   if (ssid.length()) Storage::setWifiSsid(ssid);
-  Storage::setWifiPass(pass);
+  if (pass.length()) Storage::setWifiPass(pass);   // blank = keep current (was unconditional — wiped the pw!)
   if (url.length())  Storage::setAppBaseUrl(url);
   if (sec.length())  Storage::setDeviceSecret(sec);
 

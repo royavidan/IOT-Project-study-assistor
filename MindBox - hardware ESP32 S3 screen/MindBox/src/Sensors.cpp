@@ -51,6 +51,9 @@ static float s_lightVarScale = LIGHT_VAR_SCALE_DEFAULT;
 static bool refreshDht(bool force) {
   uint32_t now = millis();
   if (!force && now - s_lastDhtRead < DHT_READ_INTERVAL_MS) return s_tempOk;
+  // IO21 is shared with the encoder SW. If it's held low (button pressed), a DHT read would fail and
+  // the held line confuses the sensor — skip and keep the last value (retries once the knob is released).
+  if (digitalRead(PIN_DHT11) == LOW) return s_tempOk;
   s_lastDhtRead = now;
   float t = s_dht.readTemperature();
   if (isnan(t) && force) {              // retry ONLY on the on-demand readTemp() path; the 2s

@@ -51,6 +51,9 @@ static bool   s_dirty = true;
 static int      s_pauseCursor = 0;
 static bool     s_runningMenu = false;
 static int      s_runCursor = 0;
+static int      s_runLevel  = 0;     // 0 = top overlay, 1 = in-session Settings list
+static int      s_setCursor = 0;     // cursor within the Settings list
+static int      s_setScroll = 0;     // scroll offset for the Settings list
 
 static int      s_resumeCursor = 0;
 static int      s_resumeRemainMin = 0;
@@ -229,7 +232,7 @@ static int itemCount(Screen s) {
   switch (s) {
     case SCR_ROOT:     return 5;
     case SCR_MODE:     return 8;   // presets · focus · break · cycles · long-break · every · auto-start
-    case SCR_SETTINGS: return 7;   // Presence · Display · Coaching · Stats · Strict · Quiet · Environment
+    case SCR_SETTINGS: return 6;   // Presence · Display · Coaching · Stats · Quiet · Environment
     case SCR_DISPLAY:  return 9;   // Show timer · Haptics · Strength · Sound · Volume · Brightness · Theme · Test motor · Test sound
     case SCR_PRESENCE: return 3;
     case SCR_COACHING: return 4;
@@ -342,13 +345,6 @@ static void toggleAutoStart() {
   markDirty();
 }
 
-static void toggleStrict() {
-  s_cfg->strictMode = !s_cfg->strictMode;
-  Storage::saveConfig(*s_cfg);
-  Haptics::click();
-  markDirty();
-}
-
 // Long break every N focus blocks: cycle 2,3,4,5,6, then Off (every=0).
 static void cycleLongBreakEvery() {
   uint8_t e = s_cfg->longBreakEvery;
@@ -397,7 +393,16 @@ static void cycleBrightness() {
   int b = s_cfg->brightnessPct;
   b = (b >= 100) ? 25 : (b < 25 ? 25 : b + 25);
   s_cfg->brightnessPct = (uint8_t)b;
+  s_cfg->autoBrightness = false;   // manual override: stop the light sensor from driving the backlight
   Panel::setBrightness(b);      // apply live
+  Storage::saveConfig(*s_cfg);
+  Haptics::click();
+  markDirty();
+}
+
+static void toggleAutoBrightness() {
+  s_cfg->autoBrightness = !s_cfg->autoBrightness;
+  if (!s_cfg->autoBrightness) Panel::setBrightness(s_cfg->brightnessPct);  // back to the manual level
   Storage::saveConfig(*s_cfg);
   Haptics::click();
   markDirty();
@@ -642,9 +647,8 @@ MenuAction tick(int rotDir, int sideBtn) {
         case 1: push(SCR_DISPLAY); break;
         case 2: push(SCR_COACHING); break;
         case 3: push(SCR_STATS); break;
-        case 4: toggleStrict(); break;
-        case 5: push(SCR_QUIET); break;
-        case 6: push(SCR_ALERTS); break;
+        case 4: push(SCR_QUIET); break;
+        case 5: push(SCR_ALERTS); break;
       }
       Haptics::tap();
       markDirty();
@@ -888,9 +892,8 @@ const MenuView& view() {
           case 1: fillRow(row, "Display", nullptr, sel, MI_DISPLAY, true); break;
           case 2: fillRow(row, "Coaching", nullptr, sel, MI_COACHING, true); break;
           case 3: fillRow(row, "Stats", nullptr, sel, MI_STATS, true); break;
-          case 4: fillRow(row, "Strict mode", s_cfg->strictMode ? "ON" : "OFF", sel); break;
-          case 5: fillRow(row, "Quiet hours", quietEnabled() ? "ON" : "OFF", sel, MI_NONE, true); break;
-          case 6: fillRow(row, "Environment", nullptr, sel, MI_PRESENCE, true); break;
+          case 4: fillRow(row, "Quiet hours", quietEnabled() ? "ON" : "OFF", sel, MI_NONE, true); break;
+          case 5: fillRow(row, "Environment", nullptr, sel, MI_PRESENCE, true); break;
         }
         break;
 
@@ -1096,27 +1099,74 @@ const MenuView& pausedView() {
   return v;
 }
 
+// In-session Settings list (level 1 of the running overlay). Reuses the global toggle handlers, so
+// changes persist and stay in sync with the main Settings menu; the session clock keeps running.
+static const int RUN_SET_ROWS = 8;
+
+static void runSettingsFillRow(MenuRow& r, int idx, bool sel) {
+  char b[8];
+  switch (idx) {
+    case 0: fillRow(r, "Show timer",  s_cfg->showTimer      ? "ON" : "OFF", sel); break;
+    case 1: fillRow(r, "Noise alert", s_cfg->alertNoise     ? "ON" : "OFF", sel); break;
+    case 2: fillRow(r, "Temp alert",  s_cfg->alertTemp      ? "ON" : "OFF", sel); break;
+    case 3: fillRow(r, "Auto-pause",  s_cfg->autoPause      ? "ON" : "OFF", sel); break;
+    case 4: fillRow(r, "Haptics",     s_cfg->hapticsEnabled ? "ON" : "OFF", sel); break;
+    case 5: fillRow(r, "Sound",       s_cfg->soundEnabled   ? "ON" : "OFF", sel); break;
+    case 6: fillRow(r, "Auto-bright", s_cfg->autoBrightness ? "ON" : "OFF", sel); break;
+    default: snprintf(b, sizeof(b), "%u%%", s_cfg->brightnessPct);
+             fillRow(r, "Brightness", b, sel); break;     // idx 7
+  }
+}
+
+static void runSettingsSelect(int idx) {
+  switch (idx) {
+    case 0: toggleShowTimer();      break;
+    case 1: toggleAlertNoise();     break;
+    case 2: toggleAlertTemp();      break;
+    case 3: toggleAutoPause();      break;
+    case 4: toggleHaptics();        break;
+    case 5: toggleSound();          break;
+    case 6: toggleAutoBrightness(); break;
+    default: cycleBrightness();     break;                // idx 7
+  }
+}
+
 void runningOpen() {
   s_runningMenu = true;
   s_runCursor = 0;
+  s_runLevel = 0; s_setCursor = 0; s_setScroll = 0;
   Inputs::setInputMode(INPUT_MENU);
   markDirty();
 }
 
 void runningDismiss() {
   s_runningMenu = false;
+  s_runLevel = 0;
   markDirty();
 }
 
 bool runningActive() { return s_runningMenu; }
 
 MenuAction runningTick(int rotDir, int sideBtn) {
-  // Rows: 0 Pause, 1 Add 5 min, 2 Show timer (toggle), 3 End. (Haptics → Settings.)
-  static const int RUN_ROWS = 4;
-  if (sideBtn == 2) {
-    runningDismiss();
+  // Level 1: the in-session Settings list (toggles apply in place; clock keeps running).
+  if (s_runLevel == 1) {
+    if (sideBtn == 2) { s_runLevel = 0; s_setCursor = 0; s_setScroll = 0; markDirty(); return MENU_NONE; }
+    if (rotDir != 0) {
+      s_setCursor += rotDir;
+      if (s_setCursor < 0) s_setCursor = RUN_SET_ROWS - 1;
+      if (s_setCursor >= RUN_SET_ROWS) s_setCursor = 0;
+      if (s_setCursor < s_setScroll) s_setScroll = s_setCursor;
+      if (s_setCursor >= s_setScroll + MENU_VISIBLE_ROWS) s_setScroll = s_setCursor - MENU_VISIBLE_ROWS + 1;
+      Haptics::click();
+      markDirty();
+    }
+    if (sideBtn == 1) runSettingsSelect(s_setCursor);   // toggle, stay in the list
     return MENU_NONE;
   }
+
+  // Level 0: the top overlay — Pause / Skip / End / Settings (Settings last).
+  static const int RUN_ROWS = 4;
+  if (sideBtn == 2) { runningDismiss(); return MENU_NONE; }
   if (rotDir != 0) {
     s_runCursor = (s_runCursor + rotDir + RUN_ROWS) % RUN_ROWS;
     Haptics::click();
@@ -1124,21 +1174,31 @@ MenuAction runningTick(int rotDir, int sideBtn) {
   }
   if (sideBtn != 1) return MENU_NONE;
   switch (s_runCursor) {
-    case 1: Haptics::tap();    return MENU_ADD_TIME;    // +5 min to this interval
-    case 2: toggleShowTimer(); return MENU_NONE;        // live eyes-off toggle, stay in overlay
-    case 3: Haptics::tap();    return MENU_END_SESSION;
-    default: Haptics::tap();   return MENU_PAUSE_SESSION;
+    case 1: Haptics::tap();  return MENU_SKIP_INTERVAL;     // skip to next interval
+    case 2: Haptics::tap();  return MENU_END_SESSION;       // end the session
+    case 3: s_runLevel = 1; s_setCursor = 0; s_setScroll = 0; Haptics::tap(); markDirty(); return MENU_NONE; // open Settings
+    default: Haptics::tap(); return MENU_PAUSE_SESSION;     // 0 = Pause
   }
 }
 
 const MenuView& runningView() {
   static MenuView v;
   memset(&v, 0, sizeof(v));
+  if (s_runLevel == 1) {
+    strncpy(v.title, "SETTINGS", sizeof(v.title) - 1);
+    v.rowCount = 0;
+    for (int i = 0; i < MENU_VISIBLE_ROWS; i++) {
+      int idx = s_setScroll + i;
+      if (idx >= RUN_SET_ROWS) break;
+      runSettingsFillRow(v.rows[v.rowCount++], idx, idx == s_setCursor);
+    }
+    return v;
+  }
   strncpy(v.title, "SESSION", sizeof(v.title) - 1);
   fillRow(v.rows[0], "Pause", nullptr, s_runCursor == 0);
-  fillRow(v.rows[1], "Add 5 min", nullptr, s_runCursor == 1);
-  fillRow(v.rows[2], "Show timer", s_cfg->showTimer ? "ON" : "OFF", s_runCursor == 2);
-  fillRow(v.rows[3], "End", nullptr, s_runCursor == 3);
+  fillRow(v.rows[1], "Skip", nullptr, s_runCursor == 1);
+  fillRow(v.rows[2], "End", nullptr, s_runCursor == 2);
+  fillRow(v.rows[3], "Settings", nullptr, s_runCursor == 3, MI_NONE, true);
   v.rowCount = 4;
   return v;
 }
