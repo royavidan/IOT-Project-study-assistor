@@ -41,25 +41,8 @@ LGFX_Hosyond_S3_28::LGFX_Hosyond_S3_28() {
   }
   setPanel(&_panel_instance);
 
-#if USE_TOUCH
-  { // FT6336 capacitive touch on I2C (LCDWIKI ES3C28P/ES3N28P)
-    auto cfg = _touch_instance.config();
-    cfg.x_min           = 0;
-    cfg.x_max           = SCR_W - 1;
-    cfg.y_min           = 0;
-    cfg.y_max           = SCR_H - 1;
-    cfg.pin_int         = PIN_TOUCH_INT;
-    cfg.bus_shared      = false;
-    cfg.offset_rotation = TOUCH_OFFSET_ROTATION;
-    cfg.i2c_port        = TOUCH_I2C_PORT;
-    cfg.i2c_addr        = TOUCH_I2C_ADDR;
-    cfg.pin_sda         = PIN_TOUCH_SDA;
-    cfg.pin_scl         = PIN_TOUCH_SCL;
-    cfg.freq            = TOUCH_FREQ;
-    _touch_instance.config(cfg);
-    _panel_instance.setTouch(&_touch_instance);
-  }
-#endif
+  // No LovyanGFX touch here on purpose — the FT6336 is read over Arduino Wire in Touch.cpp (shared single I2C
+  // master with the ToF). The TP_RST pulse for the FT6336 still happens in Panel::begin() below.
 }
 
 LGFX_Hosyond_S3_28 lcd;
@@ -72,8 +55,8 @@ static bool s_spritePsram = false;   // true = sprite fell back to PSRAM (slow d
 
 void begin() {
 #if USE_TOUCH
-  // FT6336 has no reset field in the LGFX touch config — pulse TP_RST manually
-  // before lcd.init() (which initialises the touch controller).
+  // Pulse the FT6336 reset (TP_RST) once at boot so the controller is ready before Touch.cpp reads it over
+  // Wire. (LovyanGFX no longer drives the touch, so nothing else resets it.)
   pinMode(PIN_TOUCH_RST, OUTPUT);
   digitalWrite(PIN_TOUCH_RST, LOW);  delay(10);
   digitalWrite(PIN_TOUCH_RST, HIGH); delay(120);

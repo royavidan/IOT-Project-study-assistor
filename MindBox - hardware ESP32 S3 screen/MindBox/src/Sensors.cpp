@@ -4,11 +4,9 @@
 #include "Audio.h"
 #include <Wire.h>
 #include <math.h>
-#if HAS_PRESENCE
-#include "driver/gpio.h"        // gpio_set_direction / pull
-#include "esp_rom_gpio.h"       // esp_rom_gpio_connect_*_signal
-#include "soc/gpio_sig_map.h"   // I2CEXT0_*_IDX (port-0 I2C signal indices)
-#endif
+// The FT6336 touch (Touch.cpp) and the VL53L1X ToF (here) share ONE I2C master on Arduino Wire (IO16/15):
+// touch and ToF reads both run on the core-1 loop, so they simply serialize on the bus — no second master,
+// no pad-swapping, no contention. (This replaced the old two-master setup that killed touch.)
 
 #if HAS_TEMP
 #include <DHT.h>
@@ -102,24 +100,6 @@ static void refreshLightWindow() {
 }
 #endif
 
-#if HAS_PRESENCE
-// The ToF shares the touch I2C pads (IO16/IO15) with the FT6336 (LovyanGFX, I2C port 1), which
-// re-routes those pads to itself on EVERY getTouch(). Before the ToF talks on Wire (port 0), re-point
-// the pads to port 0 — open-drain + pullup, mirroring LovyanGFX's own set_pin(). The loop is
-// single-threaded (all ToF I2C in Sensors::tick, all touch I2C in Inputs::poll), so touch reclaims
-// the pads on its next getTouch(). Without this, touch keeps the bus and the ToF never ACKs.
-static void tofClaimBus() {
-  gpio_set_direction((gpio_num_t)PIN_I2C_SDA, GPIO_MODE_INPUT_OUTPUT_OD);
-  gpio_set_direction((gpio_num_t)PIN_I2C_SCL, GPIO_MODE_INPUT_OUTPUT_OD);
-  gpio_set_pull_mode((gpio_num_t)PIN_I2C_SDA, GPIO_PULLUP_ONLY);
-  gpio_set_pull_mode((gpio_num_t)PIN_I2C_SCL, GPIO_PULLUP_ONLY);
-  esp_rom_gpio_connect_out_signal(PIN_I2C_SDA, I2CEXT0_SDA_OUT_IDX, false, false);
-  esp_rom_gpio_connect_in_signal (PIN_I2C_SDA, I2CEXT0_SDA_IN_IDX,  false);
-  esp_rom_gpio_connect_out_signal(PIN_I2C_SCL, I2CEXT0_SCL_OUT_IDX, false, false);
-  esp_rom_gpio_connect_in_signal (PIN_I2C_SCL, I2CEXT0_SCL_IN_IDX,  false);
-}
-#endif
-
 // I2C bus recovery: clock out a slave that's holding SDA low, issue STOP, then
 // re-init the bus (+ ToF). Returns true if SDA was released. Wire.setTimeOut()
 // keeps individual transactions from hanging; this unwedges a stuck bus.
@@ -140,7 +120,6 @@ static bool i2cRecover() {
   Wire.setClock(400000);
   Wire.setTimeOut(I2C_TIMEOUT_MS);
 #if HAS_PRESENCE
-  tofClaimBus();
   if (vl53.begin(0x29, &Wire)) {
     vl53.VL53L1X_SetDistanceMode(2);
     vl53.setTimingBudget(50);
@@ -174,10 +153,9 @@ void init() {
   refreshDht(true);
 #endif
 #if HAS_PRESENCE
-  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);   // ToF on the shared touch pads (port 0); started here, after
-  Wire.setClock(400000);                  // Display::init() so the FT6336 touch (port 1) owns them first
-  Wire.setTimeOut(I2C_TIMEOUT_MS);
-  tofClaimBus();                          // re-point IO16/15 to port 0 for the ToF probe
+  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);   // ONE shared I2C master. Touch::begin() already started this Wire
+  Wire.setClock(400000);                  // (USE_TOUCH); re-begin is harmless. The ToF (0x29) and FT6336 touch
+  Wire.setTimeOut(I2C_TIMEOUT_MS);        // (0x38) are two addresses on this single bus — no pad-swapping.
   if (vl53.begin(0x29, &Wire)) {
     vl53.VL53L1X_SetDistanceMode(2);   // long range
     vl53.setTimingBudget(50);
@@ -225,10 +203,11 @@ void tick() {
 #endif
 
 #if HAS_PRESENCE
+  // ToF ranging on the shared single bus — a plain Wire read; it just serializes with the touch reads on the
+  // core-1 loop (no pad-swapping needed now that touch is on the same master).
   static uint32_t s_lastTofPoll = 0;
   if (s_tofPresent && millis() - s_lastTofPoll >= TOF_POLL_MS) {
     s_lastTofPoll = millis();
-    tofClaimBus();                              // re-claim the shared pads for port 0 before the read
     if (vl53.dataReady()) {
       int16_t d = vl53.distance();
       vl53.clearInterrupt();
@@ -236,11 +215,10 @@ void tick() {
     }
   }
   // I2C watchdog: the ToF is our bus canary. If it stops ACKing, recover the bus.
-  // SDA still held after recovery = wedged bus (also kills the OLED) -> critical
+  // SDA still held after recovery = wedged bus (also kills the screen) -> critical
   // fault. A dead ToF with a healthy bus only degrades (presence disabled).
   if (s_tofPresent && millis() - s_lastBusCheck >= I2C_HEALTH_MS) {
     s_lastBusCheck = millis();
-    tofClaimBus();
     Wire.beginTransmission(0x29);
     if (Wire.endTransmission() == 0) {
       s_busFailStreak = 0;
@@ -409,9 +387,7 @@ String healthJson() {
 }
 
 int i2cScan(uint8_t* out, int maxOut) {
-#if HAS_PRESENCE
-  tofClaimBus();   // scan the shared touch bus (port 0) so the ToF (0x29) shows up
-#endif
+  // Scans the single shared Wire bus — both the FT6336 touch (0x38) and the ToF (0x29) should appear.
   int n = 0;
   for (uint8_t a = 1; a < 127; a++) {
     Wire.beginTransmission(a);

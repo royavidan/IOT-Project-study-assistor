@@ -1,8 +1,8 @@
 #pragma once
 // ============================================================================
 // TimerScreen — the RUNNING-state renderer (Tomato32 styling), model-driven.
-//   USE_TOUCH 1 : two-panel layout (timer+dots | label+buttons)
-//   USE_TOUCH 0 : centred numerals inside a progress ring
+//   USE_TOUCH 1 : centred numerals inside a smooth phase-coloured progress ring (fillArc + rounded caps)
+//   USE_TOUCH 0 : centred numerals inside a dotted progress ring
 // Everything is derived from the UiModel; no session state of its own.
 // ============================================================================
 #include "config.h"
