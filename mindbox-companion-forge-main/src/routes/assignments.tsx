@@ -5,12 +5,16 @@ import { Plus } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { ErrorState, LoadingState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/lib/auth/auth-context";
 import { useHomeworkAssignments, useHomeworkActions } from "@/lib/queries/homework";
-import type { HomeworkAssignment } from "@/lib/types";
+import { useCourses } from "@/features/courses/queries";
+import { homeworkCompletion } from "@/features/courses/courses";
+import type { HomeworkAssignment, HomeworkStatus } from "@/lib/types";
 import type { HomeworkInput, HomeworkUpdateInput } from "@/lib/queries/homework";
 import { HomeworkDialog } from "@/features/homework/components/HomeworkDialog";
-import { HomeworkCard } from "@/features/homework/components/HomeworkCard";
+import { HomeworkBoard } from "@/features/homework/components/HomeworkBoard";
 
 export const Route = createFileRoute("/assignments")({
   head: () => ({ meta: [{ title: "Assignments — MindBox" }] }),
@@ -24,7 +28,8 @@ function AssignmentsPage() {
   const [formError, setFormError] = useState<string | null>(null);
 
   const homeworkQuery = useHomeworkAssignments();
-  const { add, update, remove } = useHomeworkActions();
+  const coursesQuery = useCourses();
+  const { add, update, remove, setStatus } = useHomeworkActions();
 
   const openCreate = () => {
     setEditing(null);
@@ -63,33 +68,20 @@ function AssignmentsPage() {
     return (
       <ErrorState
         title="Could not load assignments"
-        description={
-          homeworkQuery.error instanceof Error
-            ? homeworkQuery.error.message
-            : undefined
-        }
+        description={homeworkQuery.error instanceof Error ? homeworkQuery.error.message : undefined}
         onRetry={() => void homeworkQuery.refetch()}
       />
     );
   }
 
   const assignments = homeworkQuery.data ?? [];
-
-  // Sort by due date
-  const sortedAssignments = [...assignments].sort(
-    (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
-  );
-
-  // Group by status
-  const pending = sortedAssignments.filter((a) => a.status === "pending");
-  const submitted = sortedAssignments.filter((a) => a.status === "submitted");
-  const graded = sortedAssignments.filter((a) => a.status === "graded");
+  const completion = homeworkCompletion(assignments);
 
   return (
     <>
       <PageHeader
         title="Assignments"
-        description="Upload, track, and manage your homework assignments."
+        description="Track homework on a board — tap to move work along as you finish it."
         actions={
           <Button onClick={openCreate}>
             <Plus className="h-4 w-4" />
@@ -98,71 +90,43 @@ function AssignmentsPage() {
         }
       />
 
-      <div className="space-y-8">
-        {pending.length > 0 && (
-          <section>
-            <h2 className="mb-4 text-lg font-semibold text-foreground">Pending ({pending.length})</h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {pending.map((hw) => (
-                <HomeworkCard
-                  key={hw.id}
-                  homework={hw}
-                  onEdit={openEdit}
-                  onDelete={(id) => remove.mutate(id)}
-                  isDeleting={remove.isPending}
-                />
-              ))}
-            </div>
-          </section>
-        )}
+      {assignments.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-border p-8 text-center">
+          <p className="text-muted-foreground">No assignments yet. Create one to get started!</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <Card>
+            <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
+              <div>
+                <p className="text-sm text-muted-foreground">Overall progress</p>
+                <p className="mt-1 text-2xl font-semibold tracking-tight">
+                  {completion}%{" "}
+                  <span className="text-sm font-normal text-muted-foreground">
+                    of your homework done
+                  </span>
+                </p>
+              </div>
+              <div className="min-w-[180px] flex-1">
+                <Progress value={completion} aria-label={`Overall homework ${completion}%`} />
+              </div>
+            </CardContent>
+          </Card>
 
-        {submitted.length > 0 && (
-          <section>
-            <h2 className="mb-4 text-lg font-semibold text-foreground">Submitted ({submitted.length})</h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {submitted.map((hw) => (
-                <HomeworkCard
-                  key={hw.id}
-                  homework={hw}
-                  onEdit={openEdit}
-                  onDelete={(id) => remove.mutate(id)}
-                  isDeleting={remove.isPending}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {graded.length > 0 && (
-          <section>
-            <h2 className="mb-4 text-lg font-semibold text-foreground">Graded ({graded.length})</h2>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {graded.map((hw) => (
-                <HomeworkCard
-                  key={hw.id}
-                  homework={hw}
-                  onEdit={openEdit}
-                  onDelete={(id) => remove.mutate(id)}
-                  isDeleting={remove.isPending}
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {assignments.length === 0 && (
-          <div className="rounded-lg border border-dashed border-border p-8 text-center">
-            <p className="text-muted-foreground">
-              No assignments yet. Create one to get started!
-            </p>
-          </div>
-        )}
-      </div>
+          <HomeworkBoard
+            assignments={assignments}
+            onMove={(id, status: HomeworkStatus) => setStatus.mutate({ id, status })}
+            onEdit={openEdit}
+            onDelete={(id) => remove.mutate(id)}
+          />
+        </div>
+      )}
 
       <HomeworkDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         editing={editing}
+        courses={coursesQuery.data ?? []}
         onSubmit={onSubmit}
         busy={add.isPending || update.isPending}
         error={formError}

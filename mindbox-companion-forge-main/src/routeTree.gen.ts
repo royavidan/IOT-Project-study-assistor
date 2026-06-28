@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SimulatorRouteImport } from './routes/simulator'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ReviewersRouteImport } from './routes/reviewers'
+import { Route as ProgressRouteImport } from './routes/progress'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LeaderboardRouteImport } from './routes/leaderboard'
 import { Route as InsightsRouteImport } from './routes/insights'
@@ -19,11 +20,13 @@ import { Route as HistoryRouteImport } from './routes/history'
 import { Route as FriendsRouteImport } from './routes/friends'
 import { Route as ExportsRouteImport } from './routes/exports'
 import { Route as DeviceRouteImport } from './routes/device'
+import { Route as CoursesRouteImport } from './routes/courses'
 import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as AssignmentsRouteImport } from './routes/assignments'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SessionIdRouteImport } from './routes/session.$id'
 import { Route as ReviewerAcceptRouteImport } from './routes/reviewer/accept'
+import { Route as CoursesIdRouteImport } from './routes/courses.$id'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 
 const SimulatorRoute = SimulatorRouteImport.update({
@@ -39,6 +42,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const ReviewersRoute = ReviewersRouteImport.update({
   id: '/reviewers',
   path: '/reviewers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProgressRoute = ProgressRouteImport.update({
+  id: '/progress',
+  path: '/progress',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -76,6 +84,11 @@ const DeviceRoute = DeviceRouteImport.update({
   path: '/device',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CoursesRoute = CoursesRouteImport.update({
+  id: '/courses',
+  path: '/courses',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const CalendarRoute = CalendarRouteImport.update({
   id: '/calendar',
   path: '/calendar',
@@ -101,6 +114,11 @@ const ReviewerAcceptRoute = ReviewerAcceptRouteImport.update({
   path: '/reviewer/accept',
   getParentRoute: () => rootRouteImport,
 } as any)
+const CoursesIdRoute = CoursesIdRouteImport.update({
+  id: '/$id',
+  path: '/$id',
+  getParentRoute: () => CoursesRoute,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
@@ -111,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/assignments': typeof AssignmentsRoute
   '/calendar': typeof CalendarRoute
+  '/courses': typeof CoursesRouteWithChildren
   '/device': typeof DeviceRoute
   '/exports': typeof ExportsRoute
   '/friends': typeof FriendsRoute
@@ -118,10 +137,12 @@ export interface FileRoutesByFullPath {
   '/insights': typeof InsightsRoute
   '/leaderboard': typeof LeaderboardRoute
   '/login': typeof LoginRoute
+  '/progress': typeof ProgressRoute
   '/reviewers': typeof ReviewersRoute
   '/settings': typeof SettingsRoute
   '/simulator': typeof SimulatorRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/courses/$id': typeof CoursesIdRoute
   '/reviewer/accept': typeof ReviewerAcceptRoute
   '/session/$id': typeof SessionIdRoute
 }
@@ -129,6 +150,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/assignments': typeof AssignmentsRoute
   '/calendar': typeof CalendarRoute
+  '/courses': typeof CoursesRouteWithChildren
   '/device': typeof DeviceRoute
   '/exports': typeof ExportsRoute
   '/friends': typeof FriendsRoute
@@ -136,10 +158,12 @@ export interface FileRoutesByTo {
   '/insights': typeof InsightsRoute
   '/leaderboard': typeof LeaderboardRoute
   '/login': typeof LoginRoute
+  '/progress': typeof ProgressRoute
   '/reviewers': typeof ReviewersRoute
   '/settings': typeof SettingsRoute
   '/simulator': typeof SimulatorRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/courses/$id': typeof CoursesIdRoute
   '/reviewer/accept': typeof ReviewerAcceptRoute
   '/session/$id': typeof SessionIdRoute
 }
@@ -148,6 +172,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/assignments': typeof AssignmentsRoute
   '/calendar': typeof CalendarRoute
+  '/courses': typeof CoursesRouteWithChildren
   '/device': typeof DeviceRoute
   '/exports': typeof ExportsRoute
   '/friends': typeof FriendsRoute
@@ -155,10 +180,12 @@ export interface FileRoutesById {
   '/insights': typeof InsightsRoute
   '/leaderboard': typeof LeaderboardRoute
   '/login': typeof LoginRoute
+  '/progress': typeof ProgressRoute
   '/reviewers': typeof ReviewersRoute
   '/settings': typeof SettingsRoute
   '/simulator': typeof SimulatorRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/courses/$id': typeof CoursesIdRoute
   '/reviewer/accept': typeof ReviewerAcceptRoute
   '/session/$id': typeof SessionIdRoute
 }
@@ -168,6 +195,7 @@ export interface FileRouteTypes {
     | '/'
     | '/assignments'
     | '/calendar'
+    | '/courses'
     | '/device'
     | '/exports'
     | '/friends'
@@ -175,10 +203,12 @@ export interface FileRouteTypes {
     | '/insights'
     | '/leaderboard'
     | '/login'
+    | '/progress'
     | '/reviewers'
     | '/settings'
     | '/simulator'
     | '/auth/callback'
+    | '/courses/$id'
     | '/reviewer/accept'
     | '/session/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -186,6 +216,7 @@ export interface FileRouteTypes {
     | '/'
     | '/assignments'
     | '/calendar'
+    | '/courses'
     | '/device'
     | '/exports'
     | '/friends'
@@ -193,10 +224,12 @@ export interface FileRouteTypes {
     | '/insights'
     | '/leaderboard'
     | '/login'
+    | '/progress'
     | '/reviewers'
     | '/settings'
     | '/simulator'
     | '/auth/callback'
+    | '/courses/$id'
     | '/reviewer/accept'
     | '/session/$id'
   id:
@@ -204,6 +237,7 @@ export interface FileRouteTypes {
     | '/'
     | '/assignments'
     | '/calendar'
+    | '/courses'
     | '/device'
     | '/exports'
     | '/friends'
@@ -211,10 +245,12 @@ export interface FileRouteTypes {
     | '/insights'
     | '/leaderboard'
     | '/login'
+    | '/progress'
     | '/reviewers'
     | '/settings'
     | '/simulator'
     | '/auth/callback'
+    | '/courses/$id'
     | '/reviewer/accept'
     | '/session/$id'
   fileRoutesById: FileRoutesById
@@ -223,6 +259,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AssignmentsRoute: typeof AssignmentsRoute
   CalendarRoute: typeof CalendarRoute
+  CoursesRoute: typeof CoursesRouteWithChildren
   DeviceRoute: typeof DeviceRoute
   ExportsRoute: typeof ExportsRoute
   FriendsRoute: typeof FriendsRoute
@@ -230,6 +267,7 @@ export interface RootRouteChildren {
   InsightsRoute: typeof InsightsRoute
   LeaderboardRoute: typeof LeaderboardRoute
   LoginRoute: typeof LoginRoute
+  ProgressRoute: typeof ProgressRoute
   ReviewersRoute: typeof ReviewersRoute
   SettingsRoute: typeof SettingsRoute
   SimulatorRoute: typeof SimulatorRoute
@@ -259,6 +297,13 @@ declare module '@tanstack/react-router' {
       path: '/reviewers'
       fullPath: '/reviewers'
       preLoaderRoute: typeof ReviewersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/progress': {
+      id: '/progress'
+      path: '/progress'
+      fullPath: '/progress'
+      preLoaderRoute: typeof ProgressRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -310,6 +355,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DeviceRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/courses': {
+      id: '/courses'
+      path: '/courses'
+      fullPath: '/courses'
+      preLoaderRoute: typeof CoursesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/calendar': {
       id: '/calendar'
       path: '/calendar'
@@ -345,6 +397,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ReviewerAcceptRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/courses/$id': {
+      id: '/courses/$id'
+      path: '/$id'
+      fullPath: '/courses/$id'
+      preLoaderRoute: typeof CoursesIdRouteImport
+      parentRoute: typeof CoursesRoute
+    }
     '/auth/callback': {
       id: '/auth/callback'
       path: '/auth/callback'
@@ -355,10 +414,22 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface CoursesRouteChildren {
+  CoursesIdRoute: typeof CoursesIdRoute
+}
+
+const CoursesRouteChildren: CoursesRouteChildren = {
+  CoursesIdRoute: CoursesIdRoute,
+}
+
+const CoursesRouteWithChildren =
+  CoursesRoute._addFileChildren(CoursesRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AssignmentsRoute: AssignmentsRoute,
   CalendarRoute: CalendarRoute,
+  CoursesRoute: CoursesRouteWithChildren,
   DeviceRoute: DeviceRoute,
   ExportsRoute: ExportsRoute,
   FriendsRoute: FriendsRoute,
@@ -366,6 +437,7 @@ const rootRouteChildren: RootRouteChildren = {
   InsightsRoute: InsightsRoute,
   LeaderboardRoute: LeaderboardRoute,
   LoginRoute: LoginRoute,
+  ProgressRoute: ProgressRoute,
   ReviewersRoute: ReviewersRoute,
   SettingsRoute: SettingsRoute,
   SimulatorRoute: SimulatorRoute,

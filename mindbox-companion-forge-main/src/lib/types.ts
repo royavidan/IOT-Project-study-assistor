@@ -68,6 +68,10 @@ export interface HomeworkAssignment {
   fileName: string | null;
   fileSizeBytes: number | null;
   grade: number | null;
+  /** Optional 0–100 manual progress. Null = derive completion from status. */
+  progressPct: number | null;
+  /** Points this assignment is worth toward the final grade. Null = not counted. */
+  weight: number | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;

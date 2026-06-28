@@ -35,6 +35,8 @@ function mapRow(row: Record<string, unknown>): ScheduleEvent {
     startTime: String(row.start_time ?? "09:00"),
     endTime: String(row.end_time ?? "10:00"),
     notes: row.notes ? String(row.notes) : null,
+    examWeight: row.exam_weight == null ? null : Number(row.exam_weight),
+    examScore: row.exam_score == null ? null : Number(row.exam_score),
   };
 }
 
@@ -80,7 +82,7 @@ async function fetchScheduleEvents(): Promise<ScheduleEvent[]> {
   const { data, error } = await supabase
     .from("schedule_events")
     .select(
-      "id, title, course_code, location, color, category, subtype, kind, day_of_week, event_date, start_time, end_time, notes",
+      "id, title, course_code, location, color, category, subtype, kind, day_of_week, event_date, start_time, end_time, notes, exam_weight, exam_score",
     )
     .order("start_time", { ascending: true });
   if (error) throw new Error(error.message);
@@ -131,6 +133,25 @@ async function removeScheduleEvent(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/** Update only an exam's weight + recorded score (won't touch other fields). */
+async function setExamGrade(
+  id: string,
+  examWeight: number | null,
+  examScore: number | null,
+): Promise<void> {
+  const supabase = getSupabaseBrowserClient();
+  const norm = (n: number | null, max?: number) => {
+    if (n == null || !Number.isFinite(n)) return null;
+    const v = Math.max(0, n);
+    return max == null ? v : Math.min(max, v);
+  };
+  const { error } = await supabase
+    .from("schedule_events")
+    .update({ exam_weight: norm(examWeight), exam_score: norm(examScore, 100) })
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
 export function useScheduleEvents() {
   const { user } = useAuth();
   return useQuery({
@@ -156,5 +177,17 @@ export function useScheduleActions() {
       onSuccess: invalidate,
     }),
     remove: useMutation({ mutationFn: removeScheduleEvent, onSuccess: invalidate }),
+    setExamGrade: useMutation({
+      mutationFn: ({
+        id,
+        examWeight,
+        examScore,
+      }: {
+        id: string;
+        examWeight: number | null;
+        examScore: number | null;
+      }) => setExamGrade(id, examWeight, examScore),
+      onSuccess: invalidate,
+    }),
   };
 }

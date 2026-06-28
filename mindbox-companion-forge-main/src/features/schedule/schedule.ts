@@ -22,6 +22,10 @@ export interface ScheduleEvent {
   startTime: string;
   endTime: string;
   notes: string | null;
+  /** Exam only: points toward the final grade. Null otherwise / not set. */
+  examWeight: number | null;
+  /** Exam only: recorded score 0–100. Null until graded. */
+  examScore: number | null;
 }
 
 export interface ScheduleOccurrence {
@@ -228,6 +232,46 @@ export function datesWithCourses(occurrences: ScheduleOccurrence[]): Set<string>
 
 export function datesWithFocus(sessions: Session[]): Set<string> {
   return new Set(sessions.map((s) => s.date));
+}
+
+/** A course-colored dot for a calendar day. */
+export interface CourseMarker {
+  color: string;
+  category: ScheduleCategory;
+}
+
+export const MAX_DAY_MARKERS = 3;
+
+/**
+ * Group occurrences into per-day markers for the month grid, colored by course.
+ * Distinct by (color + category); exams come first so an exam ring is never
+ * dropped by the per-day cap; capped at MAX_DAY_MARKERS per day.
+ */
+export function courseMarkersByDate(
+  occurrences: ScheduleOccurrence[],
+): Map<string, CourseMarker[]> {
+  const rank = (c: ScheduleCategory) => (c === "exam" ? 0 : 1);
+  const ordered = [...occurrences].sort((a, b) => rank(a.category) - rank(b.category));
+
+  const byDate = new Map<string, CourseMarker[]>();
+  const seen = new Map<string, Set<string>>();
+
+  for (const o of ordered) {
+    let markers = byDate.get(o.date);
+    let keys = seen.get(o.date);
+    if (!markers || !keys) {
+      markers = [];
+      keys = new Set<string>();
+      byDate.set(o.date, markers);
+      seen.set(o.date, keys);
+    }
+    const key = `${o.color}|${o.category}`;
+    if (keys.has(key) || markers.length >= MAX_DAY_MARKERS) continue;
+    keys.add(key);
+    markers.push({ color: o.color, category: o.category });
+  }
+
+  return byDate;
 }
 
 /** Monday-based week containing `anchor` (local calendar). */

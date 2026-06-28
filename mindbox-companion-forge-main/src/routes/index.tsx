@@ -148,7 +148,9 @@ function Dashboard() {
               </div>
             </div>
             <Button size="sm" variant="outline" asChild>
-              <Link to="/history">View students</Link>
+              <Link to="/progress" search={{ tab: "sessions" }}>
+                View students
+              </Link>
             </Button>
           </CardContent>
         </Card>
@@ -227,7 +229,10 @@ function Dashboard() {
             </div>
           </div>
           <Button size="sm" variant="outline" asChild>
-            <Link to="/insights" search={{ from: insightTeaser.from, to: insightTeaser.to }}>
+            <Link
+              to="/progress"
+              search={{ tab: "insights", from: insightTeaser.from, to: insightTeaser.to }}
+            >
               Open Insights
             </Link>
           </Button>
@@ -273,7 +278,9 @@ function Dashboard() {
         <CardHeader className="flex-row items-center justify-between">
           <CardTitle className="text-base">Recent sessions</CardTitle>
           <Button variant="ghost" size="sm" asChild>
-            <Link to="/history">View all</Link>
+            <Link to="/progress" search={{ tab: "sessions" }}>
+              View all
+            </Link>
           </Button>
         </CardHeader>
         <CardContent className="p-0">

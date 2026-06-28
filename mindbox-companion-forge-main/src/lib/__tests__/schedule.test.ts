@@ -4,6 +4,7 @@ import {
   buildCourseEvents,
   buildDayAgenda,
   countdownLabel,
+  courseMarkersByDate,
   daysUntil,
   expandScheduleEvents,
   meetingTypeLabel,
@@ -12,7 +13,7 @@ import {
   validateScheduleTimes,
   weekDateKeys,
 } from "@/features/schedule/schedule";
-import type { ScheduleEvent } from "@/features/schedule/schedule";
+import type { ScheduleEvent, ScheduleOccurrence } from "@/features/schedule/schedule";
 import type { Session } from "@/lib/types";
 
 const weeklyLecture: ScheduleEvent = {
@@ -29,6 +30,8 @@ const weeklyLecture: ScheduleEvent = {
   startTime: "09:00",
   endTime: "10:30",
   notes: null,
+  examWeight: null,
+  examScore: null,
 };
 
 describe("schedule helpers", () => {
@@ -155,6 +158,52 @@ describe("semester bounds + exams", () => {
     );
     expect(list.map((u) => u.event.title)).toEqual(["Midterm", "Final"]);
     expect(list[0]?.daysUntil).toBe(2);
+  });
+});
+
+describe("courseMarkersByDate (month grid)", () => {
+  const occ = (
+    date: string,
+    color: string,
+    category: ScheduleOccurrence["category"],
+  ): ScheduleOccurrence => ({
+    occurrenceKey: `${color}:${category}:${date}`,
+    eventId: `${color}-${category}`,
+    date,
+    title: "x",
+    courseCode: null,
+    location: null,
+    color,
+    category,
+    subtype: null,
+    startTime: "09:00",
+    endTime: "10:00",
+    notes: null,
+    kind: category === "exam" ? "once" : "weekly",
+  });
+
+  it("dedupes by color+category and colors by course", () => {
+    const markers = courseMarkersByDate([
+      occ("2026-06-01", "#111", "class"),
+      occ("2026-06-01", "#111", "class"), // duplicate course → one marker
+      occ("2026-06-01", "#222", "class"), // second course → its own color
+    ]);
+    const day = markers.get("2026-06-01") ?? [];
+    expect(day).toHaveLength(2);
+    expect(day.map((m) => m.color)).toEqual(["#111", "#222"]);
+  });
+
+  it("keeps the exam marker first even when classes would fill the cap", () => {
+    const markers = courseMarkersByDate([
+      occ("2026-06-02", "#a", "class"),
+      occ("2026-06-02", "#b", "class"),
+      occ("2026-06-02", "#c", "class"),
+      occ("2026-06-02", "#exam", "exam"),
+    ]);
+    const day = markers.get("2026-06-02") ?? [];
+    expect(day).toHaveLength(3); // capped at MAX_DAY_MARKERS
+    expect(day[0]).toEqual({ color: "#exam", category: "exam" });
+    expect(day.some((m) => m.category === "exam")).toBe(true);
   });
 });
 

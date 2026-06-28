@@ -60,11 +60,16 @@ function AcceptReviewerInvitePage() {
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button asChild>
-                  <Link to="/history">Open session history</Link>
+                  <Link to="/progress" search={{ tab: "sessions" }}>
+                    Open session history
+                  </Link>
                 </Button>
                 {acceptMutation.data?.ownerUserId && (
                   <Button variant="outline" asChild>
-                    <Link to="/history" search={{ student: acceptMutation.data.ownerUserId }}>
+                    <Link
+                      to="/progress"
+                      search={{ tab: "sessions", student: acceptMutation.data.ownerUserId }}
+                    >
                       View this student
                     </Link>
                   </Button>

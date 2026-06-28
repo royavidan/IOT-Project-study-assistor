@@ -5,21 +5,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # MindBox firmware (ESP32-S3 board variant) — map
 
 A **full port of the MindBox firmware** onto the **LCDWIKI ES3C28P/ES3N28P 2.8" ESP32-S3 board**
-(ILI9341 240×320 SPI TFT + **FT6336 capacitive touch on I2C**, driven by **LovyanGFX**). It boots to a
-touch-navigable **home menu** and
+(ILI9341 240×320 SPI TFT driven by **LovyanGFX**, plus an **FT6336 capacitive touch** and a **VL53L1X
+ToF** that share one Arduino-`Wire` I2C bus). It boots to a touch-navigable **home menu** and
 runs the complete session lifecycle (the same brain as the classic-ESP32 sibling in
 `../../MindBox - hardware/MindBox/`). The S3 differs from the sibling only in the **display** (TFT,
 not OLED) and **input** (touch ± encoder, not encoder-only); the rest of the firmware is the sibling's
 code, copied in.
 
 > **Status:** builds and runs on hardware; UI styling modeled on einoko/Tomato32. **Currently enabled
-> (`config.h`):** TFT + FT6336 touch, `HAS_ENCODER` (KY-040, coexists with touch), `HAS_I2S_MIC` +
+> (`config.h`):** TFT + FT6336 touch, `HAS_ENCODER` (KY-040, coexists with touch), `HAS_PRESENCE`
+> (VL53L1X ToF — **back on**, sharing the touch I2C bus as a single master), `HAS_I2S_MIC` +
 > `HAS_SPEAKER` (ES8311), `HAS_LIGHT` (KY-018), `HAS_TEMP` (DHT11), `ENABLE_WIFI` + `ENABLE_CLOUD`.
-> **OFF:** `HAS_PRESENCE` (ToF — removed; its IO2/IO14 now feed the encoder), `HAS_HAPTIC` (motor
-> removed), `HAS_LED_RING`, `HAS_BATTERY`. Re-enable mic/
-> speaker only on a solid 5V supply (see **Power / brownout** below). Wi-Fi/cloud need `src/SECRETS.h` +
-> the dev server to do anything. The `HAS_*` flags in `config.h` are the SSOT for what is live — read
-> them before assuming a peripheral is present.
+> **OFF:** `HAS_HAPTIC` (motor removed), `HAS_LED_RING`, `HAS_BATTERY`. Mic/speaker/ToF all raise boot
+> current — if the box reboot-loops on a weak USB supply the fix is a stronger 5V source (see **Power /
+> brownout** below), not turning them off. Wi-Fi/cloud need `src/SECRETS.h` + the dev server to do
+> anything. The `HAS_*` flags in `config.h` are the SSOT for what is live — read them before assuming a
+> peripheral is present.
 
 ## Repository layout
 Flat sketch under `src/` (like the sibling — Arduino compiles `src/` recursively; every module uses
@@ -30,7 +31,7 @@ plain `#include "X.h"`). `MindBox.ino` is the orchestrator only. `docs/` and `as
 | **Entry** | `MindBox.ino` (Wire, watchdog, init-all, tick loop + BOOT theme toggle) |
 | **Config / types** | `src/config.h` (SSOT: pins, `USE_TOUCH`/`HAS_*` flags, tunables), `src/types.h`, `src/focus_load.h` |
 | **Display (S3-specific)** | `src/Panel.*` (LovyanGFX device: `lcd`, `spr`, `Panel::canvas()/push()`), `src/Display.*` (the firmware's `Display::` API on the TFT: `render`/`renderMenu`/primitives), `src/TimerScreen.*` (RUNNING screen, Tomato32 styling), `src/Theme.*`, `src/Icons.h`, `src/Fonts.h` + `src/DotFont.h` (bundled glyphs) |
-| **Input (S3-specific)** | `src/Inputs.*` (touch → `rotationDir()/button()`, encoder under `HAS_ENCODER`), `src/Touch.*` (FT6336 capacitive, I2C), `src/Keyboard.*` (on-screen QWERTY for Wi-Fi entry) |
+| **Input (S3-specific)** | `src/Inputs.*` (encoder + side-button + touch → `rotationDir()/button()`), `src/Touch.*` (custom FT6336 driver over Arduino `Wire`; learned 4-corner NVS calibration), `src/Keyboard.*` (on-screen QWERTY for Wi-Fi entry) |
 | **Brain** | `src/StateMachine.*`, `src/Session.*`, `src/Menu.*` |
 | **Persistence** | `src/Storage.*` (NVS), `src/UploadQueue.*` (LittleFS) |
 | **Networking** | `src/Cloud.*`, `src/Payload.*`, `src/SECRETS.h` (gitignored creds) |
@@ -43,18 +44,27 @@ is driven only by a `UiModel`/`MenuView` value, so the brain is display-agnostic
 sibling's logic ports unchanged onto the TFT).
 
 ## Input model (the S3 adaptation)
-The menu expects `rotationDir()` (−1/0/+1) + `button()` (1=select, 2=back), produced by:
-- **Touch (`USE_TOUCH`, default):** **FT6336 capacitive on I2C** (`SDA=16, SCL=15, INT=17, RST=18,
-  addr 0x38`, config in `config.h`). `Inputs` does **direct row-tap** (walks the menu cursor onto the
-  tapped row via `Display::rowHitTest`/`selectedRow`, then selects); top-right corner = back; zones are
-  the fallback where there are no rows. `Touch.cpp` keeps a persistent corner calibration (NVS) applied
-  on boot; **long-press BOOT** recalibrates. If axes are mirrored/rotated, bump `TOUCH_OFFSET_ROTATION`.
-- **Encoder (`HAS_ENCODER`, ON):** KY-040 on the ex-ToF pins — **CLK=IO2, DT=IO14** (the GPIO header's
-  only free pins). Rotation moves the menu cursor; **select/back is via touch** — the board breaks out no
-  4th header pin for a shaft button, so **SW=-1**. (The shaft press, `knobClicked()`, is only a
-  dead-end-screen escape anyway, not the primary select.) Coexists with touch (`Inputs::poll` reads the
-  encoder first, then touch). Power from **3V3, not 5V**. Requires the **AiEsp32RotaryEncoder** library.
-- **BOOT (GPIO0):** short tap = dark/light theme; long hold = recalibrate touch.
+The menu expects `rotationDir()` (signed detents) + `button()` (1=select, 2=back). **Three** sources feed
+them; `Inputs::poll` reads them in priority order **encoder → side button → touch**:
+- **Encoder (`HAS_ENCODER`, ON):** KY-040 — **CLK=IO2, DT=IO14** (two of the only four broken-out GPIO).
+  Rotation moves the menu cursor (signed delta, so fast multi-step turns aren't dropped). The shaft press
+  is **not** read through the encoder lib (`PIN_ENC_SW=-1`; its `isEncoderButtonClicked()` busy-waits
+  ~330 ms and stalled the loop) — `knobClicked()` is therefore inert; the shaft button is wired to IO21
+  and read as the side button below. Power from **3V3, not 5V**. Needs the **AiEsp32RotaryEncoder** library.
+- **Side button (`PIN_BUTTON=IO21`, `pollSideButton`):** the encoder's shaft button as a plain debounced
+  tact (active-low; **shares IO21 with the DHT11**, whose pull-up holds it high at rest). **Short tap =
+  select (1), long hold ≥ `BTN_LONG_MS` = back (2).** A pin found stuck LOW at boot is treated as
+  miswired and ignored (`sideFault()`).
+- **Touch (`USE_TOUCH`, default):** FT6336 capacitive read over Arduino `Wire` in `Touch.cpp`. Touch is a
+  **plain click, not a position picker** — *where* you tap doesn't matter (the old `rowHitTest` approach
+  was removed because an off calibration kept landing on the wrong row). **Short tap = select the
+  highlighted row, long-press = back, vertical swipe = move the highlight** (like an encoder detent). On
+  the bare RUNNING/PAUSED timer screen, *any* touch opens the session menu. `Touch.cpp` keeps a learned
+  **4-corner calibration** in NVS (a raw→screen linear map that learns swap/mirror, so it's correct for
+  any rotation) applied on boot; **long-press BOOT** re-runs it. (`TOUCH_OFFSET_ROTATION` is vestigial —
+  calibration learns orientation; `rowHitTest`/`selectedRow` still exist in `Display` but no longer drive
+  navigation.)
+- **BOOT (GPIO0):** short tap = dark/light theme; long hold (>1.5 s) = recalibrate touch.
 
 `Keyboard.*` is a separate touch surface (not part of `rotationDir()/button()`): an on-screen QWERTY
 fed absolute tap coords via Inputs' raw-tap mode, used to type a Wi-Fi SSID/password on the TFT.
@@ -62,19 +72,24 @@ fed absolute tap coords via Inputs' raw-tap mode, used to type a Wi-Fi SSID/pass
 ## Board pin map (LCDWIKI ES3C28P/ES3N28P datasheet — verified against `config.h`)
 The **wired/onboard pins are confirmed correct** in `config.h` (datasheet CR2025-MI6890):
 - **LCD (SPI2):** CS=10, DC=46, SCK=12, MOSI=11, MISO=13, BL=45; RST tied to chip EN (`PIN_TFT_RST -1`).
-- **Touch (FT6336, I2C):** SDA=16, SCL=15, INT=17, RST=18.
+- **I2C bus (SDA=16, SCL=15):** **one Arduino-`Wire` master, two devices** — FT6336 touch (0x38, in
+  `Touch.cpp`) and VL53L1X ToF (0x29, in `Sensors.cpp`). They serialize on the bus from the core-1 loop;
+  there is no second master (the old two-master pad-swap is what killed touch). `TOUCH_I2C_PORT` is a
+  dead define — touch runs on `Wire` (port 0), not its own port. Touch INT=17, RST=18 (RST pulsed in
+  `Panel::begin`). ToF has no XSHUT/GPIO1 wired.
 - **Audio (ES8311 I2S):** MCLK=4, BCLK=5, **DOUT=8** (→speaker DAC), LRCK=7, **DIN=6** (←mic ADC),
-  AMP_EN=1 (active-low); codec control is I2C 0x18 on the **touch** SDA/SCL. (DOUT/DIN were swapped
-  early on — IO8=DOUT, IO6=DIN is the corrected/working mapping.)
-- **Encoder (KY-040, `HAS_ENCODER=1`):** CLK=IO2, DT=IO14 (ex-ToF I2C pins, GPIO header). SW disabled
-  (-1) — no free header pin; select via touch.
+  AMP_EN=1 (active-low); codec control is I2C 0x18 on the **touch** SDA/SCL, boot-only. (DOUT/DIN were
+  swapped early on — IO8=DOUT, IO6=DIN is the corrected/working mapping.)
+- **Encoder (KY-040, `HAS_ENCODER=1`):** CLK=IO2, DT=IO14 (GPIO header). `PIN_ENC_SW=-1` (lib SW off);
+  the shaft button is on **IO21** (`PIN_BUTTON`, shared with the DHT11) and read by `pollSideButton`.
 - **Other onboard:** BOOT=0, UART0 TX=43/RX=44, USB=19/20, **RGB LED=42** (single-wire WS2812-style),
   **battery ADC=9**, SD card=38/40/39/41/48/47 (firmware uses internal-flash LittleFS, not the SD slot).
 
 The firmware does **not** currently drive the onboard RGB LED (IO42) or read battery (IO9): `LedRing`
 targets an external WS2812B ring and battery is stubbed. **The board breaks out only 4 GPIO** (GPIO
-header: IO2, IO3, IO14, IO21 — docs/WIRING.md §1): IO2/IO14 = encoder CLK/DT, IO3 = light, IO21 = temp.
-That leaves **no free header pin** for an encoder shaft button (SW=-1; select via touch). The other
+header: IO2, IO3, IO14, IO21 — docs/WIRING.md §1): IO2/IO14 = encoder CLK/DT, IO3 = light, **IO21 is
+double-booked** — DHT11 data *and* the encoder shaft button (`PIN_BUTTON`), which coexist because the
+DHT's pull-up holds the active-low button line high at rest. There is no fifth header pin. The other
 external-peripheral pins in `config.h` are **inert placeholders (`HAS_*`=0)** that map to pins NOT on any
 header — `PIN_HAPTIC 48` (unused, motor removed), `PIN_LED_RING 39`=SD_D0, `PIN_BATTERY_ADC 6`=I2S_DIN;
 real battery is IO9. **`docs/WIRING.md` is the S3-accurate wiring reference; `docs/HARDWARE.md` §2's
@@ -87,10 +102,11 @@ Module** · **USB CDC On Boot = Enabled** · Flash Size = **16MB** · Partition 
 default QSPI setting makes `psramFound()` fail and the full-screen sprite fall back to flickery direct
 draw. The SPIFFS partition is where LittleFS mounts the upload queue.)
 
-**Required libraries** (Library Manager): **LovyanGFX**, **AiEsp32RotaryEncoder** (now required —
-`HAS_ENCODER=1`), **DHT sensor library** + **Adafruit Unified Sensor**, **Adafruit NeoPixel** (LED ring,
-off), **Adafruit VL53L1X** (ToF, off/removed). FT6336 touch uses LovyanGFX's built-in `Touch_FT5x06` — no extra library.
-`CLOUD_USE_TLS` stays 0 (plain HTTP) to keep the build light.
+**Required libraries** (Library Manager): **LovyanGFX**, **AiEsp32RotaryEncoder** (`HAS_ENCODER=1`),
+**Adafruit VL53L1X** (`HAS_PRESENCE=1` — ToF is back on), **DHT sensor library** + **Adafruit Unified
+Sensor**; **Adafruit NeoPixel** only if you re-enable the LED ring (off). FT6336 touch needs **no extra
+library** — it's read directly over Arduino `Wire` in `Touch.cpp` (LovyanGFX's own touch driver was
+removed from `Panel.cpp`). `CLOUD_USE_TLS` stays 0 (plain HTTP) to keep the build light.
 
 Font note: hero numerals use bundled `FreeSans` as a stand-in for Tomato32's thin Inter — a real Inter
 VLW drops into `assets/` and is a one-line `setFont` swap in `TimerScreen`.
@@ -102,7 +118,7 @@ recursive NVS mutex; the loop watchdog reboots on a stall. The box calls the web
 (`POST /ingest/sessions|telemetry|pairing|unpair`, `GET /ingest/config`) with `x-device-secret`;
 `SECRETS.h` must match the app's `.env`.
 
-## Audio subsystem (S3-only, off by default)
+## Audio subsystem (S3-only; mic + speaker now ON)
 The board carries an **ES8311 codec + FM8002E amp on I2S** — the only mic and speaker.
 - **`Audio.*`** is the driver. `Audio::begin()` configures the ES8311 once at boot over **software-I2C
   on the touch pins (IO16/IO15, addr 0x18)** — this must run **before `Display::init()`** claims that
@@ -117,8 +133,10 @@ The board carries an **ES8311 codec + FM8002E amp on I2S** — the only mic and 
 
 ## Power / brownout (recurring failure mode)
 This board browns out / reboot-loops on a marginal 5V supply (laptop USB) because the **Wi-Fi
-association current spike** sags the rail. Mitigations already in the tree: `WIFI_TX_POWER` capped to
-8.5 dBm, and mic/ToF/speaker left OFF to cut boot current. `DISABLE_BROWNOUT_DETECTOR` is intentionally
+association current spike** sags the rail. The one mitigation left in the tree is `WIFI_TX_POWER` capped
+to 8.5 dBm (and `WIFI_MODEM_SLEEP=0` to keep the link solid). Mic/speaker/ToF are now **on**, so boot
+current is back up — a marginal supply will reboot-loop; the cure is a stronger 5V source, not flipping
+those `HAS_*` flags back off. `DISABLE_BROWNOUT_DETECTOR` is intentionally
 **0** — the IDF arms the detector before `setup()` runs, so the app-level mask can't stop a boot-stage
 brownout and only turns a clean reboot into a dead-dark hang. **The real fix is a stronger 5V source**,
 not a config flag. On-screen boot breadcrumbs (`bootMsg`) + the printed reset reason exist to tell a
