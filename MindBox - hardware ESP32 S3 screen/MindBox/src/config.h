@@ -171,10 +171,12 @@ static const int           MAX_SAMPLES        = 120;
 #define CHECKPOINT_TAIL_MAX 10
 static const float         TEMP_MIN_VALID     = -20.0f;
 static const float         TEMP_MAX_VALID     = 60.0f;
-static const unsigned long TELEMETRY_PERIOD_MS = 60000UL;
+static const unsigned long TELEMETRY_PERIOD_MS = 30000UL; // heartbeat; doubles as a keep-alive so a phone
+// hotspot (which power-saves and drops idle/low-traffic clients after a few minutes) is less likely to
+// reclaim the box. Reuses the kept-alive socket (setReuse), so more-frequent posts add no teardown churn.
 // Min spacing between transition-triggered telemetry POSTs. A session fires a POST on every pause/resume/
 // skip; coalescing rapid taps to one POST per this window cuts the back-to-back sockets that widen the
-// lwip pbuf-double-free race. The 60s heartbeat (TELEMETRY_PERIOD_MS) is unaffected.
+// lwip pbuf-double-free race. The heartbeat (TELEMETRY_PERIOD_MS) is unaffected.
 static const unsigned long TELEMETRY_MIN_GAP_MS = 3000UL;
 static const unsigned long SESSION_CLOCK_MS    = 10UL;
 static const unsigned long TOF_POLL_MS         = 500UL;   // ToF ranging period (shares the bus with touch; modest rate)

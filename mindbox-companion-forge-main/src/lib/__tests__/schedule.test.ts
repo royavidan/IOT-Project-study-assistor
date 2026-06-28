@@ -86,15 +86,16 @@ describe("schedule helpers", () => {
     expect(agenda[1]?.type).toBe("focus");
   });
 
-  it("builds a Monday-based week", () => {
+  it("builds a Sunday-based week (Israel)", () => {
+    // 2026-06-04 is a Thursday; its week runs Sun 05-31 … Sat 06-06.
     expect(weekDateKeys("2026-06-04")).toEqual([
+      "2026-05-31",
       "2026-06-01",
       "2026-06-02",
       "2026-06-03",
       "2026-06-04",
       "2026-06-05",
       "2026-06-06",
-      "2026-06-07",
     ]);
   });
 });

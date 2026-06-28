@@ -3,7 +3,7 @@ import type { Session } from "@/lib/types";
 import type { ScheduleEventInput } from "@/features/schedule/queries";
 
 export type ScheduleKind = "weekly" | "once";
-export type ScheduleCategory = "class" | "exam";
+export type ScheduleCategory = "class" | "exam" | "study";
 export type MeetingType = "lecture" | "tutorial" | "lab";
 
 export interface ScheduleEvent {
@@ -274,12 +274,11 @@ export function courseMarkersByDate(
   return byDate;
 }
 
-/** Monday-based week containing `anchor` (local calendar). */
+/** Sunday-based week containing `anchor` (local calendar; Israel week starts Sunday). */
 export function weekDateKeys(anchor: string): string[] {
   const d = parseDateKey(anchor);
-  const day = d.getDay();
-  const mondayOffset = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + mondayOffset);
+  // getDay(): 0=Sun..6=Sat → step back to the Sunday that starts this week.
+  d.setDate(d.getDate() - d.getDay());
 
   const keys: string[] = [];
   for (let i = 0; i < 7; i++) {
@@ -348,6 +347,8 @@ export function upcomingExams(
 // --- Course builder (one course → many weekly meetings + exams) -------------
 
 const EXAM_COLOR = "#f43f5e";
+/** Default color for a self-planned study block (teal — distinct from courses/exams). */
+export const STUDY_COLOR = "#14b8a6";
 
 export const MEETING_TYPES: { value: MeetingType; label: string }[] = [
   { value: "lecture", label: "Lecture" },
@@ -357,6 +358,16 @@ export const MEETING_TYPES: { value: MeetingType; label: string }[] = [
 
 export function meetingTypeLabel(subtype: string | null | undefined): string {
   return MEETING_TYPES.find((m) => m.value === subtype)?.label ?? "Class";
+}
+
+/** Display label for an event: exams + study blocks have fixed labels; classes use their meeting type. */
+export function categoryLabel(
+  category: ScheduleCategory | undefined,
+  subtype: string | null | undefined,
+): string {
+  if (category === "exam") return "Exam";
+  if (category === "study") return "Study";
+  return meetingTypeLabel(subtype);
 }
 
 export interface CourseMeetingDraft {

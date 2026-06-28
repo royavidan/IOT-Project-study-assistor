@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Calendar, CalendarDayButton } from "@/components/ui/calendar";
 import { parseDateKey, toDateKey, todayDateKey } from "@/lib/dates";
 import {
+  STUDY_COLOR,
   courseMarkersByDate,
   expandScheduleEvents,
   monthDateRange,
@@ -76,6 +77,7 @@ export function CalendarMonthView({
         <div className="flex justify-center">
           <Calendar
             mode="single"
+            weekStartsOn={0}
             className="[--cell-size:2.6rem] sm:[--cell-size:2.75rem]"
             month={visibleMonth}
             onMonthChange={onVisibleMonthChange}
@@ -103,6 +105,13 @@ export function CalendarMonthView({
                               style={{ borderColor: m.color }}
                               aria-hidden
                             />
+                          ) : m.category === "study" ? (
+                            <span
+                              key={i}
+                              className="h-2 w-2 rounded-sm"
+                              style={{ backgroundColor: m.color }}
+                              aria-hidden
+                            />
                           ) : (
                             <span
                               key={i}
@@ -127,6 +136,9 @@ export function CalendarMonthView({
           </span>
           <span className="inline-flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full border-2 border-primary bg-transparent" /> Exam
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: STUDY_COLOR }} /> Study
           </span>
           <span>Dots are colored by course</span>
         </div>

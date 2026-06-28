@@ -113,6 +113,32 @@ function LoginPage() {
     }
   };
 
+  const forgotPassword = async () => {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!normalizedEmail) {
+      setMessageKind("error");
+      setMessage("Enter your email above first, then tap “Forgot password?”.");
+      return;
+    }
+    setMessage(null);
+    setIsSubmitting(true);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const redirectUrl = new URL("/auth/reset", window.location.origin).toString();
+      const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, {
+        redirectTo: redirectUrl,
+      });
+      if (error) throw error;
+      setMessageKind("success");
+      setMessage("If an account exists for that email, a reset link is on its way.");
+    } catch (error) {
+      setMessageKind("error");
+      setMessage(error instanceof Error ? error.message : "Could not send a reset link.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <>
       <PageHeader
@@ -185,7 +211,19 @@ function LoginPage() {
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="password">Password</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">Password</Label>
+                {mode === "signin" && (
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-primary hover:underline disabled:opacity-50"
+                    disabled={isSubmitting || isGoogleLoading}
+                    onClick={() => void forgotPassword()}
+                  >
+                    Forgot password?
+                  </button>
+                )}
+              </div>
               <Input
                 id="password"
                 type="password"

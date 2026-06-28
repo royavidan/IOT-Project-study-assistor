@@ -13,7 +13,12 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import type { ScheduleCategory, ScheduleEvent, ScheduleKind } from "@/features/schedule/schedule";
-import { COURSE_COLORS, DAY_LABELS_FULL, MEETING_TYPES } from "@/features/schedule/schedule";
+import {
+  COURSE_COLORS,
+  DAY_LABELS_FULL,
+  MEETING_TYPES,
+  STUDY_COLOR,
+} from "@/features/schedule/schedule";
 import type { ScheduleEventInput } from "@/features/schedule/queries";
 
 const EXAM_COLOR = "#f43f5e";
@@ -36,7 +41,7 @@ const defaultForm = (date?: string): ScheduleEventInput => ({
   category: "class",
   subtype: "lecture",
   kind: "weekly",
-  dayOfWeek: date ? new Date(`${date}T12:00:00`).getDay() : 1,
+  dayOfWeek: date ? new Date(`${date}T12:00:00`).getDay() : 0,
   eventDate: date ?? null,
   startTime: "09:00",
   endTime: "10:30",
@@ -82,22 +87,35 @@ export function ScheduleEventDialog({
       kind,
       dayOfWeek:
         kind === "weekly"
-          ? (f.dayOfWeek ?? (initialDate ? new Date(`${initialDate}T12:00:00`).getDay() : 1))
+          ? (f.dayOfWeek ?? (initialDate ? new Date(`${initialDate}T12:00:00`).getDay() : 0))
           : null,
       eventDate: kind === "once" ? (f.eventDate ?? initialDate ?? null) : null,
     }));
   };
 
   const setCategory = (category: ScheduleCategory) => {
-    setForm((f) => ({
-      ...f,
-      category,
-      // Exams are one-off, dated, and red by default.
-      kind: category === "exam" ? "once" : f.kind,
-      color: category === "exam" ? EXAM_COLOR : f.color,
-      subtype: category === "exam" ? null : (f.subtype ?? "lecture"),
-      eventDate: category === "exam" ? (f.eventDate ?? initialDate ?? null) : f.eventDate,
-    }));
+    setForm((f) => {
+      const leavingExamRed = f.color === EXAM_COLOR;
+      return {
+        ...f,
+        category,
+        // Exams are one-off + dated; classes and study blocks keep weekly/once.
+        kind: category === "exam" ? "once" : f.kind,
+        color:
+          category === "exam"
+            ? EXAM_COLOR
+            : category === "study"
+              ? leavingExamRed
+                ? STUDY_COLOR
+                : f.color
+              : leavingExamRed
+                ? COURSE_COLORS[0].value
+                : f.color,
+        // Meeting subtype is class-only.
+        subtype: category === "class" ? (f.subtype ?? "lecture") : null,
+        eventDate: category === "exam" ? (f.eventDate ?? initialDate ?? null) : f.eventDate,
+      };
+    });
   };
 
   return (
@@ -142,6 +160,7 @@ export function ScheduleEventDialog({
               <SelectContent>
                 <SelectItem value="class">Class</SelectItem>
                 <SelectItem value="exam">Exam</SelectItem>
+                <SelectItem value="study">Study block</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -237,7 +256,7 @@ export function ScheduleEventDialog({
               <div className="grid gap-2">
                 <Label htmlFor="sched-dow">Day</Label>
                 <Select
-                  value={String(form.dayOfWeek ?? 1)}
+                  value={String(form.dayOfWeek ?? 0)}
                   onValueChange={(v) => setForm((f) => ({ ...f, dayOfWeek: Number(v) }))}
                 >
                   <SelectTrigger id="sched-dow">

@@ -25,6 +25,8 @@ static const char* ROWS_ABC[3] = { "qwertyuiop", "asdfghjkl", "zxcvbnm" };
 static const char* ROWS_SYM[3] = { "1234567890", "@#$_&-+()", ".,?!'/:;" };
 
 static const int KH = 34, Y0 = 58, GAP = 4;
+static const int FN_GAP = 12;   // extra gap before the function row so a small touch-Y error can't
+                                // spill a Backspace/OK tap up into the letter row above it
 
 // Build the live key set (geometry + actions) shared by render() and handleTap().
 static int buildKeys(Key out[]) {
@@ -43,8 +45,9 @@ static int buildKeys(Key out[]) {
       k.x = x0 + i * kw; k.y = y; k.w = kw - 2; k.h = KH;
     }
   }
-  // Function row: shift · 123/abc · space · bksp · done · cancel (6 equal keys).
-  int y = Y0 + 3 * (KH + GAP);
+  // Function row: shift · 123/abc · space · bksp · done · cancel (6 equal keys). Pushed down by an
+  // extra FN_GAP so a small touch-Y error can't read a Backspace/OK tap as a letter from the row above.
+  int y = Y0 + 3 * (KH + GAP) + FN_GAP;
   int fw = 52, x0 = (SCR_W - fw * 6) / 2;
   struct F { const char* l; uint8_t a; } fr[6] = {
     { s_shift ? "^*" : "^", KSHIFT }, { s_sym ? "abc" : "123", KLAYER },
@@ -69,25 +72,35 @@ void begin(const char* title, bool masked) {
 }
 
 void handleTap(int x, int y) {
+  if (y < Y0 - 6) return;          // tap up in the title/entry-field area -> not a key
   Key keys[48];
   int n = buildKeys(keys);
+  // Forgiving hit-test: snap to the NEAREST key (distance from the tap to the key rect) instead of
+  // requiring an exact hit. The 2px column gaps, 4px row gaps and a few px of touch-calibration drift
+  // would otherwise land in dead space and type nothing. An exact hit has distance 0 and always wins;
+  // only a wild far-edge miss (> ~30px from any key) is ignored.
+  int best = -1; long bestD = 0;
   for (int i = 0; i < n; i++) {
     const Key& k = keys[i];
-    if (x < k.x || x >= k.x + k.w || y < k.y || y >= k.y + k.h) continue;
-    switch (k.act) {
-      case KCHAR:  if (s_len < (int)sizeof(s_buf) - 1) { s_buf[s_len++] = k.ch; s_buf[s_len] = 0; }
-                   if (s_shift && !s_sym) s_shift = false;   // one-shot shift
-                   break;
-      case KSHIFT: s_shift = !s_shift; break;
-      case KLAYER: s_sym = !s_sym; s_shift = false; break;
-      case KBKSP:  if (s_len > 0) s_buf[--s_len] = 0; break;
-      case KSPACE: if (s_len < (int)sizeof(s_buf) - 1) { s_buf[s_len++] = ' '; s_buf[s_len] = 0; } break;
-      case KDONE:  s_done = true; break;
-      case KCANCEL: s_cancel = true; break;
-    }
-    s_dirty = true;
-    return;
+    int ddx = (x < k.x) ? (k.x - x) : (x >= k.x + k.w ? x - (k.x + k.w - 1) : 0);
+    int ddy = (y < k.y) ? (k.y - y) : (y >= k.y + k.h ? y - (k.y + k.h - 1) : 0);
+    long d = (long)ddx * ddx + (long)ddy * ddy;
+    if (best < 0 || d < bestD) { best = i; bestD = d; }
   }
+  if (best < 0 || bestD > 30L * 30L) return;
+  const Key& k = keys[best];
+  switch (k.act) {
+    case KCHAR:  if (s_len < (int)sizeof(s_buf) - 1) { s_buf[s_len++] = k.ch; s_buf[s_len] = 0; }
+                 if (s_shift && !s_sym) s_shift = false;   // one-shot shift
+                 break;
+    case KSHIFT: s_shift = !s_shift; break;
+    case KLAYER: s_sym = !s_sym; s_shift = false; break;
+    case KBKSP:  if (s_len > 0) s_buf[--s_len] = 0; break;
+    case KSPACE: if (s_len < (int)sizeof(s_buf) - 1) { s_buf[s_len++] = ' '; s_buf[s_len] = 0; } break;
+    case KDONE:  s_done = true; break;
+    case KCANCEL: s_cancel = true; break;
+  }
+  s_dirty = true;
 }
 
 void render() {

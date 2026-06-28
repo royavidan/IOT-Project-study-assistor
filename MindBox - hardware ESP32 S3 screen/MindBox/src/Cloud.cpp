@@ -468,32 +468,43 @@ static void handlePortalRoot()
   // watchdog-fed net task, so a foreground scan trips the task WDT (panic
   // reboot) and yanks the SoftAP off-channel, dropping the phone.
   page += "<label>Network (2.4 GHz)</label>";
-  page += "<select name=ssid required>";
+  page += "<select name=ssid id=ssid required onchange='mbSec()'>";
   bool anyNetworks = false;
   for (int i = 0; i < s_scanN; i++)
   {
     if (!s_scanList[i].ssid[0])
       continue;
+    String esc = htmlAttr(s_scanList[i].ssid);
+    // data-sec lets the script below require a password only for secured networks.
+    page += "<option value=\"" + esc + "\" data-sec=" + (s_scanList[i].secured ? "1" : "0");
     if (!anyNetworks)
     {
-      page += "<option value=\"" + htmlAttr(s_scanList[i].ssid) + "\" selected>" +
-              htmlAttr(s_scanList[i].ssid) + "</option>";
+      page += " selected";
       anyNetworks = true;
     }
-    else
-    {
-      page += "<option value=\"" + htmlAttr(s_scanList[i].ssid) + "\">" +
-              htmlAttr(s_scanList[i].ssid) + "</option>";
-    }
+    page += ">" + esc + (s_scanList[i].secured ? "" : " (open)") + "</option>";
   }
   if (!anyNetworks)
   {
     page += "<option value=\"\" selected disabled>No networks found</option>";
   }
   page += "</select>";
-  page += "<label>Password</label><input name=pass type=password required placeholder='Wi-Fi password'>";
+  // Password is deliberately NOT html-`required`: open networks have none, so a hard
+  // requirement would make them unjoinable. The script flips the requirement (and the
+  // hint) to match the selected network's security. With JS disabled the field is just
+  // optional — leave it blank for an open network. The save handler + WiFi.begin()
+  // already accept an empty pass (joins as open).
+  page += "<label>Password</label>";
+  page += "<input name=pass id=pass type=password placeholder='Wi-Fi password'>";
   page += "<label>Server URL (optional)</label><input name=url value='" + Storage::appBaseUrl() + "'>";
-  page += "<button type=submit>Save &amp; connect</button></form></body></html>";
+  page += "<button type=submit>Save &amp; connect</button></form>";
+  page += "<script>function mbSec(){var s=document.getElementById('ssid'),"
+          "o=s.options[s.selectedIndex],"            // unknown/no attr -> treat as secured (safe default)
+          "sec=!o||o.getAttribute('data-sec')!=='0',"
+          "p=document.getElementById('pass');"
+          "p.required=sec;p.placeholder=sec?'Wi-Fi password':'(open network - no password)';}"
+          "mbSec();</script>";
+  page += "</body></html>";
   s_web.send(200, "text/html", page);
 }
 
@@ -594,7 +605,8 @@ static void manageWifi()
     if (s_ssid.length() && millis() - s_lastWifiTry > WIFI_RETRY_MS)
     {
       s_lastWifiTry = millis();
-      WiFi.begin(s_ssid.c_str(), s_pass.c_str());
+      WiFi.disconnect(false, false);  // drop stale assoc state (radio on, creds kept) so we cleanly
+      WiFi.begin(s_ssid.c_str(), s_pass.c_str());  // rejoin when the hotspot wakes back up
     }
   }
   else

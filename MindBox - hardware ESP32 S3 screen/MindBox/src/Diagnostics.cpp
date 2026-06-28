@@ -11,6 +11,10 @@
 #include "Cloud.h"
 #include "UploadQueue.h"
 #include "Inputs.h"
+#if USE_TOUCH
+#include "Touch.h"
+#include <esp_task_wdt.h>
+#endif
 #include <ESP.h>
 #include <esp_system.h>
 #include <math.h>
@@ -275,7 +279,7 @@ void selfTest() {
   Serial.printf("calib    : noise=%.0f light=%.0f lightvar=%.0f tempOff=%.1f C\n",
                 Storage::noiseFullScale(), Storage::lightLuxScale(),
                 Storage::lightVarScale(), Storage::tempOffsetC());
-  Serial.println("commands : m=monitor  c=calib  a=audio  b=btn  w=wifi  q=queue  d=dump  h=help");
+  Serial.println("commands : m=monitor  c=calib  a=audio  b=btn  t=touch  k=recal  w=wifi  q=queue  d=dump  h=help");
   Serial.println("===========================");
 }
 
@@ -292,7 +296,11 @@ void tick() {
     else if (c == 'w') Cloud::provisionFromSerial();
     else if (c == 'c') handleCalibCommand();
     else if (c == 'a') Audio::probe();
-    else if (c == 'h') Serial.println("[diag] m=monitor  c=calib  a=audio  b=btn  w=wifi  q=queue  d=dump  h=help");
+#if USE_TOUCH
+    else if (c == 't') Touch::diagnose();
+    else if (c == 'k') { esp_task_wdt_delete(NULL); Touch::calibrate(); esp_task_wdt_add(NULL); }  // blocks on taps -> drop WDT
+#endif
+    else if (c == 'h') Serial.println("[diag] m=monitor  c=calib  a=audio  b=btn  t=touch  k=recal  w=wifi  q=queue  d=dump  h=help");
   }
   if (s_monitor && millis() - s_lastMon > 1000) { s_lastMon = millis(); dump(); }
 }

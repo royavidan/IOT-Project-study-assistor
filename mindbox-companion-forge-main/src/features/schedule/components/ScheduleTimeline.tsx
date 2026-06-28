@@ -1,12 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { BookOpen, Brain, GraduationCap, MapPin, Pencil, Trash2 } from "lucide-react";
+import { BookOpen, Brain, GraduationCap, MapPin, NotebookPen, Pencil, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { AgendaItem } from "@/features/schedule/schedule";
 import {
+  categoryLabel,
   formatDurationMinutes,
   formatTimeDisplay,
-  meetingTypeLabel,
 } from "@/features/schedule/schedule";
 
 function fmtMins(total: number): string {
@@ -92,6 +92,8 @@ export function ScheduleTimeline({
                     <div className="flex flex-wrap items-center gap-2">
                       {item.category === "exam" ? (
                         <GraduationCap className="h-4 w-4 shrink-0 text-danger" aria-hidden />
+                      ) : item.category === "study" ? (
+                        <NotebookPen className="h-4 w-4 shrink-0 text-info" aria-hidden />
                       ) : (
                         <BookOpen className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
                       )}
@@ -100,10 +102,12 @@ export function ScheduleTimeline({
                         className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                           item.category === "exam"
                             ? "bg-danger-muted text-danger"
-                            : "bg-primary/10 text-primary"
+                            : item.category === "study"
+                              ? "bg-info/10 text-info"
+                              : "bg-primary/10 text-primary"
                         }`}
                       >
-                        {item.category === "exam" ? "Exam" : meetingTypeLabel(item.subtype)}
+                        {categoryLabel(item.category, item.subtype)}
                       </span>
                     </div>
 

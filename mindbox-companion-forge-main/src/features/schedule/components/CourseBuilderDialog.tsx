@@ -39,7 +39,7 @@ type Props = {
 function defaultMeeting(date?: string): CourseMeetingDraft {
   return {
     subtype: "lecture",
-    dayOfWeek: date ? new Date(`${date}T12:00:00`).getDay() : 1,
+    dayOfWeek: date ? new Date(`${date}T12:00:00`).getDay() : 0,
     startTime: "09:00",
     endTime: "10:30",
     location: "",

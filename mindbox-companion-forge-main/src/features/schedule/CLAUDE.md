@@ -1,6 +1,12 @@
 # Feature: schedule
 
 Calendar / focus-block scheduling (`/calendar`, mobile-first Agenda/Day/Month switcher).
+**Week starts Sunday** (Israel): `weekDateKeys` is Sunday-based and the Month `<Calendar weekStartsOn={0}>`;
+new weekly events default to Sunday (`dayOfWeek` 0). Day storage is JS-convention `0=Sun..6=Sat` (unchanged).
+Event **category** is `class | exam | study` — a **study block** is a self-planned session (NotebookPen,
+teal `STUDY_COLOR`, "Study" badge; Month marker = filled rounded-square), weekly or one-time, **calendar-only**
+(excluded from course meeting/exam counts + the grade scheme). Use `categoryLabel(category, subtype)` for the
+display label. Migration `0017_schedule_study_blocks.sql` widens the category CHECK. `subtype` is class-only.
 - `schedule.ts` — schedule domain logic. `queries.ts` — schedule queries.
 - `ics.ts` — pure iCalendar parser (CheeseFork/Technion-tuned: RRULE weekly classes, `מועד` all-day exams,
   HE+EN `"{type} {group} - {course}"` summaries; no course code → name-keyed). `ics.functions.ts` —

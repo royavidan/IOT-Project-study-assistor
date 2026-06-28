@@ -213,6 +213,7 @@ int timerAction() {
 void setRawTouchActive(bool on) {
 #if USE_TOUCH
   s_rawTouch = on;
+  Touch::setRawMode(on);   // keyboard: every release becomes a tap, so a press is never lost to a swipe
   if (!on) s_tapped = false;
 #else
   (void)on;

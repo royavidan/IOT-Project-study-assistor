@@ -14,6 +14,10 @@ namespace Touch {
 
   void begin();                  // load saved calibration, or run it once if none
   void calibrate();              // interactive corner calibration -> applied + saved to NVS
+  void diagnose();               // ~12s live probe: draws a crosshair where the touch maps +
+                                 // prints raw/mapped coords (so a bad calibration is visible)
+  void setRawMode(bool on);      // keyboard/raw-tap mode: every release is a TAP at the down
+                                 // point (no drag, no long-press) so a key press is never lost
   Gesture poll(int& x, int& y);  // G_NONE until a gesture completes; x/y = tap point
 }
 

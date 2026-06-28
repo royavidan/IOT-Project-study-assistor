@@ -319,11 +319,11 @@ function Device() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-sm font-semibold">{myDevice.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {myDevice.firmwareVersion
-                      ? `Firmware ${myDevice.firmwareVersion} · linked to ${accountLabel}`
-                      : `Linked to ${accountLabel}`}
-                  </p>
+                  {myDevice.firmwareVersion && (
+                    <p className="text-xs text-muted-foreground">
+                      Firmware {myDevice.firmwareVersion}
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button

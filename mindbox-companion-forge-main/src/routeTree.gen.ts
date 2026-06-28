@@ -27,6 +27,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SessionIdRouteImport } from './routes/session.$id'
 import { Route as ReviewerAcceptRouteImport } from './routes/reviewer/accept'
 import { Route as CoursesIdRouteImport } from './routes/courses.$id'
+import { Route as AuthResetRouteImport } from './routes/auth/reset'
 import { Route as AuthCallbackRouteImport } from './routes/auth/callback'
 
 const SimulatorRoute = SimulatorRouteImport.update({
@@ -119,6 +120,11 @@ const CoursesIdRoute = CoursesIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => CoursesRoute,
 } as any)
+const AuthResetRoute = AuthResetRouteImport.update({
+  id: '/auth/reset',
+  path: '/auth/reset',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/auth/callback',
   path: '/auth/callback',
@@ -142,6 +148,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/simulator': typeof SimulatorRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/reset': typeof AuthResetRoute
   '/courses/$id': typeof CoursesIdRoute
   '/reviewer/accept': typeof ReviewerAcceptRoute
   '/session/$id': typeof SessionIdRoute
@@ -163,6 +170,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/simulator': typeof SimulatorRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/reset': typeof AuthResetRoute
   '/courses/$id': typeof CoursesIdRoute
   '/reviewer/accept': typeof ReviewerAcceptRoute
   '/session/$id': typeof SessionIdRoute
@@ -185,6 +193,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/simulator': typeof SimulatorRoute
   '/auth/callback': typeof AuthCallbackRoute
+  '/auth/reset': typeof AuthResetRoute
   '/courses/$id': typeof CoursesIdRoute
   '/reviewer/accept': typeof ReviewerAcceptRoute
   '/session/$id': typeof SessionIdRoute
@@ -208,6 +217,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/simulator'
     | '/auth/callback'
+    | '/auth/reset'
     | '/courses/$id'
     | '/reviewer/accept'
     | '/session/$id'
@@ -229,6 +239,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/simulator'
     | '/auth/callback'
+    | '/auth/reset'
     | '/courses/$id'
     | '/reviewer/accept'
     | '/session/$id'
@@ -250,6 +261,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/simulator'
     | '/auth/callback'
+    | '/auth/reset'
     | '/courses/$id'
     | '/reviewer/accept'
     | '/session/$id'
@@ -272,6 +284,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   SimulatorRoute: typeof SimulatorRoute
   AuthCallbackRoute: typeof AuthCallbackRoute
+  AuthResetRoute: typeof AuthResetRoute
   ReviewerAcceptRoute: typeof ReviewerAcceptRoute
   SessionIdRoute: typeof SessionIdRoute
 }
@@ -404,6 +417,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CoursesIdRouteImport
       parentRoute: typeof CoursesRoute
     }
+    '/auth/reset': {
+      id: '/auth/reset'
+      path: '/auth/reset'
+      fullPath: '/auth/reset'
+      preLoaderRoute: typeof AuthResetRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth/callback': {
       id: '/auth/callback'
       path: '/auth/callback'
@@ -442,6 +462,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   SimulatorRoute: SimulatorRoute,
   AuthCallbackRoute: AuthCallbackRoute,
+  AuthResetRoute: AuthResetRoute,
   ReviewerAcceptRoute: ReviewerAcceptRoute,
   SessionIdRoute: SessionIdRoute,
 }

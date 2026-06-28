@@ -18,10 +18,16 @@ import { AuthProvider, useAuth } from "../lib/auth/auth-context";
 import { LoadingState } from "../components/EmptyState";
 
 // Routes a guest (signed-out user) is allowed to see.
-const PUBLIC_PATHS = ["/login", "/reviewer/accept", "/auth/callback"];
+const PUBLIC_PATHS = ["/login", "/reviewer/accept", "/auth/callback", "/auth/reset"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
+// Auth pages that should always render chrome-free — even for a signed-in user
+// (password reset arrives with a temporary recovery session).
+function isStandaloneAuthPath(pathname: string) {
+  return pathname === "/login" || pathname === "/auth/reset";
 }
 
 function NotFoundComponent() {
@@ -194,8 +200,9 @@ function AuthGate() {
     return <FullScreenStatus label="Redirecting to sign in…" />;
   }
 
-  // Signed in. The login page redirects itself once a user is present.
-  if (pathname === "/login") {
+  // Signed in. The login page redirects itself once a user is present; the
+  // password-reset page keeps its standalone layout despite the recovery session.
+  if (isStandaloneAuthPath(pathname)) {
     return (
       <GuestShell>
         <Outlet />

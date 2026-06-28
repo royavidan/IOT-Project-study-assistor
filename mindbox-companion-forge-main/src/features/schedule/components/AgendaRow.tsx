@@ -1,12 +1,12 @@
 import { Link } from "@tanstack/react-router";
-import { BookOpen, Brain, GraduationCap, Pencil, Trash2 } from "lucide-react";
+import { BookOpen, Brain, GraduationCap, NotebookPen, Pencil, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import type { AgendaItem } from "@/features/schedule/schedule";
 import {
+  categoryLabel,
   formatDurationMinutes,
   formatTimeDisplay,
-  meetingTypeLabel,
 } from "@/features/schedule/schedule";
 import { cn } from "@/lib/utils";
 
@@ -30,16 +30,26 @@ export function AgendaRow({
   const duration = item.endMinutes - item.startMinutes;
   const eventId = item.type === "course" ? item.id.split(":")[0] : null;
   const isExam = item.category === "exam";
+  const isStudy = item.category === "study";
   const isFocus = item.type === "focus";
   const accent = isFocus ? "#16a34a" : isExam ? "var(--color-danger)" : (item.color ?? "#6366f1");
 
-  const Icon = isFocus ? Brain : isExam ? GraduationCap : BookOpen;
-  const typeLabel = isFocus ? "Focus" : isExam ? "Exam" : meetingTypeLabel(item.subtype);
+  const Icon = isFocus ? Brain : isExam ? GraduationCap : isStudy ? NotebookPen : BookOpen;
+  const typeLabel = isFocus ? "Focus" : categoryLabel(item.category, item.subtype);
+  const iconClass = isFocus
+    ? "text-success"
+    : isExam
+      ? "text-danger"
+      : isStudy
+        ? "text-info"
+        : "text-muted-foreground";
   const typeClass = isFocus
     ? "bg-success/10 text-success"
     : isExam
       ? "bg-danger-muted text-danger"
-      : "bg-primary/10 text-primary";
+      : isStudy
+        ? "bg-info/10 text-info"
+        : "bg-primary/10 text-primary";
 
   return (
     <div className="flex min-h-14 items-stretch gap-3 rounded-xl border border-border bg-card p-3">
@@ -49,13 +59,7 @@ export function AgendaRow({
       <span className="w-1 shrink-0 rounded-full" style={{ backgroundColor: accent }} aria-hidden />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5">
-          <Icon
-            className={cn(
-              "h-3.5 w-3.5 shrink-0",
-              isFocus ? "text-success" : isExam ? "text-danger" : "text-muted-foreground",
-            )}
-            aria-hidden
-          />
+          <Icon className={cn("h-3.5 w-3.5 shrink-0", iconClass)} aria-hidden />
           {item.href ? (
             <Link to={item.href} className="truncate text-sm font-semibold hover:underline">
               {item.label}
