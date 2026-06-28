@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "author": "GitHub Copilot",
+  "editor": "wokwi",
+  "parts": [
+    {
+      "type": "board-esp32-s3-devkitc-1",
+      "id": "esp",
+      "top": 0,
+      "left": 0,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-ili9341",
+      "id": "tft1",
+      "top": 20,
+      "left": 360,
+      "attrs": {
+        "flipHorizontal": "true"
+      }
+    },
+    {
+      "type": "wokwi-ky-040",
+      "id": "enc1",
+      "top": 250,
+      "left": 360,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-pushbutton",
+      "id": "btn1",
+      "top": 250,
+      "left": 560,
+      "attrs": {
+        "color": "red"
+      }
+    },
+    {
+      "type": "wokwi-photoresistor-sensor",
+      "id": "ldr1",
+      "top": 40,
+      "left": 560,
+      "attrs": {
+        "lux": "350"
+      }
+    },
+    {
+      "type": "wokwi-dht11",
+      "id": "dht1",
+      "top": 150,
+      "left": 560,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-vl53l0x",
+      "id": "tof1",
+      "top": 340,
+      "left": 560,
+      "attrs": {}
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r1",
+      "top": 190,
+      "left": 760,
+      "attrs": {
+        "value": "10k"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r2",
+      "top": 220,
+      "left": 760,
+      "attrs": {
+        "value": "4.7k"
+      }
+    },
+    {
+      "type": "wokwi-resistor",
+      "id": "r3",
+      "top": 250,
+      "left": 760,
+      "attrs": {
+        "value": "4.7k"
+      }
+    }
+  ],
+  "connections": [
+    ["esp:12", "tft1:SCK", "green", []],
+    ["esp:11", "tft1:MOSI", "green", []],
+    ["esp:13", "tft1:MISO", "green", []],
+    ["esp:46", "tft1:D/C", "green", []],
+    ["esp:10", "tft1:CS", "green", []],
+    ["esp:45", "tft1:LED", "green", []],
+    ["esp:3V3", "tft1:VCC", "red", []],
+    ["esp:GND", "tft1:GND", "black", []],
+    ["esp:3V3", "tft1:RST", "red", []],
+
+    ["esp:2", "enc1:CLK", "orange", []],
+    ["esp:14", "enc1:DT", "orange", []],
+    ["esp:3V3", "enc1:VCC", "red", []],
+    ["esp:GND", "enc1:GND", "black", []],
+
+    ["esp:21", "btn1:1", "blue", []],
+    ["btn1:2", "esp:GND", "black", []],
+    ["esp:21", "r1:1", "blue", []],
+    ["r1:2", "esp:3V3", "red", []],
+    ["esp:21", "dht1:DATA", "blue", []],
+    ["esp:3V3", "dht1:VCC", "red", []],
+    ["esp:GND", "dht1:GND", "black", []],
+
+    ["esp:3", "ldr1:AO", "yellow", []],
+    ["esp:3V3", "ldr1:VCC", "red", []],
+    ["esp:GND", "ldr1:GND", "black", []],
+
+    ["esp:16", "tof1:SDA", "green", []],
+    ["esp:15", "tof1:SCL", "green", []],
+    ["esp:3V3", "tof1:VCC", "red", []],
+    ["esp:GND", "tof1:GND", "black", []],
+    ["esp:16", "r2:1", "green", []],
+    ["r2:2", "esp:3V3", "red", []],
+    ["esp:15", "r3:1", "green", []],
+    ["r3:2", "esp:3V3", "red", []]
+  ],
+  "dependencies": {}
+}
