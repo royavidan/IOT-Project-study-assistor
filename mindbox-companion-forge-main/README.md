@@ -19,11 +19,60 @@ Web companion app for the MindBox focus device (TanStack Start + React + Supabas
 
    Then reload the API cache by running `NOTIFY pgrst, 'reload schema';` once.
    The **Settings**, **Friends**, **Insights**, reviewer picker, and weekly email require `0002`–`0004`.
+
 4. **Google sign-in:** In Supabase → **Authentication → Providers → Google**, enable Google and paste your Google Cloud **Client ID** and **Client Secret**. In Google Cloud Console, add this authorized redirect URI:
    `https://<your-project-ref>.supabase.co/auth/v1/callback`
    Also add **Redirect URLs** in Supabase → **Authentication → URL Configuration**:
    `http://localhost:8080/auth/callback` (and your production URL when deployed).
 5. Start the dev server: `npm run dev` (serves `http://localhost:8080`).
+
+## AI features (Gemini)
+
+The **Smart (AI) study planner**, the **post-session check-in auto-replan**, and
+the **daily load review** are powered by Gemini (`gemini-2.5-flash`):
+
+1. Set `GEMINI_API_KEY` in `.env` (free key from https://aistudio.google.com/apikey)
+   and `JOBS_SECRET` (any long random string), then restart the dev server.
+2. Apply migrations `0020_llm_planner.sql` → `0021_session_checkin.sql` →
+   `0022_device_sound_agenda.sql` → `0023_load_review.sql` in the SQL editor.
+3. The daily load-review sweep is triggered by an external cron
+   (`.github/workflows/load-review.yml` at the repo root — set the
+   `APP_BASE_URL` + `JOBS_SECRET` repo secrets), or on demand from the
+   Insights page ("Run review now").
+
+Every assumption and threshold behind these features is documented in
+[`docs/ASSUMPTIONS.md`](docs/ASSUMPTIONS.md) — read it before the demo.
+
+## Site ↔ device features (remote control & live status)
+
+Four features talk to the ESP32-S3 box over the ingest contract (migrations
+`0024_device_commands.sql` → `0025_device_prefs_status.sql`, no new env vars):
+
+- **Remote interface control** — the "MindBox device" card on `/settings` sets
+  the box's screen theme (5 accent presets), pomodoro focus/break lengths and
+  exam mode; the box picks them up on its next 60s config poll.
+- **Remote commands** — the `/device` page can start/end a session, **ring the
+  box** (find-my) and send a short message to its screen, with live
+  Queued → Sent → Done status per command.
+- **Live device status** — `/device` shows an online/last-seen indicator
+  (90s threshold), battery, Wi-Fi, running firmware and the room right now
+  (temperature/humidity/light/noise from the box's sensors).
+- **On-device actions** — the box shows an exam badge + study streak, and after
+  a finished session lets you bump homework progress from its touch screen
+  (updates `/assignments` automatically).
+
+Everything is testable without hardware — see the device-communication flags in
+the simulator section below (`--config`, `--send-command`, `--ack`,
+`--homework`).
+
+## System guide (PDF)
+
+[`docs/MindBox-System-Guide.pdf`](docs/MindBox-System-Guide.pdf) is the full
+Hebrew system document (ESP32-S3 focused): every sensor's physics/wiring/driver,
+the firmware architecture, the device↔server protocol, the engineering
+lessons (brownout, I2C bus wars), and a **claim→live-proof playbook** for the
+demo. Source chapters live in `docs/system-guide/*.html`; rebuild with
+`bun run doc` (or `npx tsx scripts/build-system-doc.ts`).
 
 ## Tests
 

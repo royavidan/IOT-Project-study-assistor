@@ -86,6 +86,23 @@ describe("schedule helpers", () => {
     expect(agenda[1]?.type).toBe("focus");
   });
 
+  it("propagates planGenerated onto study AgendaItems", () => {
+    const genStudy: ScheduleEvent = {
+      ...weeklyLecture,
+      id: "gen1",
+      category: "study",
+      kind: "once",
+      dayOfWeek: null,
+      eventDate: "2026-06-01",
+      title: "Study: Calculus",
+      planGenerated: true,
+    };
+    const expanded = expandScheduleEvents([genStudy], "2026-06-01", "2026-06-01");
+    const agenda = buildDayAgenda(expanded, [], "2026-06-01");
+    expect(agenda).toHaveLength(1);
+    expect(agenda[0]?.planGenerated).toBe(true);
+  });
+
   it("builds a Sunday-based week (Israel)", () => {
     // 2026-06-04 is a Thursday; its week runs Sun 05-31 … Sat 06-06.
     expect(weekDateKeys("2026-06-04")).toEqual([
@@ -181,6 +198,7 @@ describe("courseMarkersByDate (month grid)", () => {
     endTime: "10:00",
     notes: null,
     kind: category === "exam" ? "once" : "weekly",
+    planGenerated: false,
   });
 
   it("dedupes by color+category and colors by course", () => {

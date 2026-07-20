@@ -20,6 +20,7 @@ namespace Sensors {
   unsigned long absentForMs(); // how long continuously absent (0 if present)
 
   bool  readTemp(float& c);            // false if no sensor
+  bool  readHumidity(float& pct);      // DHT11 relative humidity %; false if no sensor
   bool  readLight(float& lux, float& variance);  // false if no sensor
   int   batteryPct();          // -1 if unknown
 

@@ -115,8 +115,36 @@ VLW drops into `assets/` and is a one-line `setFont` swap in `TimerScreen`.
 The Arduino `loop()` runs input → FSM → render on core 1; `Cloud::begin()` spawns the Wi-Fi/HTTP/
 telemetry/upload **net task on core 0**. They share state only through thread-safe shims + `Storage`'s
 recursive NVS mutex; the loop watchdog reboots on a stall. The box calls the web app's ingest API
-(`POST /ingest/sessions|telemetry|pairing|unpair`, `GET /ingest/config`) with `x-device-secret`;
-`SECRETS.h` must match the app's `.env`.
+(`POST /ingest/sessions|telemetry|pairing|unpair|homework`, `GET /ingest/config`) with
+`x-device-secret`; `SECRETS.h` must match the app's `.env`.
+
+### Site↔device features (2026-07 downlink growth)
+- **Downlink** (`GET /ingest/config`, parsed in `Cloud::syncDownlink`) gained: `themeId` (accent
+  preset 0-4 → `Theme::setAccentPreset`, C_* colours are now macros over the active `AccentSet`),
+  `focusMin/breakMin/timingRev` (adopt-once-per-rev pomodoro timing; `Storage::lastTimingRev`),
+  `examMode` (DND) + `nextExamDays/Title` (root "EXAM Nd" badge via `Menu::setExamInfo`),
+  `streakDays/weekFocusMin` (STATS rows via `Menu::setCloudStats`), `hwStr` (top-3 homework →
+  `parseHwStr`), `weekStr` (rest-of-week schedule, days 1..6 ahead, ≤36 items → `parseWeekStr`;
+  browsed by the **ST_AGENDA day pager** — swipe/rotate pages Today→+6d, day 0 still renders
+  `agenda[]` and auto-start reads `agenda[]` only), and the command channel
+  `cmdId/cmdType/cmdArg/cmdText`. **`HTTP_MAX_BODY` is 8192** to fit the grown payload (over-cap
+  bodies are dropped silently). `CloudSettings` is ~2.9 KB now — both its copies are `static`
+  (net task + loop), never task-stack locals.
+- **Remote commands**: the once-dead `s_cmdQueue`/`Cloud::nextCommand` path is live. `syncDownlink`
+  enqueues a NEW `cmdId` (dedupe: the server re-serves an un-acked command after 75s), acks via
+  `&ack=<id>` on the next config GET, and sets `s_configNow` so bursts drain ~1/s.
+  `StateMachine::handleRemoteCmd` maps `CmdType` (wire values 1=start 4=end 5=ring 6=message —
+  keep in sync with the web `command-encode.ts`): start/end reuse the menu paths, ring =
+  `Sound::ring()` (find-my, MAX volume, bypasses every gate), message = alert chime + **`ST_MESSAGE`**
+  splash (`Display::renderMessage`; held in a 1-slot buffer if a session is running).
+- **`ST_HOMEWORK`** (`Display::renderHomework`): offered from ST_COMPLETE's go-idle path after a
+  finished WORK interval (paired + `hwCount > 0`); tap = +25%, hold = done, Skip row/20s = exit;
+  progress taps queue through `Cloud::postHomework` → `POST /ingest/homework`.
+- **Exam DND**: `Sound::setDnd(true)` mutes every chime except ring; coaching + interference nudges
+  are suppressed in StateMachine while `examMode` (quiet-hours screen-dim untouched).
+- **Telemetry uplink** gained optional `tempC/humidityPct/lightLux/noiseDb` — filled LOOP-side into
+  `TelemetrySnap` (sentinels NAN/-1) only when the sensor is wired + valid; humidity comes from the
+  DHT11 via the new `Sensors::readHumidity`.
 
 ## Audio subsystem (S3-only; mic + speaker now ON)
 The board carries an **ES8311 codec + FM8002E amp on I2S** — the only mic and speaker.

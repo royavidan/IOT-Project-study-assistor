@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/PageHeader";
 import { ErrorState, LoadingState } from "@/components/EmptyState";
 import { DeleteSessionDialog } from "@/features/sessions/components/DeleteSessionDialog";
+import { SessionTagCard } from "@/features/sessions/components/SessionTagCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { InfoHint } from "@/components/InfoHint";
@@ -95,6 +96,13 @@ function SessionDetail() {
         <Stat label="Presence breaks" value={String(meta.presenceInterruptions)} />
         <Stat label="Avg noise" value={fmtEnv(meta.noiseAvg)} />
       </div>
+
+      <SessionTagCard
+        id={id}
+        mode={meta.mode}
+        companions={meta.companions}
+        editable={!isReviewerView}
+      />
 
       <Card className="mb-6">
         <CardHeader className="flex-row items-center gap-2">

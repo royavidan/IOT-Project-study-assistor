@@ -70,6 +70,12 @@ static int      s_cycleTotal = 4;
 
 static PauseReason s_pauseReason = PAUSE_MANUAL;
 
+// Cloud extras (site downlink, RAM only): root exam badge + STATS streak/week.
+static int16_t s_examDays = -1;          // -1 = none -> badge hidden
+static char    s_examTitle[24] = {0};
+static int16_t s_streakDays = -1;        // -1 = unknown -> "--"
+static int32_t s_weekMin = -1;
+
 static void markDirty() { s_dirty = true; }
 
 // Honest connection state: Wi-Fi link is NOT the same as internet/backend.
@@ -230,7 +236,7 @@ static void applyPreset(int work, int brk) {
 
 static int itemCount(Screen s) {
   switch (s) {
-    case SCR_ROOT:     return 5;
+    case SCR_ROOT:     return 6;   // Start · Today · Mode · Settings · Device · About
     case SCR_MODE:     return 8;   // presets · focus · break · cycles · long-break · every · auto-start
     case SCR_SETTINGS: return 6;   // Presence · Display · Coaching · Stats · Quiet · Environment
     case SCR_DISPLAY:  return 9;   // Show timer · Haptics · Strength · Sound · Volume · Brightness · Theme · Test motor · Test sound
@@ -238,7 +244,7 @@ static int itemCount(Screen s) {
     case SCR_COACHING: return 4;
     case SCR_QUIET:    return 3;   // Enabled · From · To
     case SCR_ALERTS:   return 10;  // temp(+min/max) · noise(+max) · light(+min/max) · away · nudge
-    case SCR_STATS:         return 8;
+    case SCR_STATS:         return 10;  // Today..Total · Streak · Week · History · Goal · Reset
     case SCR_STATS_HISTORY: {
       int n = Storage::sessionLogCount();
       return n > 0 ? n : 1;
@@ -509,6 +515,22 @@ void setLiveFocusSec(uint32_t sec) {
   markDirty();
 }
 
+void setExamInfo(int16_t days, const char* title) {
+  bool changed = days != s_examDays ||
+                 strncmp(title ? title : "", s_examTitle, sizeof(s_examTitle) - 1) != 0;
+  s_examDays = days;
+  strncpy(s_examTitle, title ? title : "", sizeof(s_examTitle) - 1);
+  s_examTitle[sizeof(s_examTitle) - 1] = 0;
+  if (changed) markDirty();
+}
+
+void setCloudStats(int16_t streakDays, int32_t weekMin) {
+  if (streakDays == s_streakDays && weekMin == s_weekMin) return;
+  s_streakDays = streakDays;
+  s_weekMin = weekMin;
+  markDirty();
+}
+
 int activeDurationMin() {
   return (*s_mode == MODE_WORK) ? *s_work : *s_break;
 }
@@ -617,10 +639,11 @@ MenuAction tick(int rotDir, int sideBtn) {
     case SCR_ROOT:
       switch (s_cursor) {
         case 0: return MENU_START_SESSION;
-        case 1: push(SCR_MODE); break;
-        case 2: push(SCR_SETTINGS); break;
-        case 3: push(SCR_DEVICE); break;
-        case 4: push(SCR_ABOUT); break;
+        case 1: return MENU_ENTER_AGENDA;   // "Today" — read-only agenda (ST_AGENDA)
+        case 2: push(SCR_MODE); break;
+        case 3: push(SCR_SETTINGS); break;
+        case 4: push(SCR_DEVICE); break;
+        case 5: push(SCR_ABOUT); break;
       }
       Haptics::tap();
       markDirty();
@@ -707,9 +730,9 @@ MenuAction tick(int rotDir, int sideBtn) {
       break;
 
     case SCR_STATS:
-      if (s_cursor == 5) push(SCR_STATS_HISTORY);
-      else if (s_cursor == 6) openGoalEditor();
-      else if (s_cursor == 7) {
+      if (s_cursor == 7) push(SCR_STATS_HISTORY);   // rows 5/6 = Streak/Week (read-only)
+      else if (s_cursor == 8) openGoalEditor();
+      else if (s_cursor == 9) {
         Storage::resetToday();
         Haptics::tap();
         markDirty();
@@ -804,9 +827,13 @@ const MenuView& view() {
     };
     strncpy(v.title, titles[s_screen], sizeof(v.title) - 1);
   }
-  if (s_screen == SCR_ROOT)
-    formatTodayShort(v.statusWord, sizeof(v.statusWord));
-  else
+  if (s_screen == SCR_ROOT) {
+    // Exam badge takes the root status slot when one is coming up ("EXAM" on the
+    // day itself, "EXAM 3d" before); otherwise today's progress as before.
+    if (s_examDays == 0)     strncpy(v.statusWord, "EXAM", sizeof(v.statusWord) - 1);
+    else if (s_examDays > 0) snprintf(v.statusWord, sizeof(v.statusWord), "EXAM %dd", (int)s_examDays);
+    else                     formatTodayShort(v.statusWord, sizeof(v.statusWord));
+  } else
     strncpy(v.statusWord, connWord(), sizeof(v.statusWord) - 1);
   Cloud::localTimeHHMM(v.clockStr, sizeof(v.clockStr));   // "HH:MM" when synced, else ""
 
@@ -831,13 +858,14 @@ const MenuView& view() {
             formatStartVal(buf, sizeof(buf));
             fillRow(row, "Start", buf, sel, MI_START);
             break;
-          case 1:
+          case 1: fillRow(row, "Today", nullptr, sel, MI_HISTORY, true); break;
+          case 2:
             formatModeVal(buf, sizeof(buf));
             fillRow(row, "Mode", buf, sel, MI_MODE, true);
             break;
-          case 2: fillRow(row, "Settings", nullptr, sel, MI_SETTINGS, true); break;
-          case 3: fillRow(row, "Device", connWord(), sel, MI_DEVICE, true); break;
-          case 4: fillRow(row, "About", FW_VERSION, sel, MI_ABOUT, true); break;
+          case 3: fillRow(row, "Settings", nullptr, sel, MI_SETTINGS, true); break;
+          case 4: fillRow(row, "Device", connWord(), sel, MI_DEVICE, true); break;
+          case 5: fillRow(row, "About", FW_VERSION, sel, MI_ABOUT, true); break;
         }
         break;
 
@@ -977,8 +1005,20 @@ const MenuView& view() {
           else        snprintf(buf, sizeof(buf), "%dm", tm);
           fillRow(row, "Total", buf, sel);
         } else if (idx == 5) {
-          fillRow(row, "History", nullptr, sel, MI_HISTORY, true);
+          // Server-computed (cloud cache) — "--" while unpaired/unknown.
+          if (s_streakDays >= 0) snprintf(buf, sizeof(buf), "%dd", (int)s_streakDays);
+          else                   snprintf(buf, sizeof(buf), "--");
+          fillRow(row, "Streak", buf, sel);
         } else if (idx == 6) {
+          if (s_weekMin >= 0) {
+            int wh = (int)(s_weekMin / 60), wm = (int)(s_weekMin % 60);
+            if (wh > 0) snprintf(buf, sizeof(buf), "%dh %02dm", wh, wm);
+            else        snprintf(buf, sizeof(buf), "%dm", wm);
+          } else snprintf(buf, sizeof(buf), "--");
+          fillRow(row, "Week", buf, sel);
+        } else if (idx == 7) {
+          fillRow(row, "History", nullptr, sel, MI_HISTORY, true);
+        } else if (idx == 8) {
           snprintf(buf, sizeof(buf), "%dm", (int)s_cfg->dailyGoalMin);
           fillRow(row, "Daily goal", buf, sel, MI_GOAL);
         } else {

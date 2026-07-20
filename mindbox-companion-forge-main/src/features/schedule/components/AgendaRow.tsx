@@ -51,6 +51,40 @@ export function AgendaRow({
         ? "bg-info/10 text-info"
         : "bg-primary/10 text-primary";
 
+  // Planner-generated study blocks render as a slim single-line row so a full
+  // week's worth doesn't visually flood the calendar. Hand-made study blocks
+  // (and everything else) keep the full card below.
+  if (item.planGenerated) {
+    return (
+      <div className="flex min-h-11 items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-1.5">
+        <span className="w-12 shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+          {fmtMins(item.startMinutes)}
+        </span>
+        <NotebookPen className="h-3.5 w-3.5 shrink-0 text-info" aria-hidden />
+        <span className="truncate text-sm font-medium">{item.label}</span>
+        <span className="shrink-0 rounded-full bg-info/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-info">
+          Study
+        </span>
+        <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">
+          {formatDurationMinutes(duration)}
+        </span>
+        {eventId && onDeleteCourse && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0 text-muted-foreground"
+            disabled={busy}
+            onClick={() => onDeleteCourse(eventId)}
+            aria-label="Remove study block"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="flex min-h-14 items-stretch gap-3 rounded-xl border border-border bg-card p-3">
       <div className="w-12 shrink-0 pt-0.5 text-xs font-medium tabular-nums text-muted-foreground">

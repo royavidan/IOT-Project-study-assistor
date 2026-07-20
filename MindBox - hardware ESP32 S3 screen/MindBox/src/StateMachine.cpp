@@ -9,6 +9,7 @@
 #include "Panel.h"
 #include "Haptics.h"
 #include "Sound.h"
+#include "Theme.h"
 #include "Audio.h"
 #include "LedRing.h"
 #include "Storage.h"
@@ -47,6 +48,51 @@ static uint8_t  s_sessionWorst  = INTERF_NONE;  // most recent interference this
 static uint32_t s_interfSince   = 0;            // when the current interference began
 static bool     s_interfNudged  = false;        // already buzzed for this episode
 static const uint32_t INTERF_NUDGE_MS = 30000;  // persist this long -> nudge
+static uint32_t s_lastInterfChime = 0;          // last Sound::alert(); 0 = none this session
+static const uint32_t INTERF_ALERT_GAP_MS = 180000;  // alert chime at most every 3 min per session
+
+// Site agenda day-cache — refreshed on every config poll while paired. Times are
+// OWNER-local (CloudSettings.tzOffsetMin), NOT the box TZ: the site schedules in
+// the account owner's timezone and the box just follows.
+static AgendaItem s_agenda[AGENDA_MAX_ITEMS];
+static uint8_t    s_agendaCount = 0;
+static int16_t    s_tzOffsetMin = 0;
+static bool       s_autoStartEnabled = false;
+
+// Rest-of-week cache (weekStr, days 1..6 ahead) + the ST_AGENDA day pager
+// index (0 = today from agenda[], 1..6 = week[] filtered by dayOffset).
+static WeekItem   s_week[WEEK_MAX_ITEMS];
+static uint8_t    s_weekCount = 0;
+static uint8_t    s_agendaDay = 0;
+static const uint8_t AGENDA_MAX_DAY = 6;
+static const uint8_t AGENDA_DAY_ROWS = 10;   // server cap: <=10 blocks per day
+
+// Exam mode (site DND) — RAM only, re-applied on every config poll while paired.
+static bool       s_examMode = false;
+
+// Remote message splash (ST_MESSAGE) + a 1-slot hold for a message that arrives
+// mid-session (newest wins; shown when the box next returns to idle).
+static const uint32_t MESSAGE_SPLASH_MS = 30000;
+static char       s_msgTitle[16] = {0};
+static char       s_msgBody[48]  = {0};
+static char       s_pendingMsg[48] = {0};
+
+// Homework quick-update (ST_HOMEWORK): cloud cache of the top pending items +
+// the row cursor (== count selects the Skip row). 20s idle timeout.
+static const uint32_t HOMEWORK_TIMEOUT_MS = 20000;
+static HwItem     s_hw[HW_MAX_ITEMS];
+static uint8_t    s_hwCount = 0;
+static int        s_hwCursor = 0;
+
+// Scheduled auto-start: splash payload + per-day dedupe. A block is "handled"
+// (won't retrigger today) the moment its splash is raised — start AND cancel
+// both count. Key = the block's startMin within the owner-local day ordinal.
+static const uint32_t AUTOSTART_SPLASH_MS = 10000;
+static char       s_autoTitle[24] = {0};
+static int        s_autoDurMin = DUR_DEFAULT_MIN;
+static uint16_t   s_autoHandled[AGENDA_MAX_ITEMS];
+static uint8_t    s_autoHandledN = 0;
+static uint32_t   s_autoHandledDay = 0;
 
 #if USE_TOUCH
 // On-device Wi-Fi setup sub-flow (ST_WIFI_SETUP).
@@ -201,6 +247,19 @@ static void publishTelemetry() {
   t.batteryPct   = b < 0 ? 100 : b;
   String h = Sensors::healthJson();
   strncpy(t.health, h.c_str(), sizeof(t.health) - 1);
+  // Env readings for the telemetry uplink — sentinels first, then only the
+  // wired-and-valid sensors overwrite them (the net task never calls Sensors).
+  t.tempC = NAN; t.humidityPct = -1; t.lightLux = -1; t.noiseDb = -1;
+#if HAS_TEMP
+  { float c;  if (Sensors::readTemp(c))       t.tempC = c; }
+  { float hp; if (Sensors::readHumidity(hp))  t.humidityPct = (int16_t)lroundf(hp); }
+#endif
+#if HAS_LIGHT
+  { float lux, var; if (Sensors::readLight(lux, var)) t.lightLux = (int32_t)lroundf(lux); }
+#endif
+#if HAS_ANY_MIC
+  if (Sensors::health().micOk) t.noiseDb = (int16_t)lroundf(Sensors::noiseDb());
+#endif
   Cloud::publishState(t);
 }
 
@@ -256,6 +315,15 @@ static void signOutAccount() {
   Storage::setPaired(false);
   Storage::clearOwnerAccount();
   Storage::setServerTodaySec(0);
+  s_agendaCount = 0;                      // agenda/auto-start are account data
+  s_weekCount = 0;
+  s_autoStartEnabled = false;
+  s_examMode = false;                     // exam/homework/stats are account data too
+  Sound::setDnd(false);
+  s_hwCount = 0;
+  Menu::setExamInfo(-1, "");
+  Menu::setCloudStats(-1, -1);
+  Sound::setChimeMask(0xFF);              // back to local-only sound control
   s_signOutGuardUntil = millis() + SIGN_OUT_GUARD_MS;
   if (s_cfg.hapticsEnabled) Haptics::reset();
   Menu::setContext(Cloud::online(), false, s_devShort.c_str());
@@ -292,6 +360,7 @@ static void startSessionMode(Mode m, int durMin) {
   s_curInterf = INTERF_NONE;
   s_sessionWorst = INTERF_NONE;
   s_interfNudged = false;
+  s_lastInterfChime = 0;   // fresh rate-limit window for the alert chime
   s_wasAway = false;
   time_t st = Cloud::haveClock() ? Cloud::nowEpoch() : 0;
   Session::start(m, durMin, st);
@@ -354,6 +423,79 @@ static bool inQuietHours() {
   int s = s_cfg.quietStartMin, e = s_cfg.quietEndMin;
   if (s == e) return false;
   return (s < e) ? (mins >= s && mins < e) : (mins >= s || mins < e);  // handle wrap
+}
+
+// Header label for an ST_AGENDA page: "TODAY", or weekday + date for a paged
+// day ("Sun 20/7"), from the tz-shifted epoch via gmtime_r so the fields are
+// the OWNER's calendar. gmtime's tm_wday (0 = Sunday) agrees with the epoch-day
+// formula ((epochDays % 7) + 4) % 7 on a Sun..Sat table: 1970-01-01 (day 0)
+// was a Thursday, and (0 + 4) % 7 = 4 -> "Thu". Falls back to "+Nd" before NTP.
+static void agendaDayLabel(char* out, size_t n) {
+  if (s_agendaDay == 0) {
+    strncpy(out, "TODAY", n - 1);
+    out[n - 1] = 0;
+    return;
+  }
+  static const char* DOW[7] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+  time_t ep = Cloud::nowEpoch();
+  if (ep <= 0) {
+    snprintf(out, n, "+%dd", (int)s_agendaDay);
+    return;
+  }
+  time_t shifted = ep + (time_t)s_tzOffsetMin * 60 + (time_t)s_agendaDay * 86400;
+  struct tm t;
+  gmtime_r(&shifted, &t);   // gmtime on the shifted epoch = owner-local calendar
+  snprintf(out, n, "%s %d/%d", DOW[t.tm_wday], t.tm_mday, t.tm_mon + 1);
+}
+
+// Owner-local wall clock from the NTP epoch + the site's tzOffsetMin (NOT the
+// box TZ — agenda minutes are in the account owner's timezone). False until NTP.
+static bool ownerLocalNow(int& minOfDay, uint32_t& dayKey) {
+  if (!Cloud::haveClock()) return false;
+  time_t ep = Cloud::nowEpoch();
+  if (ep <= 0) return false;
+  int64_t local = (int64_t)ep + (int64_t)s_tzOffsetMin * 60;
+  if (local < 0) local = 0;
+  dayKey   = (uint32_t)(local / 86400);
+  minOfDay = (int)((local % 86400) / 60);
+  return true;
+}
+
+// Scheduled auto-start (checked only from ST_IDLE): a STUDY agenda block whose
+// startMin matches owner-local now (±1 min) raises the cancellable 10 s splash,
+// then starts a WORK session of the block's length. chimeMask bit2 gates only
+// the splash CHIME (inside Sound::autoStart); the start itself is gated by the
+// server's autoStartEnabled. In quiet hours the chime is already muted by the
+// quiet-hours Sound gate, but the session still auto-starts SILENTLY — a
+// scheduled block is the user's own plan, not a notification to suppress.
+static bool tickScheduledStart() {
+  if (!s_autoStartEnabled || s_agendaCount == 0 || !Storage::paired()) return false;
+  int nowMin; uint32_t day;
+  if (!ownerLocalNow(nowMin, day)) return false;
+  if (day != s_autoHandledDay) { s_autoHandledDay = day; s_autoHandledN = 0; }
+  for (uint8_t i = 0; i < s_agendaCount; i++) {
+    const AgendaItem& it = s_agenda[i];
+    if (it.kind != AGENDA_STUDY) continue;
+    int d = nowMin - (int)it.startMin;
+    if (d < -1 || d > 1) continue;
+    bool handled = false;
+    for (uint8_t h = 0; h < s_autoHandledN; h++)
+      if (s_autoHandled[h] == it.startMin) { handled = true; break; }
+    if (handled) continue;
+    if (s_autoHandledN < AGENDA_MAX_ITEMS) s_autoHandled[s_autoHandledN++] = it.startMin;
+    int dur = (int)it.endMin - (int)it.startMin;
+    if (dur < 10)  dur = 10;    // sane session bounds, whatever the block says
+    if (dur > 180) dur = 180;
+    s_autoDurMin = dur;
+    strncpy(s_autoTitle, it.title, sizeof(s_autoTitle) - 1);
+    s_autoTitle[sizeof(s_autoTitle) - 1] = 0;
+    Sound::autoStart();          // bit2 + enabled/quiet gating live inside Sound
+    enter(ST_AUTOSTART);
+    Serial.printf("[sched] auto-start splash: '%s' %dm (block %02d:%02d)\n",
+                  s_autoTitle, s_autoDurMin, it.startMin / 60, it.startMin % 60);
+    return true;
+  }
+  return false;
 }
 
 static void scheduleCycleOffer(Mode completedMode) {
@@ -466,6 +608,7 @@ static void discardCheckpoint() {
 }
 
 static void tickAdaptiveCoaching(uint32_t now) {
+  if (s_examMode) return;   // exam DND: no coaching nudges/auto-pause
   if (!s_cfg.adaptiveCoaching || s_mode != MODE_WORK) return;
   if (Session::lastFle() <= FLE_ADAPTIVE_BREAK) return;
   if (now - s_lastCoachAt < COACHING_COOLDOWN_MS) return;
@@ -484,6 +627,74 @@ static void tickAdaptiveCoaching(uint32_t now) {
     s_lastCoachAt = now;
 }
 
+// "Idle-ish": no session in flight — the states a remote START may take over
+// (mirrors the scheduled auto-start's ST_IDLE gate, widened to the other
+// between-session screens; taking over COMPLETE/CYCLE_OFFER is deliberate).
+static bool idleLike() {
+  return s_state == ST_IDLE || s_state == ST_COMPLETE || s_state == ST_AGENDA ||
+         s_state == ST_CYCLE_OFFER || s_state == ST_MESSAGE || s_state == ST_HOMEWORK;
+}
+
+// Stricter gate for the message/ring SPLASH: never trample the post-interval
+// flow (COMPLETE's auto-advance / the NEXT prompt) — those hold the pomodoro
+// chain. A message that can't show now waits in the 1-slot pending buffer.
+static bool msgIdle() {
+  return s_state == ST_IDLE || s_state == ST_AGENDA ||
+         s_state == ST_MESSAGE || s_state == ST_HOMEWORK;
+}
+
+static void enterMessage(const char* title, const char* body) {
+  strncpy(s_msgTitle, title ? title : "", sizeof(s_msgTitle) - 1);
+  s_msgTitle[sizeof(s_msgTitle) - 1] = 0;
+  strncpy(s_msgBody, body ? body : "", sizeof(s_msgBody) - 1);
+  s_msgBody[sizeof(s_msgBody) - 1] = 0;
+  enter(ST_MESSAGE);
+}
+
+// Remote commands from the app (Cloud cmd queue). A command that doesn't fit the
+// current state is IGNORED (logged) — the box never interrupts a running session
+// except for the explicit CMD_END.
+static void handleRemoteCmd(const RemoteCmd& rc) {
+  switch (rc.type) {
+    case CMD_START:
+      if (idleLike()) {
+        s_pendingCycleOffer = false;
+        s_pendingSetComplete = false;
+        clearSet();   // a remote start runs as a single interval, like a scheduled block
+        Serial.printf("[cmd] remote start %um\n", (unsigned)rc.durationMin);
+        startSessionMode(MODE_WORK, rc.durationMin);   // normal start chime path
+      } else {
+        Serial.println("[cmd] start ignored (session active)");
+      }
+      break;
+    case CMD_END:
+      if (s_state == ST_RUNNING || s_state == ST_PAUSED) {
+        Serial.println("[cmd] remote end");
+        Menu::runningDismiss();          // same path as the menu End action
+        beginEnd("interrupted");
+      } else {
+        Serial.println("[cmd] end ignored (no session)");
+      }
+      break;
+    case CMD_RING:
+      Sound::ring();                     // ALWAYS — find-my bypasses every gate
+      if (msgIdle()) enterMessage("Ring!", "Your MindBox is here");
+      break;                             // never disturbs a running session's state
+    case CMD_MESSAGE:
+      Sound::alert();                    // chimeMask bit3 + quiet hours + exam DND gated
+      if (msgIdle()) {
+        enterMessage("Message", rc.text);
+      } else {                           // hold for after the session (newest wins)
+        strncpy(s_pendingMsg, rc.text, sizeof(s_pendingMsg) - 1);
+        s_pendingMsg[sizeof(s_pendingMsg) - 1] = 0;
+      }
+      break;
+    default:                             // CMD_PAUSE/CMD_RESUME not exposed by the site (yet)
+      Serial.printf("[cmd] type %u ignored\n", (unsigned)rc.type);
+      break;
+  }
+}
+
 #if USE_TOUCH
 static void wifiStartFlow();   // defined below (used here by handleMenuAction)
 #endif
@@ -494,6 +705,7 @@ static void handleMenuAction(MenuAction a) {
     case MENU_ENTER_PAIRING:  enterPairing(); break;
     case MENU_SIGN_OUT:       signOutAccount(); break;
     case MENU_ENTER_DIAGNOSTICS: enter(ST_DIAG); break;
+    case MENU_ENTER_AGENDA:   s_agendaDay = 0; enter(ST_AGENDA); break;   // pager opens on today
 #if USE_TOUCH
     case MENU_ENTER_WIFI_SETUP: wifiStartFlow(); break;   // on-device scan + keyboard
 #else
@@ -736,8 +948,9 @@ void tick() {
 
   // Apply settings the net task pulled from the server. Device menu settings
   // live in NVS and survive power cycles — routine config polls must NOT
-  // overwrite them (only seed once on first account link).
-  CloudSettings cs;
+  // overwrite them (only seed once on first account link). STATIC: the struct
+  // is ~2.9 KB since the week schedule joined it — keep it off the loop stack.
+  static CloudSettings cs;
   if (Cloud::takeSettings(cs)) {
     bool wasPaired = Storage::paired();
     // After a local "Sign out", ignore a stale paired:true from a config fetch
@@ -770,17 +983,90 @@ void tick() {
       Storage::setOwnerAccount(cs.ownerDisplayName, cs.ownerEmail);
       if (acctChanged) Menu::invalidate();
       Storage::setServerTodaySec(cs.todayFocusSec < 0 ? 0 : (uint32_t)cs.todayFocusSec);
+
+      // Sound config is SITE-OWNED while paired: unlike the first-link-only seed
+      // above, re-apply it on EVERY poll so a change on the website lands within
+      // one config fetch. Persist to NVS only on change (flash wear); honour this
+      // tick's quiet-hours mute (the transition-only gate above won't re-fire).
+      if (s_cfg.soundEnabled != cs.soundEnabled || s_cfg.soundLevel != cs.soundLevel) {
+        s_cfg.soundEnabled = cs.soundEnabled;
+        s_cfg.soundLevel   = cs.soundLevel;
+        Storage::saveConfig(s_cfg);
+        Menu::invalidate();
+      }
+      Sound::setEnabled(quiet ? false : s_cfg.soundEnabled);
+      Sound::setVolume(s_cfg.soundLevel);
+      Sound::setChimeMask(cs.chimeMask);
+
+      // Today's agenda + owner tz -> the FSM day-cache (Today screen + scheduled
+      // auto-start read it). Full-array copy is fine: syncDownlink zero-inits cs.
+      s_agendaCount = cs.agendaCount > AGENDA_MAX_ITEMS ? AGENDA_MAX_ITEMS : cs.agendaCount;
+      memcpy(s_agenda, cs.agenda, sizeof(s_agenda));
+      s_tzOffsetMin = cs.tzOffsetMin;
+      s_autoStartEnabled = cs.autoStartEnabled;
+      s_weekCount = cs.weekCount > WEEK_MAX_ITEMS ? WEEK_MAX_ITEMS : cs.weekCount;
+      memcpy(s_week, cs.week, sizeof(s_week));
+
+      // Accent preset is SITE-OWNED while paired: apply on CHANGE only (NVS
+      // wear + full repaint are per-change costs, and the poll re-sends it).
+      if (cs.themeId != Theme::accentPreset()) {
+        Theme::setAccentPreset(cs.themeId);
+        Storage::setThemeAccent(cs.themeId);
+        Menu::invalidate();
+        s_uiDirty = true;
+      }
+
+      // Pomodoro timing: adopt the site's focus/break ONCE per new timingRev.
+      // The site save lands exactly once; later on-box spinner edits win until
+      // the next site save. NVS writes only on a rev change.
+      if (cs.timingRev != 0 && cs.timingRev != Storage::lastTimingRev()
+          && cs.focusMin >= 5 && cs.focusMin <= 120 && cs.breakMin >= 1 && cs.breakMin <= 60) {
+        s_workDur  = cs.focusMin;
+        s_breakDur = cs.breakMin;
+        Storage::setWorkDuration(s_workDur);
+        Storage::setBreakDuration(s_breakDur);
+        Storage::setLastTimingRev(cs.timingRev);
+        if (s_state == ST_IDLE) Inputs::setMinutes(s_workDur);  // refresh the shown duration
+        Menu::invalidate();
+        s_uiDirty = true;
+        Serial.printf("[cloud] adopted site timing %d/%d (rev %lu)\n",
+                      s_workDur, s_breakDur, (unsigned long)cs.timingRev);
+      }
+
+      // Exam DND + idle badge + server stats + homework cache (all RAM only —
+      // each re-arrives on every poll; unpair below clears them).
+      s_examMode = cs.examMode;
+      Sound::setDnd(s_examMode);
+      Menu::setExamInfo(cs.nextExamDays, cs.nextExamTitle);
+      Menu::setCloudStats(cs.streakDays, cs.weekFocusMin);
+      if (s_state != ST_HOMEWORK) {   // don't yank rows out from under the open screen
+        s_hwCount = cs.hwCount > HW_MAX_ITEMS ? HW_MAX_ITEMS : cs.hwCount;
+        memcpy(s_hw, cs.hw, sizeof(s_hw));
+      }
     } else if (wasPaired) {
       // Remote sign-out from the web app: drop the account locally + notify.
       // (The box keeps no owner identity on-device; unpair is the whole state.)
       Storage::clearOwnerAccount();
       Menu::invalidate();
       Storage::setServerTodaySec(0);
+      s_agendaCount = 0;                  // agenda/auto-start are account data
+      s_weekCount = 0;
+      s_autoStartEnabled = false;
+      s_examMode = false;                 // exam/homework/stats are account data too
+      Sound::setDnd(false);
+      s_hwCount = 0;
+      Menu::setExamInfo(-1, "");
+      Menu::setCloudStats(-1, -1);
+      Sound::setChimeMask(0xFF);          // back to local-only sound control
       if (s_cfg.hapticsEnabled) Haptics::reset();
       s_uiDirty = true;
       Serial.println("[device] account unlinked from the app — signed out");
     }
   }
+
+  // Remote commands from the app (queued by the net task's config poll).
+  { RemoteCmd rc;
+    if (Cloud::nextCommand(rc)) handleRemoteCmd(rc); }
 
   // Live mirror: refresh the net task's snapshot ~1 Hz (transitions push instantly).
   if (now - s_lastSnap > 1000) { s_lastSnap = now; publishTelemetry(); }
@@ -799,6 +1085,15 @@ void tick() {
       } else {
         s_lastIdleConfigPoll = 0;
       }
+      if (s_pendingMsg[0]) {             // message held during a session -> show now
+        char body[48];
+        strncpy(body, s_pendingMsg, sizeof(body) - 1);
+        body[sizeof(body) - 1] = 0;
+        s_pendingMsg[0] = 0;
+        enterMessage("Message", body);
+        break;
+      }
+      if (tickScheduledStart()) break;   // agenda study block due -> splash (ST_AUTOSTART)
       Menu::setContext(Cloud::online(), Storage::paired(), s_devShort.c_str());
       MenuAction ma = Menu::tick(rot, btn);
       if (rot || btn) s_uiDirty = true;
@@ -819,6 +1114,72 @@ void tick() {
       MenuAction ma = Menu::cycleOfferTick(rot, btn);
       if (rot || btn) s_uiDirty = true;
       handleMenuAction(ma);
+      break;
+    }
+
+    case ST_AUTOSTART:
+      // Any press cancels — the block was marked handled when the splash rose,
+      // so it will not retrigger today.
+      if (btn == 1 || btn == 2 || clk) { Haptics::click(); enter(ST_IDLE); break; }
+      if (now - s_stateAt >= AUTOSTART_SPLASH_MS) {
+        clearSet();   // a scheduled block runs as a single interval, not a set
+        startSessionMode(MODE_WORK, s_autoDurMin);
+        break;
+      }
+      s_uiDirty = true;   // countdown repaint (shouldRender throttles to ~200 ms)
+      break;
+
+    case ST_AGENDA:
+      // Swipe/rotate pages across the week (0 = today .. 6); presses exit as
+      // before (read-only screen). Day 0 keeps the exact old behavior.
+      if (rot) {
+        int d = (int)s_agendaDay + rot;
+        if (d < 0) d = 0;
+        if (d > (int)AGENDA_MAX_DAY) d = AGENDA_MAX_DAY;
+        if (d != (int)s_agendaDay) { s_agendaDay = (uint8_t)d; Haptics::click(); }
+      }
+      if (btn == 1 || btn == 2 || clk) enter(ST_IDLE);   // read-only: any press exits
+      s_uiDirty = true;   // repaint so the now/next highlight tracks the clock
+      break;
+
+    case ST_MESSAGE:
+      // Any press dismisses; otherwise auto-dismiss after the countdown.
+      if (btn == 1 || btn == 2 || clk) { Haptics::click(); enter(ST_IDLE); break; }
+      if (now - s_stateAt >= MESSAGE_SPLASH_MS) { enter(ST_IDLE); break; }
+      s_uiDirty = true;   // countdown repaint (shouldRender throttles to ~200 ms)
+      break;
+
+    case ST_HOMEWORK: {
+      // Post-focus quick-update. Swipe/rotate = row cursor (rows + Skip); tap =
+      // +25% on a row (100 marks done) or exit on Skip; long-press = mark the
+      // row done / exit on Skip; 20 s without input -> idle.
+      if (now - s_stateAt >= HOMEWORK_TIMEOUT_MS) { enter(ST_IDLE); break; }
+      int rows = (int)s_hwCount + 1;                     // + the Skip row
+      if (rot) {
+        s_hwCursor += rot;
+        while (s_hwCursor < 0)      s_hwCursor += rows;
+        while (s_hwCursor >= rows)  s_hwCursor -= rows;
+        Haptics::click();
+        s_stateAt = now;                                 // any input re-arms the timeout
+        s_uiDirty = true;
+      }
+      if ((btn == 1 || btn == 2) && s_hwCursor >= (int)s_hwCount) {  // Skip row
+        enter(ST_IDLE);
+        break;
+      }
+      if ((btn == 1 || btn == 2 || clk) && s_hwCount == 0) { enter(ST_IDLE); break; }
+      if (btn == 1 || btn == 2) {                        // tap = +25 · hold = done
+        HwItem& it = s_hw[s_hwCursor];
+        int pct = (btn == 2) ? 100 : (int)it.pct + 25;
+        if (pct > 100) pct = 100;
+        if (pct != (int)it.pct) {
+          it.pct = (uint8_t)pct;
+          Cloud::postHomework(it.id, it.pct);            // queued; net task POSTs it
+        }
+        Haptics::tap();
+        s_stateAt = now;
+        s_uiDirty = true;
+      }
       break;
     }
 
@@ -889,9 +1250,20 @@ void tick() {
         }
         if (intf != INTERF_NONE) {
           s_sessionWorst = intf;   // most recent disruption (shown on DONE)
-          if (s_cfg.alertNudge && !s_interfNudged &&
+          // Exam DND also suppresses the interference nudge (haptic + chime);
+          // the on-screen interference label keeps tracking regardless.
+          if (s_cfg.alertNudge && !s_examMode && !s_interfNudged &&
               (now - s_interfSince) > INTERF_NUDGE_MS) {
             if (s_cfg.hapticsEnabled) Haptics::pause();
+            // The S3 has no motor (HAS_HAPTIC=0), so back the nudge with the
+            // alert chime (chimeMask bit3 + sound/quiet gating live in Sound).
+            // s_interfNudged is only per-EPISODE (resets when the interference
+            // type flips), so rate-limit across episodes too: at most one chime
+            // per INTERF_ALERT_GAP_MS per session — it nags, not screams.
+            if (s_lastInterfChime == 0 || now - s_lastInterfChime > INTERF_ALERT_GAP_MS) {
+              s_lastInterfChime = now;
+              Sound::alert();
+            }
             s_interfNudged = true;
             s_uiDirty = true;
           }
@@ -955,7 +1327,15 @@ void tick() {
           }
         } else {
           s_pendingSetComplete = false;
-          enter(ST_IDLE);
+          // Exactly where the flow would otherwise go idle: after a finished
+          // WORK interval (never mid-chain — no cycle offer pending), offer the
+          // homework quick-update if the site sent pending items.
+          if (s_lastRec.mode == MODE_WORK && Storage::paired() && s_hwCount > 0) {
+            s_hwCursor = 0;
+            enter(ST_HOMEWORK);
+          } else {
+            enter(ST_IDLE);
+          }
         }
       }
       break;
@@ -1065,6 +1445,42 @@ void tick() {
 #else
       renderWifiSetup();
 #endif
+    } else if (s_state == ST_AGENDA) {
+      char hdr[16];
+      agendaDayLabel(hdr, sizeof(hdr));
+      bool hasNext = s_agendaDay < AGENDA_MAX_DAY;
+      if (s_agendaDay == 0) {
+        int nowMin; uint32_t day;
+        if (!ownerLocalNow(nowMin, day)) nowMin = -1;   // no clock -> no highlight
+        Display::renderAgenda(s_agenda, s_agendaCount, nowMin, 0, hdr, false, hasNext);
+      } else {
+        // Paged day: week[] filtered by dayOffset into AgendaItem rows (same
+        // renderer/row style; no now/next highlight off-day).
+        AgendaItem items[AGENDA_DAY_ROWS];
+        uint8_t n = 0;
+        for (uint8_t i = 0; i < s_weekCount && n < AGENDA_DAY_ROWS; i++) {
+          if (s_week[i].dayOffset != s_agendaDay) continue;
+          items[n].startMin = s_week[i].startMin;
+          items[n].endMin   = s_week[i].endMin;
+          items[n].kind     = s_week[i].kind;
+          strncpy(items[n].title, s_week[i].title, sizeof(items[n].title) - 1);
+          items[n].title[sizeof(items[n].title) - 1] = 0;
+          n++;
+        }
+        Display::renderAgenda(items, n, -1, s_agendaDay, hdr, true, hasNext);
+      }
+    } else if (s_state == ST_AUTOSTART) {
+      uint32_t el = millis() - s_stateAt;
+      int left = (el >= AUTOSTART_SPLASH_MS) ? 0
+               : (int)((AUTOSTART_SPLASH_MS - el + 999) / 1000);
+      Display::renderAutoStart(s_autoTitle, left);
+    } else if (s_state == ST_MESSAGE) {
+      uint32_t el = millis() - s_stateAt;
+      int left = (el >= MESSAGE_SPLASH_MS) ? 0
+               : (int)((MESSAGE_SPLASH_MS - el + 999) / 1000);
+      Display::renderMessage(s_msgTitle, s_msgBody, left);
+    } else if (s_state == ST_HOMEWORK) {
+      Display::renderHomework(s_hw, s_hwCount, (uint8_t)s_hwCursor);
     } else if (s_state == ST_IDLE) {
       Display::renderMenu(Menu::view());
     } else if (s_state == ST_RESUME) {

@@ -1,4 +1,4 @@
-import { CalendarPlus, FileUp, GraduationCap, Plus } from "lucide-react";
+import { CalendarPlus, FileUp, GraduationCap, Plus, Sparkles, Trash2 } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -13,10 +13,16 @@ export function CalendarFab({
   onAddEvent,
   onAddCourse,
   onImport,
+  onPlanWeek,
+  onClearPlan,
 }: {
   onAddEvent: () => void;
   onAddCourse: () => void;
   onImport: () => void;
+  /** Optional — omit to hide the "Auto-plan study time" entry. */
+  onPlanWeek?: () => void;
+  /** Optional — omit to hide "Clear auto-plan" (show only when a plan exists). */
+  onClearPlan?: () => void;
 }) {
   return (
     <div className="fixed bottom-24 right-4 z-30 lg:hidden">
@@ -42,6 +48,18 @@ export function CalendarFab({
             <FileUp className="mr-2 h-4 w-4" />
             Import calendar
           </DropdownMenuItem>
+          {onPlanWeek && (
+            <DropdownMenuItem onSelect={onPlanWeek}>
+              <Sparkles className="mr-2 h-4 w-4" />
+              Auto-plan study time
+            </DropdownMenuItem>
+          )}
+          {onClearPlan && (
+            <DropdownMenuItem onSelect={onClearPlan}>
+              <Trash2 className="mr-2 h-4 w-4" />
+              Clear auto-plan
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

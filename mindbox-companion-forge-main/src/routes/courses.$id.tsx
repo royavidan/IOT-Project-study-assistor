@@ -34,6 +34,7 @@ import { useCourses, useCourseActions } from "@/features/courses/queries";
 import type { CourseInput, WatchedCounts } from "@/features/courses/queries";
 import {
   buildCourseSummary,
+  courseStanding,
   examsForCourse,
   homeworkForCourse,
   matchesCode,
@@ -211,6 +212,10 @@ function CourseDetailPage() {
   };
 
   const done = summary.homeworkByStatus.submitted + summary.homeworkByStatus.graded;
+  const standing = courseStanding(summary);
+  const watchedTotal = course.watchedLectures + course.watchedTutorials + course.watchedLabs;
+  const plannedTotal = planned?.total ?? 0;
+  const watchedPct = plannedTotal > 0 ? Math.round((watchedTotal / plannedTotal) * 100) : null;
 
   return (
     <>
@@ -275,6 +280,36 @@ function CourseDetailPage() {
         }
       />
 
+      {/* "Where am I" band — the key numbers stay visible across every tab. */}
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Stat
+          label="Standing"
+          value={`${standing.value}${standing.suffix ? ` ${standing.suffix}` : ""}`}
+          hint={standing.caption}
+        />
+        <Stat
+          label="Homework"
+          value={`${summary.completionPct}%`}
+          hint={`${done}/${summary.homeworkTotal} done`}
+        />
+        <Stat
+          label="Watched"
+          value={watchedPct != null ? `${watchedPct}%` : String(watchedTotal)}
+          hint={plannedTotal > 0 ? `${watchedTotal}/${plannedTotal} meetings` : "meetings"}
+        />
+        <Stat
+          label="Next exam"
+          value={
+            summary.nextExam
+              ? summary.nextExam.daysUntil <= 0
+                ? "Today"
+                : `${summary.nextExam.daysUntil}d`
+              : "—"
+          }
+          hint={summary.nextExam ? "until next exam" : "none scheduled"}
+        />
+      </div>
+
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="mb-4 flex-wrap">
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -285,7 +320,7 @@ function CourseDetailPage() {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <Stat
               label="Meetings"
               value={String(summary.meetings.total)}
@@ -299,35 +334,12 @@ function CourseDetailPage() {
                   .join(" · ") || "weekly"
               }
             />
+            <Stat label="Exams" value={String(summary.examCount)} hint="scheduled" />
             <Stat
-              label="Exams"
-              value={String(summary.examCount)}
-              hint={
-                summary.nextExam
-                  ? summary.nextExam.daysUntil <= 0
-                    ? "next is today"
-                    : `next in ${summary.nextExam.daysUntil} day${summary.nextExam.daysUntil === 1 ? "" : "s"}`
-                  : undefined
-              }
+              label="Credits"
+              value={course.credits != null ? String(course.credits) : "—"}
+              hint={course.instructor ?? undefined}
             />
-            <Stat
-              label="Homework"
-              value={`${done}/${summary.homeworkTotal}`}
-              hint={`${summary.completionPct}% done`}
-            />
-            {summary.gradeBreakdown.components.length > 0 ? (
-              <Stat
-                label="Grade so far"
-                value={`${summary.gradeBreakdown.earnedPoints} / 100`}
-                hint={`${summary.gradeBreakdown.scoredWeight}/${summary.gradeBreakdown.assignedWeight} pts graded`}
-              />
-            ) : (
-              <Stat
-                label="Grade avg"
-                value={summary.gradeAverage == null ? "—" : String(summary.gradeAverage)}
-                hint={summary.targetGrade != null ? `target ${summary.targetGrade}` : undefined}
-              />
-            )}
           </div>
 
           <Card>

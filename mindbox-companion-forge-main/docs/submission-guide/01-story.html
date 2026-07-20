@@ -1,0 +1,122 @@
+<!-- Chapter 1: the story + architecture -->
+<h1>1. הסיפור והארכיטקטורה</h1>
+
+<div class="lead">
+<b>במשפט אחד:</b> MindBox היא קופסה פיזית על בסיס ESP32-S3 שמריצה סשני פוקוס (פומודורו),
+<b>מודדת את סביבת הלימוד בזמן אמת</b> (רעש, טמפרטורה, לחות, אור, נוכחות), ומסתנכרנת דו-כיוונית
+עם אפליקציית ווב — כולל עבודה מלאה גם ללא רשת. המכשיר מריץ <b>שתי ליבות</b>, חמישה חיישנים פעילים,
+מסך מגע, ושמע דו-כיווני (מיקרופון I2S + רמקול).
+</div>
+
+<h2>1.1 הבעיה שפתרנו</h2>
+<p>
+סטודנטים נכשלים לא מחוסר זמן אלא מחוסר <b>פוקוס</b>: הטלפון, הרעש, החדר החם, ואפס משוב על מה
+שבאמת קורה בזמן הלמידה. אפליקציות טיימר קיימות הן פסיביות — הן סופרות זמן אבל לא יודעות אם
+באמת למדת. <b>MindBox</b> הופכת את סביבת הלמידה למדידה: היא רואה אם אתה מול השולחן (ToF),
+שומעת אם החדר רועש (מיקרופון), יודעת אם חשוך או חם מדי (אור/טמפרטורה), ומחברת את כל זה
+ל"עומס פוקוס" (Focus Load) שמוצג בזמן אמת ונשמר לניתוח מאוחר באתר.
+</p>
+
+<h2>1.2 מסע ההנדסה: מ-OLED קלאסי ל-S3 עם מסך מגע</h2>
+<p>
+הפרויקט התחיל כקושחת ESP32 קלאסית (DOIT DevKit) עם מסך OLED קטן ואנקודר בלבד. ה"מוח" —
+מכונת המצבים, מחזור הסשן, והתפריטים (<code>StateMachine</code> / <code>Session</code> /
+<code>Menu</code>) — נכתב כך שהוא <b>אגנוסטי לתצוגה</b>: הוא מייצר ערך <code>UiModel</code>,
+והרנדרר מצייר אותו. בזכות זה הצלחנו <b>לעשות port מלא</b> ללוח ESP32-S3 חדש (LCDWIKI ES3C28P,
+מסך מגע צבעוני 2.8") כמעט בלי לגעת בלוגיקה: רק ה<b>תצוגה</b> (TFT SPI במקום OLED I2C)
+וה<b>קלט</b> (מגע + אנקודר במקום אנקודר בלבד) השתנו. זהו הסיפור ההנדסי המרכזי — ארכיטקטורה
+נכונה מאפשרת החלפת חומרה שלמה בעלות מינימלית.
+</p>
+<p class="small">מקור: <span class="src">MindBox - hardware ESP32 S3 screen/MindBox/CLAUDE.md</span> (סעיף "Context for this variant").</p>
+
+<h2>1.3 תמונת-על של המערכת</h2>
+<div class="diagram">
+<svg width="700" height="330" viewBox="0 0 700 330" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
+  <rect x="10" y="20" width="240" height="290" rx="10" fill="#f7f8fa" stroke="#16213e" stroke-width="2"/>
+  <text x="130" y="42" text-anchor="middle" font-weight="bold" fill="#16213e">MindBox (ESP32-S3)</text>
+  <rect x="25" y="55" width="210" height="22" rx="4" fill="#e5352b" opacity="0.12" stroke="#e5352b"/>
+  <text x="130" y="70" text-anchor="middle" fill="#8b1e16">ILI9341 TFT 320×240 + FT6336 Touch</text>
+  <rect x="25" y="83" width="100" height="22" rx="4" fill="#fff" stroke="#888"/>
+  <text x="75" y="98" text-anchor="middle">DHT11 temp/RH</text>
+  <rect x="135" y="83" width="100" height="22" rx="4" fill="#fff" stroke="#888"/>
+  <text x="185" y="98" text-anchor="middle">VL53L1X ToF</text>
+  <rect x="25" y="111" width="100" height="22" rx="4" fill="#fff" stroke="#888"/>
+  <text x="75" y="126" text-anchor="middle">KY-018 light</text>
+  <rect x="135" y="111" width="100" height="22" rx="4" fill="#fff" stroke="#888"/>
+  <text x="185" y="126" text-anchor="middle">ES8311 I2S mic</text>
+  <rect x="25" y="139" width="100" height="22" rx="4" fill="#fff" stroke="#888"/>
+  <text x="75" y="154" text-anchor="middle">Speaker + amp</text>
+  <rect x="135" y="139" width="100" height="22" rx="4" fill="#fff" stroke="#888"/>
+  <text x="185" y="154" text-anchor="middle">KY-040 encoder</text>
+  <rect x="25" y="172" width="210" height="30" rx="4" fill="#16213e"/>
+  <text x="130" y="191" text-anchor="middle" fill="#fff">Core 1: UI + FSM + Sensors</text>
+  <rect x="25" y="207" width="210" height="30" rx="4" fill="#0f3460"/>
+  <text x="130" y="226" text-anchor="middle" fill="#fff">Core 0: Wi-Fi/HTTP + Audio tasks</text>
+  <rect x="25" y="243" width="210" height="24" rx="4" fill="#fff" stroke="#888"/>
+  <text x="130" y="259" text-anchor="middle">NVS + LittleFS (offline queue)</text>
+  <rect x="25" y="273" width="210" height="24" rx="4" fill="#fff" stroke="#888"/>
+  <text x="130" y="289" text-anchor="middle">NTP clock (UTC + tz)</text>
+
+  <path d="M255 120 H 330" stroke="#2e9b4f" stroke-width="3" marker-end="url(#ar)"/>
+  <text x="292" y="112" text-anchor="middle" fill="#2e9b4f">uplink (POST)</text>
+  <path d="M330 200 H 255" stroke="#0f6ec4" stroke-width="3" marker-end="url(#ar2)"/>
+  <text x="292" y="222" text-anchor="middle" fill="#0f6ec4">downlink (GET 60s)</text>
+
+  <rect x="335" y="60" width="170" height="210" rx="10" fill="#f7f8fa" stroke="#16213e" stroke-width="2"/>
+  <text x="420" y="84" text-anchor="middle" font-weight="bold" fill="#16213e">Server (fetch entry)</text>
+  <rect x="348" y="97" width="144" height="46" rx="4" fill="#2e9b4f" opacity="0.12" stroke="#2e9b4f"/>
+  <text x="420" y="115" text-anchor="middle">/ingest/* (device path)</text>
+  <text x="420" y="132" text-anchor="middle" font-size="10">x-device-secret · service-role</text>
+  <rect x="348" y="150" width="144" height="46" rx="4" fill="#0f6ec4" opacity="0.12" stroke="#0f6ec4"/>
+  <text x="420" y="168" text-anchor="middle">App router (browser path)</text>
+  <text x="420" y="185" text-anchor="middle" font-size="10">auth · RLS · CSRF</text>
+  <rect x="348" y="203" width="144" height="30" rx="4" fill="#fff" stroke="#888"/>
+  <text x="420" y="222" text-anchor="middle">/jobs/* (cron)</text>
+
+  <rect x="530" y="40" width="160" height="90" rx="10" fill="#f7f8fa" stroke="#16213e" stroke-width="2"/>
+  <text x="610" y="64" text-anchor="middle" font-weight="bold">Supabase (Postgres)</text>
+  <text x="610" y="84" text-anchor="middle" font-size="10">sessions · device_status</text>
+  <text x="610" y="100" text-anchor="middle" font-size="10">device_commands · homework</text>
+  <text x="610" y="116" text-anchor="middle" font-size="10">env/focus samples · settings</text>
+  <rect x="530" y="180" width="160" height="90" rx="10" fill="#f7f8fa" stroke="#16213e" stroke-width="2"/>
+  <text x="610" y="204" text-anchor="middle" font-weight="bold">Web App (React 19)</text>
+  <text x="610" y="224" text-anchor="middle" font-size="10">/device · dashboard · insights</text>
+  <text x="610" y="240" text-anchor="middle" font-size="10">remote control · settings</text>
+  <text x="610" y="256" text-anchor="middle" font-size="10">live refetch 5–10s</text>
+
+  <path d="M505 110 H 525" stroke="#555" stroke-width="2" marker-end="url(#ar3)"/>
+  <path d="M525 220 H 505" stroke="#555" stroke-width="2" marker-end="url(#ar4)"/>
+  <path d="M610 135 V 175" stroke="#555" stroke-width="2" marker-end="url(#ar5)"/>
+
+  <defs>
+    <marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2e9b4f"/></marker>
+    <marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#0f6ec4"/></marker>
+    <marker id="ar3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#555"/></marker>
+    <marker id="ar4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#555"/></marker>
+    <marker id="ar5" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#555"/></marker>
+  </defs>
+</svg>
+</div>
+
+<h2>1.4 ששת ערוצי התקשורת</h2>
+<table>
+  <tr><th>ערוץ</th><th class="ltr">Route</th><th>כיוון</th><th>קצב</th><th>מה עובר</th></tr>
+  <tr><td>סשנים</td><td class="ltr">POST /ingest/sessions</td><td>מכשיר → שרת</td><td>בסיום סשן (+ תור offline)</td><td>סשן מלא: זמנים, מצב, אגרגטים סביבתיים, דגימות לדקה</td></tr>
+  <tr><td>טלמטריה</td><td class="ltr">POST /ingest/telemetry</td><td>מכשיר → שרת</td><td>כל 30 שניות (פעימת-לב)</td><td>מצב, סוללה, WiFi RSSI, תקינות חיישנים, טמפ'/לחות/אור/רעש חיים, גרסת קושחה</td></tr>
+  <tr><td>קונפיגורציה</td><td class="ltr">GET /ingest/config</td><td>שרת → מכשיר</td><td>כל 60 שניות (3–5 בזמן צימוד)</td><td>הגדרות, לו"ז יומי+שבועי, ערכת צבעים, זמני פומודורו, מצב מבחן, סטריק, שיעורי בית, פקודה מרחוק</td></tr>
+  <tr><td>צימוד</td><td class="ltr">POST /ingest/pairing</td><td>מכשיר → שרת</td><td>לפי דרישה</td><td>קוד 6 ספרות שהמכשיר מציג (תוקף 15 דק')</td></tr>
+  <tr><td>שחרור</td><td class="ltr">POST /ingest/unpair</td><td>מכשיר → שרת</td><td>לפי דרישה</td><td>שחרור בעלות מהמכשיר ("Sign out")</td></tr>
+  <tr><td>שיעורי בית</td><td class="ltr">POST /ingest/homework</td><td>מכשיר → שרת</td><td>לפי פעולה במסך המגע</td><td>עדכון אחוז התקדמות מטלה מהמכשיר</td></tr>
+</table>
+<p>
+כל הערוצים מאומתים ב-header <code>x-device-secret</code> (השוואה בזמן-קבוע נגד timing attacks).
+הכתיבות רצות דרך service-role client (עוקף RLS), אך הבעלות נבדקת מחדש בקוד לכל פעולה רגישה.
+<span class="src">src/features/device/ingest.server.ts · MindBox/src/Cloud.cpp</span>
+</p>
+
+<div class="proof">
+<b>הוכחה מהירה שהכול חי:</b> פותחים את <code>/device</code> באתר ליד המכשיר — נקודת ה-Online,
+הסוללה, עוצמת ה-Wi-Fi ותנאי החדר ("Room right now") מתעדכנים מכל פעימת טלמטריה (30 שניות
+מהמכשיר, רענון UI כל 10 שניות). מכבים את המכשיר — תוך 90 שניות החיווי הופך ל-"Last seen".
+ההרחבה המלאה בפרק 12.
+</div>

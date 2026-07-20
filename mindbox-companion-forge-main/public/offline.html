@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Offline — MindBox</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        font-family:
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          sans-serif;
+        background: #fbfcfd;
+        color: #2a2f3d;
+        padding: 1.5rem;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #16181f;
+          color: #e7e9ee;
+        }
+      }
+      .card {
+        max-width: 22rem;
+        text-align: center;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 0.5rem;
+      }
+      p {
+        margin: 0 0 1.25rem;
+        opacity: 0.7;
+        font-size: 0.95rem;
+        line-height: 1.5;
+      }
+      button {
+        font: inherit;
+        border: 0;
+        border-radius: 0.6rem;
+        padding: 0.6rem 1.1rem;
+        background: #2a2f3d;
+        color: #fff;
+        cursor: pointer;
+      }
+      .ring {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 1rem;
+        border-radius: 50%;
+        border: 7px solid #2a2f3d;
+        position: relative;
+      }
+      .ring::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        margin: auto;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #3882f6;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="ring" aria-hidden="true"></div>
+      <h1>You're offline</h1>
+      <p>
+        MindBox needs a connection to load your latest sessions and schedule. Reconnect and try
+        again.
+      </p>
+      <button onclick="location.reload()">Retry</button>
+    </div>
+  </body>
+</html>

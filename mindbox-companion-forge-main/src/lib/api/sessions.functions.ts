@@ -20,7 +20,7 @@ async function requireUser() {
 
 /** Delete a focus session owned by the signed-in user (RLS-enforced). */
 export const deleteSession = createServerFn({ method: "POST" })
-  .validator(deleteInput)
+  .inputValidator(deleteInput)
   .handler(async ({ data }) => {
     const { user, supabase } = await requireUser();
 

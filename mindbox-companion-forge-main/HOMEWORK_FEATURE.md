@@ -1,11 +1,13 @@
 # Homework Assignments Feature - Implementation Guide
 
 ## Overview
+
 A complete homework assignments management system has been added to the MindBox Companion app, allowing students to upload, track, and manage their homework with file attachments.
 
 ## Features Implemented
 
 ### 1. **Database Layer** (`supabase/migrations/0012_homework_assignments.sql`)
+
 - New `homework_assignments` table with the following columns:
   - `id`: Unique identifier (UUID)
   - `user_id`: Reference to student (profile)
@@ -26,6 +28,7 @@ A complete homework assignments management system has been added to the MindBox 
 - **File Size Limit**: 25 MB per file (enforced at application level)
 
 ### 2. **Type Definitions** (`src/lib/types.ts`)
+
 ```typescript
 type HomeworkStatus = "pending" | "submitted" | "graded";
 
@@ -47,6 +50,7 @@ interface HomeworkAssignment {
 ```
 
 ### 3. **Query Hooks** (`src/lib/queries/homework.ts`)
+
 - `useHomeworkAssignments()`: Fetch all assignments for current user
 - `useHomeworkActions()`: CRUD mutations
   - `add`: Add new assignment with optional file upload
@@ -54,6 +58,7 @@ interface HomeworkAssignment {
   - `remove`: Delete assignment
 
 Features:
+
 - Automatic file upload to Supabase Storage
 - File size validation (25 MB limit)
 - Query invalidation on mutations
@@ -62,12 +67,14 @@ Features:
 ### 4. **Components** (`src/features/homework/components/`)
 
 #### HomeworkDialog.tsx
+
 - Create and edit assignment dialogs
 - File upload with file size display
 - Form validation
 - Status selection (pending/submitted/graded)
 
 #### HomeworkCard.tsx
+
 - Display individual assignment cards
 - Visual status indicators with color coding
 - File download capability
@@ -77,6 +84,7 @@ Features:
 - File size display
 
 ### 5. **Route** (`src/routes/assignments.tsx`)
+
 - Full assignments management page
 - Assignments organized by status (Pending, Submitted, Graded)
 - Quick add button
@@ -85,6 +93,7 @@ Features:
 - Sort by due date
 
 ### 6. **Navigation** (`src/components/AppShell.tsx`)
+
 - Added "Assignments" menu item with BookOpen icon
 - Positioned after Calendar in navigation
 - Available in both desktop and mobile navigation
@@ -92,12 +101,14 @@ Features:
 ## Setup Instructions
 
 ### Step 1: Run Database Migration
+
 1. Go to Supabase Dashboard → SQL Editor
 2. Create a new query and paste the contents of `supabase/migrations/0012_homework_assignments.sql`
 3. Execute the query
 4. You should see: "Parsed SQL: 11 queries. Executing them now..."
 
 ### Step 2: Create Storage Bucket
+
 1. Go to Supabase Dashboard → Storage
 2. Click "Create a new bucket"
 3. Name it: `homework-files`
@@ -109,7 +120,9 @@ Features:
    - Add INSERT/UPDATE/DELETE policies with the same condition
 
 ### Step 3: Verify Types and Imports
+
 All files should import correctly. The feature uses:
+
 - React Query for state management
 - Supabase Client for database and storage
 - React Hook Form patterns for validation
@@ -118,6 +131,7 @@ All files should import correctly. The feature uses:
 ## Usage
 
 ### For Students:
+
 1. Navigate to **Assignments** in the main menu
 2. Click **+ Add assignment**
 3. Fill in:
@@ -131,17 +145,20 @@ All files should import correctly. The feature uses:
 4. Click **Add assignment**
 
 ### Updating an Assignment:
+
 1. Find the assignment card
 2. Click the **Edit** button
 3. Modify fields (upload a new file to replace the old one)
 4. Click **Update assignment**
 
 ### Deleting an Assignment:
+
 1. Find the assignment card
 2. Click the **Delete** button
 3. The assignment will be removed
 
 ### Downloading Files:
+
 1. Click the **Download** button on any assignment card with an attached file
 2. The file opens in a new tab
 
@@ -167,6 +184,7 @@ All files should import correctly. The feature uses:
 ```
 
 ## File Structure
+
 ```
 src/
 ├── features/homework/
@@ -188,17 +206,21 @@ supabase/migrations/
 ## Important Notes
 
 ### File Upload Security
+
 - Files are stored in a private Supabase Storage bucket
 - RLS policies ensure users can only access their own files
 - File size is limited to 25 MB to prevent abuse
 - File names are prepended with user_id and timestamp for security
 
 ### Overdue Indicators
+
 - Assignments with `due_date` in the past and `status: "pending"` show with a red background
 - The due date displays "X days ago" format
 
 ### Status Management
+
 The three status levels allow tracking:
+
 - **Pending**: Not yet submitted
 - **Submitted**: Handed in, awaiting grades
 - **Graded**: Graded by instructor with optional score
@@ -206,15 +228,18 @@ The three status levels allow tracking:
 ## Troubleshooting
 
 ### "Failed to upload file" error
+
 - Check if storage bucket exists and is named `homework-files`
 - Verify storage bucket policies are set correctly
 - Ensure file size is under 25 MB
 
 ### "You must be signed in" error
+
 - User needs to be authenticated first
 - Verify auth context is working (login required)
 
 ### Files not showing in public URL
+
 - Check storage bucket permissions
 - Verify the file was uploaded successfully
 - Check if the file path in database matches storage path
@@ -222,6 +247,7 @@ The three status levels allow tracking:
 ## Future Enhancements
 
 Consider adding:
+
 - Batch upload for multiple files
 - File preview (PDF, images)
 - Assignment templates/rubrics

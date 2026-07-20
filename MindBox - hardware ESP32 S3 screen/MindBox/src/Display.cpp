@@ -196,6 +196,261 @@ void renderMenu(const MenuView& m) {
   Panel::push();
 }
 
+// --- agenda day page (ST_AGENDA pager: today + the week ahead) ----------------
+// Kind accents: class = blue, exam = amber, study = red (the focus colour —
+// study blocks are the ones that scheduled-auto-start a session).
+static uint16_t agendaKindColor(uint8_t kind) {
+  switch (kind) {
+    case AGENDA_EXAM:  return C_ALERT;
+    case AGENDA_STUDY: return C_FOCUS;
+    default:           return C_LONG_BREAK;   // AGENDA_CLASS
+  }
+}
+
+void renderAgenda(const AgendaItem* items, uint8_t count, int nowMin,
+                  uint8_t dayIdx, const char* header, bool hasPrev, bool hasNext) {
+  lgfx::LovyanGFX* g = G();
+  const Palette& pal = Theme::palette();
+  g->fillScreen(pal.bg);
+  g->setTextSize(1);
+  s_rowCount = 0; s_selectedRow = -1;
+
+  // Header — same back-chip + title treatment as renderMenu (long-press = back).
+  s_hasBack = true;
+  g->drawRoundRect(6, 6, 46, 28, 6, pal.muted);
+  g->drawLine(28, 20, 22, 20, pal.text);
+  g->drawLine(22, 20, 26, 16, pal.text);
+  g->drawLine(22, 20, 26, 24, pal.text);
+  g->setTextDatum(top_left);
+  g->setFont(FONT_M);
+  g->setTextColor(pal.text, pal.bg);
+  g->drawString((header && header[0]) ? header : "TODAY", 64, 10);
+  // ‹ / › day-paging affordances (swipe changes day) — clear of the day-0
+  // clock, which owns the very right edge.
+  g->setTextDatum(top_center);
+  g->setTextColor(pal.muted, pal.bg);
+  if (hasPrev) g->drawString("<", SCR_W - 88, 10);
+  if (hasNext) g->drawString(">", SCR_W - 64, 10);
+  if (nowMin >= 0) {   // owner-local clock (the timezone the agenda is written in)
+    char clk[8];
+    snprintf(clk, sizeof(clk), "%02d:%02d", nowMin / 60, nowMin % 60);
+    g->setTextDatum(top_right);
+    g->setFont(FONT_S);
+    g->setTextColor(pal.muted, pal.bg);
+    g->drawString(clk, SCR_W - 12, 16);
+  }
+  g->drawFastHLine(0, 40, SCR_W, pal.divider);
+
+  if (count == 0) {
+    g->setTextDatum(middle_center);
+    g->setFont(FONT_M);
+    g->setTextColor(pal.muted, pal.bg);
+    g->drawString(dayIdx == 0 ? "No plan today" : "Nothing planned", SCR_W / 2, SCR_H / 2);
+    Panel::push();
+    return;
+  }
+
+  // Items are server-sorted by startMin: the first block that hasn't ended yet
+  // is "now" (if started) or "next" — the one row that gets the red dot.
+  int hot = -1;
+  if (nowMin >= 0)
+    for (int i = 0; i < count; i++)
+      if (nowMin < (int)items[i].endMin) { hot = i; break; }
+
+  const int rowH = 30, y0 = 48;
+  const int maxRows = (SCR_H - y0 - 10) / rowH;   // 6 rows on 240 px
+  int first = 0;
+  if (hot >= 0 && count > maxRows) {              // keep the hot row visible (one row of context above)
+    first = hot - 1;
+    if (first < 0) first = 0;
+    if (first > count - maxRows) first = count - maxRows;
+  }
+  int shown = count - first;
+  if (shown > maxRows) shown = maxRows;
+
+  for (int i = 0; i < shown; i++) {
+    const AgendaItem& it = items[first + i];
+    int ry = y0 + i * rowH, rmid = ry + rowH / 2;
+    bool isHot = (first + i) == hot;
+    bool past  = nowMin >= 0 && (int)it.endMin <= nowMin;
+
+    g->fillRect(10, ry + 4, 4, rowH - 8, past ? pal.divider : agendaKindColor(it.kind));
+
+    char tbuf[16];
+    snprintf(tbuf, sizeof(tbuf), "%02u:%02u-%02u:%02u",
+             it.startMin / 60u, it.startMin % 60u, it.endMin / 60u, it.endMin % 60u);
+    g->setTextDatum(middle_left);
+    g->setFont(FONT_S);
+    g->setTextColor(isHot ? pal.text : pal.muted, pal.bg);
+    g->drawString(tbuf, 22, rmid);
+    char tt[16];   // FONT_S fits ~15 title chars right of the time column
+    strncpy(tt, it.title, sizeof(tt) - 1);
+    tt[sizeof(tt) - 1] = 0;
+    g->drawString(tt, 152, rmid);
+    if (isHot) g->fillCircle(SCR_W - 14, rmid, 3, C_ACCENT);   // the one red dot: now / next
+
+    g->drawFastHLine(8, ry + rowH, SCR_W - 16, pal.divider);
+  }
+
+  if (first + shown < count) {
+    char more[12];
+    snprintf(more, sizeof(more), "+%d more", count - first - shown);
+    g->setTextDatum(bottom_right);
+    g->setFont(FONT_S);
+    g->setTextColor(pal.muted, pal.bg);
+    g->drawString(more, SCR_W - 10, SCR_H - 2);
+  }
+  Panel::push();
+}
+
+// --- scheduled-start splash (ST_AUTOSTART) -----------------------------------
+void renderAutoStart(const char* title, int secsLeft) {
+  lgfx::LovyanGFX* g = G();
+  const Palette& pal = Theme::palette();
+  g->fillScreen(pal.bg);
+  g->setTextSize(1);
+  s_rowCount = 0; s_selectedRow = -1; s_hasBack = false;
+
+  g->fillCircle(SCR_W / 2 - 92, 48, 4, C_ACCENT);   // the one red dot (matches sComplete)
+  g->setTextDatum(middle_center);
+  g->setFont(FONT_L);
+  g->setTextColor(pal.text, pal.bg);
+  g->drawString("Starting", SCR_W / 2 + 8, 48);
+
+  const char* t = (title && title[0]) ? title : "study block";
+  g->setFont(strlen(t) > 20 ? FONT_S : FONT_M);   // 23-char titles overflow FONT_M
+  g->setTextColor(pal.muted, pal.bg);
+  g->drawString(t, SCR_W / 2, 88);
+
+  char b[8];
+  snprintf(b, sizeof(b), "%d", secsLeft < 0 ? 0 : secsLeft);
+  g->setFont(FONT_XL);
+  g->setTextColor(pal.text, pal.bg);
+  g->drawString(b, SCR_W / 2, 150);
+
+  g->setFont(FONT_S);
+  g->setTextColor(pal.muted, pal.bg);
+  g->drawString("tap to cancel", SCR_W / 2, 216);
+  Panel::push();
+}
+
+// --- remote message / ring splash (ST_MESSAGE) --------------------------------
+void renderMessage(const char* title, const char* body, int secsLeft) {
+  lgfx::LovyanGFX* g = G();
+  const Palette& pal = Theme::palette();
+  g->fillScreen(pal.bg);
+  g->setTextSize(1);
+  s_rowCount = 0; s_selectedRow = -1; s_hasBack = false;
+
+  const char* t = (title && title[0]) ? title : "Message";
+  g->setTextDatum(middle_center);
+  g->setFont(strlen(t) > 14 ? FONT_M : FONT_L);
+  g->setTextColor(pal.text, pal.bg);
+  g->drawString(t, SCR_W / 2, 56);
+
+  // Body (<=47 chars): wrap onto two lines at the space nearest the middle so a
+  // full-length remote message never runs off the panel.
+  if (body && body[0]) {
+    char b1[48], b2[48];
+    strncpy(b1, body, sizeof(b1) - 1);
+    b1[sizeof(b1) - 1] = 0;
+    b2[0] = 0;
+    size_t len = strlen(b1);
+    if (len > 22) {
+      int split = -1;
+      for (int d = 0; d < (int)len / 2; d++) {          // nearest space to the middle
+        int lo = (int)len / 2 - d, hi = (int)len / 2 + d;
+        if (lo > 0 && b1[lo] == ' ') { split = lo; break; }
+        if (hi < (int)len && b1[hi] == ' ') { split = hi; break; }
+      }
+      if (split > 0) {
+        strncpy(b2, b1 + split + 1, sizeof(b2) - 1);
+        b2[sizeof(b2) - 1] = 0;
+        b1[split] = 0;
+      }
+    }
+    g->setFont(FONT_M);
+    g->setTextColor(pal.muted, pal.bg);
+    g->drawString(b1, SCR_W / 2, b2[0] ? 108 : 118);
+    if (b2[0]) g->drawString(b2, SCR_W / 2, 132);
+  }
+
+  char c[8];
+  snprintf(c, sizeof(c), "%d", secsLeft < 0 ? 0 : secsLeft);
+  g->setFont(FONT_M);
+  g->setTextColor(pal.muted, pal.bg);
+  g->drawString(c, SCR_W / 2, 180);
+
+  g->setFont(FONT_S);
+  g->setTextColor(pal.muted, pal.bg);
+  g->drawString("tap to dismiss", SCR_W / 2, 216);
+  Panel::push();
+}
+
+// --- post-focus homework quick-update (ST_HOMEWORK) ---------------------------
+void renderHomework(const HwItem* items, uint8_t count, uint8_t sel) {
+  lgfx::LovyanGFX* g = G();
+  const Palette& pal = Theme::palette();
+  g->fillScreen(pal.bg);
+  g->setTextSize(1);
+  s_rowCount = 0; s_selectedRow = -1; s_hasBack = false;
+
+  g->setTextDatum(top_left);
+  g->setFont(FONT_M);
+  g->setTextColor(pal.text, pal.bg);
+  g->drawString("Nice work!", 12, 8);
+  g->setTextDatum(top_right);
+  g->setFont(FONT_S);
+  g->setTextColor(pal.muted, pal.bg);
+  g->drawString("update homework?", SCR_W - 12, 14);
+  g->drawFastHLine(0, 36, SCR_W, pal.divider);
+
+  // Rows: title + thin progress bar + pct — selected row gets the accent dot
+  // (same language as renderMenu; swipe moves, tap = +25%).
+  const int rowH = 46, y0 = 42;
+  if (count > HW_MAX_ITEMS) count = HW_MAX_ITEMS;
+  for (uint8_t i = 0; i < count; i++) {
+    const HwItem& it = items[i];
+    int ry = y0 + i * rowH;
+    bool isSel = (sel == i);
+    uint16_t fg = isSel ? pal.text : pal.muted;
+    if (isSel) g->fillCircle(14, ry + 14, 4, C_ACCENT);
+
+    g->setTextDatum(middle_left);
+    g->setFont(FONT_M);
+    g->setTextColor(fg, pal.bg);
+    g->drawString(it.title, 30, ry + 14);
+
+    char p[8];
+    snprintf(p, sizeof(p), "%u%%", (unsigned)it.pct);
+    g->setTextDatum(middle_right);
+    g->setTextColor(it.pct >= 100 ? C_ACCENT : pal.muted, pal.bg);
+    g->drawString(p, SCR_W - 14, ry + 14);
+
+    int bw = SCR_W - 30 - 60;                       // bar under the title
+    g->fillRect(30, ry + 30, bw, 6, pal.segment);
+    int fw = bw * it.pct / 100;
+    if (fw > 0) g->fillRect(30, ry + 30, fw, 6, C_ACCENT);
+    g->drawFastHLine(8, ry + rowH - 2, SCR_W - 16, pal.divider);
+  }
+
+  // Skip row (sel == count) + the touch hint.
+  {
+    int ry = y0 + count * rowH;
+    bool isSel = (sel >= count);
+    if (isSel) g->fillCircle(14, ry + 14, 4, C_ACCENT);
+    g->setTextDatum(middle_left);
+    g->setFont(FONT_M);
+    g->setTextColor(isSel ? pal.text : pal.muted, pal.bg);
+    g->drawString("Skip", 30, ry + 14);
+  }
+  g->setTextDatum(bottom_center);
+  g->setFont(FONT_S);
+  g->setTextColor(pal.muted, pal.bg);
+  g->drawString("tap = +25%  hold = done", SCR_W / 2, SCR_H - 4);
+  Panel::push();
+}
+
 // --- per-state screens ------------------------------------------------------
 static void sPairing(const UiModel& m) {
   clear();

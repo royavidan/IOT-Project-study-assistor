@@ -25,6 +25,7 @@
 
 import type { Session } from "@/lib/types";
 import { parseDateKey, toDateKey } from "@/lib/dates";
+import { strainMinutes } from "@/lib/study-strain";
 
 export type Confidence = "low" | "medium" | "high";
 
@@ -232,7 +233,13 @@ function computeRecoveryBalance(
     .reduce((sum, s) => sum + s.durationMin, 0);
   const lateShare = recentMinutes > 0 ? lateMinutes / recentMinutes : 0;
 
-  // Compare per-day total load (study + commitments) against the prior 14 days.
+  // Activity-weighted minutes ("strain"): homework/deep-focus and group study on
+  // hard tasks are re-weighted per study-strain.ts, so the load-spike term below
+  // reflects WHAT you studied, not just how long. Rest & late-night stay on raw
+  // timing — intensity doesn't change whether or when you rested.
+  const recentStrainMin = recent.reduce((sum, s) => sum + strainMinutes(s), 0);
+
+  // Compare per-day total load (study strain + commitments) against the prior 14 days.
   const priorEnd = shiftKey(recentStart, -1);
   const priorStart = shiftKey(priorEnd, -(RECOVERY_WINDOW_DAYS - 1));
   const prior = sessions.filter((s) => s.date >= priorStart && s.date <= priorEnd);
@@ -244,8 +251,9 @@ function computeRecoveryBalance(
         .reduce((sum, e) => sum + Math.max(0, e.hours), 0) * 60;
     const externalPriorMin = weeklyHours * 60 * (RECOVERY_WINDOW_DAYS / 7) + datedPriorMin;
     const priorRate =
-      (prior.reduce((sum, s) => sum + s.durationMin, 0) + externalPriorMin) / RECOVERY_WINDOW_DAYS;
-    const recentRate = (recentMinutes + externalRecentMin) / windowSpanDays;
+      (prior.reduce((sum, s) => sum + strainMinutes(s), 0) + externalPriorMin) /
+      RECOVERY_WINDOW_DAYS;
+    const recentRate = (recentStrainMin + externalRecentMin) / windowSpanDays;
     if (priorRate > 0) loadChangePct = (recentRate - priorRate) / priorRate;
   }
 
@@ -364,10 +372,12 @@ function computeCircadianAlignment(sessions: Session[]): CircadianAlignment {
     stats.set(label, row);
   }
 
-  // A window is comparable once it has >= 2 sessions.
+  // A window is comparable once it has >= 2 sessions. "Best" = where the user
+  // actually studies the most (minutes), NOT the highest Focus Load — higher
+  // load means more strain, so ranking by it would be misleading.
   const qualifying = [...stats.values()].filter((b) => b.scores.length >= 2);
   const best =
-    qualifying.length > 0 ? [...qualifying].sort((a, b) => avg(b.scores) - avg(a.scores))[0] : null;
+    qualifying.length > 0 ? [...qualifying].sort((a, b) => b.minutes - a.minutes)[0] : null;
 
   const lateMinutes = sessions
     .filter((s) => isLateNight(s.start))
@@ -416,7 +426,7 @@ function computeCircadianAlignment(sessions: Session[]): CircadianAlignment {
   let suggestion: string;
   if (status === "aligned") {
     headline = bestWindow
-      ? `You focus best in the ${shortWindow(bestWindow)}`
+      ? `You get the most focus time in the ${shortWindow(bestWindow)}`
       : "Your timing looks healthy";
     detail =
       delta != null && delta > 0

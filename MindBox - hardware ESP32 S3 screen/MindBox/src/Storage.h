@@ -29,6 +29,12 @@ namespace Storage {
   bool darkTheme();          // UI theme: true = dark (default), false = light
   void setDarkTheme(bool d);
 
+  uint8_t themeAccent();     // accent preset 0-4 (site downlink themeId; 0 = original red)
+  void    setThemeAccent(uint8_t p);
+
+  uint32_t lastTimingRev();  // last adopted site focus/break revision (epoch-sec, 0 = never)
+  void     setLastTimingRev(uint32_t rev);
+
   void factoryReset();       // wipe the whole NVS namespace; caller reboots
 
   void setOwnerAccount(const char* displayName, const char* email);

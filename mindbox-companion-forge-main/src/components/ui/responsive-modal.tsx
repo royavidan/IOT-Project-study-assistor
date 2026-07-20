@@ -67,8 +67,13 @@ export function ResponsiveModal({
           <DrawerTitle>{title}</DrawerTitle>
           {description && <DrawerDescription>{description}</DrawerDescription>}
         </DrawerHeader>
-        <div className="overflow-y-auto px-4">{children}</div>
-        {footer && <DrawerFooter className="pt-2">{footer}</DrawerFooter>}
+        {/* flex-1 + min-h-0 lets only the body scroll; footer stays pinned. */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">{children}</div>
+        {footer && (
+          <DrawerFooter className="pb-[max(1rem,env(safe-area-inset-bottom))] pt-2">
+            {footer}
+          </DrawerFooter>
+        )}
       </DrawerContent>
     </Drawer>
   );

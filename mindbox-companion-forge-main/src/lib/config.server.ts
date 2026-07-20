@@ -30,5 +30,11 @@ export function getServerConfig() {
     // Shared secret the device/simulator sends as the `x-device-secret` header
     // when POSTing to the ingestion endpoints. Server-only.
     deviceIngestSecret: process.env.DEVICE_INGEST_SECRET,
+    // Gemini Developer API key for the LLM planner / check-in / load-review
+    // features. Server-only (never VITE_-prefixed).
+    geminiApiKey: process.env.GEMINI_API_KEY,
+    // Shared secret an external scheduler sends as `x-jobs-secret` to trigger
+    // `/jobs/*` routes (e.g. the daily load review). Server-only.
+    jobsSecret: process.env.JOBS_SECRET,
   };
 }

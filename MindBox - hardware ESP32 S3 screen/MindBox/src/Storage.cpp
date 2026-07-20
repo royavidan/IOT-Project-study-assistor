@@ -276,6 +276,22 @@ void setDarkTheme(bool d) {
   prefs.putBool("darkTheme", d);
 }
 
+uint8_t themeAccent() {
+  NvsLock lock;
+  uint8_t p = prefs.getUChar("themeAcc", 0);   // default: the original red preset
+  return p > 4 ? 0 : p;
+}
+void setThemeAccent(uint8_t p) {
+  NvsLock lock;
+  if (prefs.getUChar("themeAcc", 0) != p) prefs.putUChar("themeAcc", p);
+}
+
+uint32_t lastTimingRev() { NvsLock lock; return prefs.getUInt("timingRev", 0); }
+void setLastTimingRev(uint32_t rev) {
+  NvsLock lock;
+  if (prefs.getUInt("timingRev", 0) != rev) prefs.putUInt("timingRev", rev);
+}
+
 void factoryReset() {
   NvsLock lock;
   prefs.clear();   // wipe every key in the "mindbox" namespace; begin() re-seeds on reboot

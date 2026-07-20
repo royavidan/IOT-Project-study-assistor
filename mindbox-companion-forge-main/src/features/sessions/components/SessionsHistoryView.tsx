@@ -252,8 +252,11 @@ export function SessionsHistoryView({ student, initialFrom, initialTo }: Props) 
                   >
                     {s.status}
                   </span>
-                  <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums">
-                    {s.focusScore}
+                  <span
+                    className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold tabular-nums text-muted-foreground"
+                    title="Focus Load Estimate (strain, not a grade)"
+                  >
+                    Load {s.focusScore}
                   </span>
                 </div>
               </Link>

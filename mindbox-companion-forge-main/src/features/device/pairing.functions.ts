@@ -35,7 +35,7 @@ function sixDigitCode(): string {
  * it, transfer ownership to the signed-in user, and burn the code.
  */
 export const claimDeviceByCode = createServerFn({ method: "POST" })
-  .validator(claimInput)
+  .inputValidator(claimInput)
   .handler(async ({ data }) => {
     const user = await requireUser();
     const admin = getSupabaseAdminClient();
@@ -114,13 +114,15 @@ export const unlinkDevice = createServerFn({ method: "POST" }).handler(async () 
     .update({ used: true })
     .in("device_id", ids)
     .eq("used", false);
+  // Pending remote commands must not survive into a new owner's pairing.
+  await admin.from("device_commands").delete().in("device_id", ids).is("delivered_at", null);
 
   return { ok: true as const, unlinked: ids.length };
 });
 
 /** Rename the caller's MindBox (owner-checked). */
 export const renameDevice = createServerFn({ method: "POST" })
-  .validator(renameInput)
+  .inputValidator(renameInput)
   .handler(async ({ data }) => {
     const user = await requireUser();
     const admin = getSupabaseAdminClient();

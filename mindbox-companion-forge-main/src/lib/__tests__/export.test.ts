@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { escapeCsv, sessionsToCsv, sessionsToJson, summarize, type ReportMeta } from "@/features/reports/export";
+import {
+  escapeCsv,
+  sessionsToCsv,
+  sessionsToJson,
+  summarize,
+  type ReportMeta,
+} from "@/features/reports/export";
 import type { Session } from "@/lib/types";
 
 function session(overrides: Partial<Session> = {}): Session {

@@ -132,11 +132,16 @@ static const Note CH_PAUSE[]    = { {523, 120}, {0, 60}, {392, 150} };
 static const Note CH_RESUME[]   = { {784, 90}, {0, 30}, {1047, 140} };
 static const Note CH_COMPLETE[] = { {660, 110}, {0, 40}, {880, 110}, {0, 40}, {1175, 220} };
 static const Note CH_TEST[]     = { {880, 220} };
+static const Note CH_SCHED[]    = { {523, 90}, {0, 30}, {784, 90}, {0, 30}, {1047, 160} };   // rising C-G-C: "scheduled block starting"
+static const Note CH_ALERT[]    = { {1175, 70}, {0, 60}, {1175, 70}, {0, 60}, {1568, 130} }; // attention double-tap + high hold — distinct from start/complete
+static const Note CH_RING[]     = { {1568, 140}, {0, 70}, {1568, 140}, {0, 70}, {2093, 320}, {0, 180},
+                                    {1568, 140}, {0, 70}, {1568, 140}, {0, 70}, {2093, 320} }; // find-my: two insistent high triplets
 
 static const Note* s_seq   = nullptr;
 static int         s_seqLen = 0, s_seqIdx = 0, s_noteLeft = 0;
 static float       s_phase  = 0.0f;
 static int         s_tail   = 0;            // silent blocks with amp still on (anti-pop)
+static bool        s_ringNow = false;       // CHIME_RING playing -> volAmp() forces MAX
 
 static int samplesForMs(uint16_t ms) {
   return (int)((uint32_t)ms * AUDIO_SAMPLE_RATE / 1000);
@@ -144,6 +149,7 @@ static int samplesForMs(uint16_t ms) {
 
 static int16_t volAmp() {
   static const int16_t amps[3] = { 2200, 6800, 13000 };
+  if (s_ringNow) return amps[2];             // find-my always rings at MAX
   return amps[s_volume > 2 ? 2 : s_volume];
 }
 
@@ -154,8 +160,12 @@ static void startChime(uint8_t kind) {
     case Audio::CHIME_RESUME:   s_seq = CH_RESUME;   s_seqLen = 3; break;
     case Audio::CHIME_COMPLETE: s_seq = CH_COMPLETE; s_seqLen = 5; break;
     case Audio::CHIME_TEST:     s_seq = CH_TEST;     s_seqLen = 1; break;
+    case Audio::CHIME_SCHED:    s_seq = CH_SCHED;    s_seqLen = 5; break;
+    case Audio::CHIME_ALERT:    s_seq = CH_ALERT;    s_seqLen = 5; break;
+    case Audio::CHIME_RING:     s_seq = CH_RING;     s_seqLen = 11; break;
     default: return;
   }
+  s_ringNow = (kind == Audio::CHIME_RING);   // volume override for this sequence only
   s_seqIdx = 0;
   s_noteLeft = samplesForMs(s_seq[0].ms);
   s_phase = 0.0f;
@@ -177,7 +187,7 @@ static bool fillTx(int16_t* buf, int frames) {
       }
       if (--s_noteLeft <= 0) {
         s_seqIdx++;
-        if (s_seqIdx >= s_seqLen) { s_seq = nullptr; s_tail = frames; } // anti-pop tail
+        if (s_seqIdx >= s_seqLen) { s_seq = nullptr; s_ringNow = false; s_tail = frames; } // anti-pop tail (+ drop the ring MAX override)
         else { s_noteLeft = samplesForMs(s_seq[s_seqIdx].ms); s_phase = 0.0f; }
       }
     } else if (s_tail > 0) {

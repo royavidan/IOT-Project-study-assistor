@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+﻿import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { useAuth } from "@/lib/auth/auth-context";
@@ -7,6 +7,7 @@ import { parseDateKey, todayDateKey, toDateKey } from "@/lib/dates";
 import { computeStreakFromDateKeys } from "@/lib/streak";
 import { filterSessionsByUser } from "@/lib/session-scope";
 import type {
+  Companions,
   DailyAggregate,
   DeviceState,
   DeviceStatusSnapshot,
@@ -16,7 +17,7 @@ import type {
   TodayStats,
 } from "@/lib/types";
 
-const MODES: SessionMode[] = ["Deep Focus", "Study", "Reading", "Review"];
+const MODES: SessionMode[] = ["Deep Focus", "Study", "Reading", "Review", "Homework"];
 const DEVICE_STATES: DeviceState[] = ["work", "break", "sync", "warning", "danger", "idle"];
 const DEFAULT_GOAL_MIN = 180;
 
@@ -26,6 +27,10 @@ function pad(n: number): string {
 
 function asMode(value: string): SessionMode {
   return MODES.includes(value as SessionMode) ? (value as SessionMode) : "Study";
+}
+
+function asCompanions(value: unknown): Companions {
+  return value === "with_others" ? "with_others" : "solo";
 }
 
 function asStatus(value: string): SessionStatus {
@@ -74,8 +79,11 @@ function mapSession(row: Record<string, unknown>): Session {
     tempC: numOrNull(row.temp_c),
     lightLux: numOrNull(row.light_lux),
     presenceInterruptions: Number(row.presence_interruptions ?? 0),
+    companions: asCompanions(row.companions),
     userId: row.user_id ? String(row.user_id) : undefined,
     endedAt: row.ended_at ? String(row.ended_at) : undefined,
+    tiredness: numOrNull(row.tiredness),
+    checkinAt: row.checkin_at ? String(row.checkin_at) : null,
   };
 }
 
@@ -115,7 +123,7 @@ async function fetchSessions(): Promise<Session[]> {
   const { data, error } = await supabase
     .from("sessions")
     .select(
-      "id, user_id, started_at, ended_at, actual_focus_sec, mode, status, focus_load_avg, breaks, noise_avg, temp_c, light_lux, presence_interruptions",
+      "id, user_id, started_at, ended_at, actual_focus_sec, mode, status, focus_load_avg, breaks, noise_avg, temp_c, light_lux, presence_interruptions, companions, tiredness, checkin_at",
     )
     .order("started_at", { ascending: false });
 
@@ -146,7 +154,15 @@ async function fetchDeviceStatus(): Promise<DeviceStatusSnapshot> {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) {
-    return { state: "idle", battery: 0, wifi: "Unknown", sensorHealth: null };
+    return {
+      state: "idle",
+      battery: 0,
+      wifi: "Unknown",
+      sensorHealth: null,
+      updatedAt: null,
+      firmwareVersion: null,
+      room: null,
+    };
   }
 
   const { data: devices, error: devError } = await supabase
@@ -157,12 +173,22 @@ async function fetchDeviceStatus(): Promise<DeviceStatusSnapshot> {
   if (devError) throw new Error(devError.message);
   const deviceIds = (devices ?? []).map((d) => String((d as { id: string }).id));
   if (deviceIds.length === 0) {
-    return { state: "idle", battery: 0, wifi: "Unknown", sensorHealth: null };
+    return {
+      state: "idle",
+      battery: 0,
+      wifi: "Unknown",
+      sensorHealth: null,
+      updatedAt: null,
+      firmwareVersion: null,
+      room: null,
+    };
   }
 
   const { data: status, error: statusError } = await supabase
     .from("device_status")
-    .select("state, battery_pct, wifi_rssi, sensor_health, updated_at")
+    .select(
+      "state, battery_pct, wifi_rssi, sensor_health, updated_at, temp_c, humidity_pct, light_lux, noise_db, firmware_version",
+    )
     .in("device_id", deviceIds)
     .order("updated_at", { ascending: false })
     .limit(1)
@@ -170,11 +196,26 @@ async function fetchDeviceStatus(): Promise<DeviceStatusSnapshot> {
 
   if (statusError) throw new Error(statusError.message);
   if (!status) {
-    return { state: "idle", battery: 0, wifi: "Unknown", sensorHealth: null };
+    return {
+      state: "idle",
+      battery: 0,
+      wifi: "Unknown",
+      sensorHealth: null,
+      updatedAt: null,
+      firmwareVersion: null,
+      room: null,
+    };
   }
 
   const row = status as Record<string, unknown>;
   const health = row.sensor_health;
+  const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
+  const room = {
+    tempC: num(row.temp_c),
+    humidityPct: num(row.humidity_pct),
+    lightLux: num(row.light_lux),
+    noiseDb: num(row.noise_db),
+  };
   return {
     state: asDeviceState(String(row.state ?? "idle")),
     battery: Number(row.battery_pct ?? 0),
@@ -183,6 +224,9 @@ async function fetchDeviceStatus(): Promise<DeviceStatusSnapshot> {
       health && typeof health === "object" && !Array.isArray(health)
         ? (health as Record<string, unknown>)
         : null,
+    updatedAt: row.updated_at ? String(row.updated_at) : null,
+    firmwareVersion: row.firmware_version ? String(row.firmware_version) : null,
+    room: Object.values(room).some((v) => v != null) ? room : null,
   };
 }
 

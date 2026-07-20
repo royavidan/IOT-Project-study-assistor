@@ -1,0 +1,47 @@
+<!-- Chapter 6: the pbuf_free connectivity fix -->
+<h1>6. תקלת הקישוריות ותיקון ה-<code>pbuf_free</code></h1>
+
+<div class="lead">
+<b>הבאג:</b> הקופסה התאתחלה "כל כמה דקות" — אבל <b>רק כשהיא מחוברת ל-Wi-Fi</b>. זה היה ה-bug ההנדסי
+הקשה ביותר בפרויקט. השורש: assertion של מחסנית ה-רשת lwIP —
+<code>assert failed: pbuf_free ... p-&gt;ref &gt; 0</code> — שחרור-כפול (double-free) של buffer רשת.
+התיקון הוא <b>מחסנית של תשעה שינויים</b>, שכולם נועדו לסגור את חלון ה-race של שחרור-הכפול.
+</div>
+
+<h2>6.1 מה קרה בפועל</h2>
+<p>
+כל פתיחה וסגירה של socket TCP מקצה ומשחררת <code>pbuf</code>-ים. כאשר <b>שני שחקנים</b> (משימת הרשת
+שלנו + משימת האירועים הפנימית של ה-Wi-Fi, או ה-thread של SNTP) נגעו במחסנית ה-רשת <b>בו-זמנית</b>,
+אותו buffer שוחרר פעמיים — וה-assert הפיל את הצ'יפ. תסמין קלאסי: יציב לגמרי במצב offline, מתאתחל
+מחזורית רק כשמחובר. <span class="src">Cloud.cpp L86-91</span>
+</p>
+
+<h2>6.2 מחסנית התיקון (9 שינויים)</h2>
+<table>
+  <tr><th>#</th><th>השינוי</th><th>למה זה עוזר</th><th class="ltr">מקור</th></tr>
+  <tr><td>1</td><td><b>Socket keep-alive</b>: <code>HTTPClient</code> + <code>WiFiClient</code> משותפים, ממוחזרים בכל קריאות ה-<code>/ingest/*</code> עם <code>setReuse(true)</code>; <code>http.end()</code> משאיר את ה-socket פתוח</td><td>פירוק ה-TCP הוא בדיוק המקום שבו חי השחרור-הכפול; מיחזור מוריד ~2 sockets/דקה לכמעט-אפס</td><td class="ltr">Cloud.cpp L106-124, L168-180</td></tr>
+  <tr><td>2</td><td><b><code>autoReconnect</code> מושבת במכוון</b> + reconnect ידני מסונכרן על משימת הרשת (<code>manageWifi()</code> כל 15s)</td><td>auto-reconnect רץ ב-EVENT task נפרד ומתאסס מחדש <i>במקביל</i> ל-socket פעיל → חלון double-free בין שחקנים</td><td class="ltr">Cloud.cpp L982-985, L936-941</td></tr>
+  <tr><td>3</td><td><b>Settle gate של 500ms</b> לפני הבקשה הראשונה אחרי חיבור</td><td>מפריד את הקמת ה-SNTP/DNS מה-pass של ה-TCP connect הראשון</td><td class="ltr">Cloud.cpp L1101, L934</td></tr>
+  <tr><td>4</td><td><b>SNTP capped ל-12 שעות</b> + <code>sntp_restart()</code></td><td>re-sync ברירת-מחדל (~1h) פותח socket UDP/DNS על ה-tcpip thread באמצע HTTP → אותו double-free</td><td class="ltr">Cloud.cpp L947-954</td></tr>
+  <tr><td>5</td><td><b>בקשת HTTP אחת ל-pass</b> (שרשרת else-if)</td><td>מונע ערימה של כמה stalls של ~18-20s בתוך חלון WDT יחיד</td><td class="ltr">Cloud.cpp L1102-1134</td></tr>
+  <tr><td>6</td><td><b>Coalescing</b> של פעימות-מעבר: <code>TELEMETRY_MIN_GAP_MS=3000</code></td><td>רצף pause→resume→skip מהיר מתכווץ ל-POST אחד במקום סדרה של sockets</td><td class="ltr">config.h L177-180</td></tr>
+  <tr><td>7</td><td><code>vTaskDelay(20ms)</code> אחרי כל בקשה</td><td>נותן ל-lwIP לעשות housekeeping ל-pbuf</td><td class="ltr">Cloud.cpp L185-187</td></tr>
+  <tr><td>8</td><td>כל <code>WiFi.*</code> מרוכז בליבה 0; SSID/IP ב-snapshot ל-UI</td><td>מוטציה של הרדיו מליבה אחרת גורמת panic (LoadProhibited)</td><td class="ltr">Cloud.cpp L34-36, L974-987</td></tr>
+  <tr><td>9</td><td><b>Modem-sleep כבוי</b> (<code>WIFI_PS_NONE</code>)</td><td>שומר על הקישור יציב כדי ש-HTTP תקופתי לא ייתקע ויפיל את ה-WDT</td><td class="ltr">config.h L196-200</td></tr>
+</table>
+
+<h2>6.3 הלקח: <b>לא</b> <code>autoReconnect</code></h2>
+<div class="danger">
+<b>נקודה חשובה למי שיקרא את הקוד:</b> אינטואיטיבית היינו מצפים ש"החיבור נופל" נפתר ע"י
+<code>WiFi.setAutoReconnect(true)</code>. אצלנו זה בדיוק <b>מה שהשבתנו</b>. auto-reconnect הוא בעצמו
+מקור הבעיה — הוא מריץ re-association ב-thread נפרד שמתנגש עם ה-socket הפעיל שלנו. במקומו אנחנו
+<b>מסנכרנים את ה-reconnect ידנית על משימת הרשת</b> (שחקן אחד בכל רגע). כך מתארים את התיקון: <b>keep-alive
+של ה-socket + reconnect מסונכרן</b> — לא autoReconnect. <span class="src">Cloud.cpp L982-985</span>
+</div>
+
+<div class="proof">
+<b>איך מוכיחים שהתיקון עובד:</b> משאירים את המכשיר מחובר ל-Wi-Fi ורצים לאורך זמן — הוא <b>לא מתאתחל</b>
+(לפני התיקון: אתחול מחזורי). ב-Serial, סביב חיבור, מודפס ה-heap הפנוי + הבלוק הגדול ביותר, וכל ~30s
+המשימה מדפיסה מדדי heap — יציבים לאורך זמן, בלי דליפה. אם רוצים להראות את סיבת האיפוס, ה-self-test
+ב-boot מדפיס אותה (למשל <code>task-wdt</code> מול <code>brownout</code> מול panic).
+</div>

@@ -2,7 +2,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 import { getSupabaseAdminClient, getSupabaseServerClient } from "@/lib/supabase/server";
-import { sendFriendAcceptedEmail, sendFriendRequestEmail } from "@/features/social/friend-notify.server";
+import {
+  sendFriendAcceptedEmail,
+  sendFriendRequestEmail,
+} from "@/features/social/friend-notify.server";
 
 const sendInput = z.object({
   email: z.string().trim().toLowerCase().email("Enter a valid email address."),
@@ -45,7 +48,7 @@ function nameFor(p: ProfileRow | null, fallback: string): string {
  * the friend's email and sending mail need the service-role client.
  */
 export const sendFriendRequestFn = createServerFn({ method: "POST" })
-  .validator(sendInput)
+  .inputValidator(sendInput)
   .handler(async ({ data }) => {
     const { user, supabase } = await requireUser();
     const admin = getSupabaseAdminClient();
@@ -126,7 +129,7 @@ export const sendFriendRequestFn = createServerFn({ method: "POST" })
  * requester that you accepted. Decline just removes the pending row.
  */
 export const respondToFriendRequestFn = createServerFn({ method: "POST" })
-  .validator(respondInput)
+  .inputValidator(respondInput)
   .handler(async ({ data }) => {
     const { user, supabase } = await requireUser();
 

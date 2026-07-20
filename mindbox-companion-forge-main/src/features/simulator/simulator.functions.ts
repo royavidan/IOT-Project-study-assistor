@@ -5,8 +5,9 @@ import { computeFocusLoad } from "@/lib/focus-load";
 import { DEFAULT_SIM_ENV } from "@/features/simulator/simulator-env";
 import { getSupabaseAdminClient, getSupabaseServerClient } from "@/lib/supabase/server";
 
-const MODES = ["Deep Focus", "Study", "Reading", "Review"] as const;
+const MODES = ["Deep Focus", "Study", "Reading", "Review", "Homework"] as const;
 const STATUSES = ["completed", "interrupted", "aborted"] as const;
+const COMPANIONS = ["solo", "with_others"] as const;
 const DEVICE_STATES = ["idle", "work", "break", "sync", "warning", "danger"] as const;
 
 export function simulatorDeviceId(userId: string): string {
@@ -19,6 +20,7 @@ const sessionInput = z.object({
   durationMin: z.number().int().min(1).max(480),
   mode: z.enum(MODES),
   status: z.enum(STATUSES),
+  companions: z.enum(COMPANIONS).default("solo"),
   breaks: z.number().int().min(0).max(20).default(0),
   presenceInterruptions: z.number().int().min(0).max(10).default(0),
   focusScore: z.number().int().min(0).max(100).optional(),
@@ -158,7 +160,7 @@ export const getSimulatorDevice = createServerFn({ method: "GET" }).handler(asyn
 });
 
 export const submitSimulatorSession = createServerFn({ method: "POST" })
-  .validator(sessionInput)
+  .inputValidator(sessionInput)
   .handler(async ({ data }) => {
     const user = await requireUser();
     const deviceId = await ensureDevice(user.id);
@@ -206,6 +208,7 @@ export const submitSimulatorSession = createServerFn({ method: "POST" })
       actual_focus_sec: actualFocusSec,
       mode: data.mode,
       status: data.status,
+      companions: data.companions,
       breaks: data.breaks,
       presence_interruptions: data.presenceInterruptions,
       noise_avg: data.noiseAvg,
@@ -242,7 +245,7 @@ export const submitSimulatorSession = createServerFn({ method: "POST" })
   });
 
 export const submitSimulatorTelemetry = createServerFn({ method: "POST" })
-  .validator(telemetryInput)
+  .inputValidator(telemetryInput)
   .handler(async ({ data }) => {
     const user = await requireUser();
     const deviceId = await ensureDevice(user.id);

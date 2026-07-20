@@ -48,10 +48,17 @@ export default {
         url.pathname === "/ingest/telemetry" ||
         url.pathname === "/ingest/pairing" ||
         url.pathname === "/ingest/unpair" ||
+        url.pathname === "/ingest/homework" ||
         url.pathname === "/ingest/config"
       ) {
         const { handleIngestRequest } = await import("./features/device/ingest.server");
         return await handleIngestRequest(request, url);
+      }
+
+      // Scheduled jobs (external cron -> shared secret), same pattern as ingest.
+      if (url.pathname === "/jobs/load-review") {
+        const { handleLoadReviewRequest } = await import("./features/insights/load-review.server");
+        return await handleLoadReviewRequest(request);
       }
 
       const handler = await getServerEntry();

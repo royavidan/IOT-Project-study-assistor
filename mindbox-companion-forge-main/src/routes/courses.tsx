@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { EmptyState, ErrorState, LoadingState } from "@/components/EmptyState";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { useScheduleEvents } from "@/features/schedule/queries";
 import { useHomeworkAssignments } from "@/lib/queries/homework";
 import { useCourses, useCourseActions } from "@/features/courses/queries";
@@ -19,12 +20,13 @@ export const Route = createFileRoute("/courses")({
   component: CoursesPage,
 });
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, progress }: { label: string; value: string; progress?: number }) {
   return (
     <Card>
       <CardContent className="p-4">
         <p className="text-xs text-muted-foreground">{label}</p>
         <p className="mt-1 text-xl font-semibold tracking-tight">{value}</p>
+        {progress != null && <Progress value={progress} className="mt-2 h-1.5" />}
       </CardContent>
     </Card>
   );
@@ -99,7 +101,11 @@ function CoursesPage() {
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <Stat label="Courses" value={String(overall.courseCount)} />
           <Stat label="Credits" value={String(overall.totalCredits)} />
-          <Stat label="Homework done" value={`${overall.completionPct}%`} />
+          <Stat
+            label="Homework done"
+            value={`${overall.completionPct}%`}
+            progress={overall.completionPct}
+          />
           <Stat
             label="Avg grade"
             value={

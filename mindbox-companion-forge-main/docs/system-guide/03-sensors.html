@@ -1,0 +1,73 @@
+<!-- Chapter 3: per-sensor deep dive -->
+<h1>3. החיישנים — אחד-אחד</h1>
+
+<p>לכל חיישן: איך הוא עובד פיזיקלית, איך הוא מחווט, איפה הדרייבר, באיזה קצב הוא נדגם,
+איך הקריאה הגולמית הופכת ליחידות, איך מזוהות תקלות — <b>ואיך מוכיחים שהוא חי</b>.</p>
+
+<h2>3.1 DHT11 — טמפרטורה ולחות</h2>
+<table class="kv">
+  <tr><th>עיקרון פיזיקלי</th><td>מדחום תרמיסטור + חיישן לחות קיבולי; פרוטוקול 1-wire קנייני (רצף פולסים מתוזמן על קו דאטה אחד)</td></tr>
+  <tr><td>חיווט</td><td>DATA→IO21 (משותף עם כפתור הצד), VCC→3V3, GND; <b>pull-up ‏4.7k–10k חובה</b> DATA→3V3</td></tr>
+  <tr><td>דרייבר</td><td><code>Sensors.cpp — refreshDht()</code>, ספריית <code>DHT</code></td></tr>
+  <tr><td>קצב דגימה</td><td>כל 2000ms (<code>DHT_READ_INTERVAL_MS</code>) — מגבלת החיישן עצמו; 5 שניות warmup אחרי boot</td></tr>
+  <tr><td>עיבוד</td><td>טמפ' + offset כיול (<code>Storage::tempOffsetC</code>, פקודת serial ‏<code>c temp</code>); תיחום תקינות ‎−20…60°C; לחות 0–100%</td></tr>
+  <tr><td>תקלות</td><td>קריאה מחוץ לטווח/NaN ⇒ <code>tempPresent=false</code> ⇒ ‏<code>"temp":"invalid"</code> ב-sensorHealth של הטלמטריה ⇒ שורת Fault אדומה בעמוד ‎/device</td></tr>
+</table>
+<div class="proof"><b>הוכחה:</b> ‏<code>m</code> ב-Serial מציג טמפ' חיה; נשיפה חמה על החיישן מעלה את הערך תוך ‎2–4 שניות גם בשורת ‎[mon]‎, גם במסך ה-Diag במכשיר, וגם ב-"Room right now" באתר (עדכון ≤30 שניות).</div>
+
+<h2>3.2 VL53L1X — חיישן מרחק Time-of-Flight (נוכחות)</h2>
+<table class="kv">
+  <tr><th>עיקרון פיזיקלי</th><td>לייזר IR ‏940nm + מדידת זמן-טיסה של פוטונים (SPAD array) ⇒ מרחק במ"מ עד ~4m, ללא תלות בצבע המשטח</td></tr>
+  <tr><td>חיווט</td><td>על באס ה-I2C המשותף (IO16/IO15), כתובת 0x29</td></tr>
+  <tr><td>דרייבר</td><td><code>Sensors.cpp</code>, ספריית <code>Adafruit_VL53L1X</code>; מצב long-range, ‏timing budget ‏50ms</td></tr>
+  <tr><td>קצב דגימה</td><td>כל 500ms (<code>TOF_POLL_MS</code>): ‏<code>dataReady→distance→clearInterrupt</code>; רק ‎0–4000mm נחשב תקין</td></tr>
+  <tr><td>עיבוד</td><td><b>נוכחות</b> = מרחק &lt; ‏700mm (<code>PRESENCE_NEAR_MM</code>); נמדד גם משך היעדרות רציף (<code>absentForMs</code>) שמזין ספירת הפרעות-נוכחות והשהיה אוטומטית</td></tr>
+  <tr><td>תקלות</td><td>I2C watchdog כל 2s על 0x29; שני NACK רצופים ⇒ ריקברי-באס; SDA תקוע ⇒ ‏<code>ST_ERROR</code> על המסך (תקלה קריטית, לא שקטה)</td></tr>
+</table>
+<div class="proof"><b>הוכחה:</b> ‏<code>m</code> ב-Serial מציג <code>dist=Nmm</code> חי — הזיזו יד מול החיישן וראו את המספר קופץ. בזמן סשן: התרחקות ‎&gt;‏15 שניות מציגה חיווי Away על מסך הטיימר וסופרת presence interruption שמגיע עד גרף הסשן באתר.</div>
+
+<h2>3.3 KY-018 — חיישן אור (פוטורזיסטור)</h2>
+<table class="kv">
+  <tr><th>עיקרון פיזיקלי</th><td>נגד תלוי-אור (LDR): ההתנגדות יורדת באור; נמדד כמתח על מחלק דרך ADC</td></tr>
+  <tr><td>חיווט</td><td>AO→IO3 ‏(ADC1, ‏12-bit), מוזן מ-3V3</td></tr>
+  <tr><td>דרייבר</td><td><code>Sensors.cpp</code> — חלון min/max של שנייה</td></tr>
+  <tr><td>עיבוד</td><td>ההיפוך (<code>LIGHT_RAW_DARK_HIGH</code> — הגולמי עולה בחושך) ⇒ ‏<code>lux = mid/4095 × luxScale</code> (ברירת מחדל 1000, כיול ב-<code>c light</code>); <b>תנודתיות</b> ‏<code>lightVar = (max−min)/varScale</code> — מזהה תאורה מהבהבת ומזין את מדד העומס</td></tr>
+  <tr><td>שימושים</td><td>התראת אור נמוך/גבוה (ספים 50–1000 lux), <b>בהירות מסך אוטומטית</b> (מיפוי lux→20–100% עם היסטרזיס 5%), רכיב ב-Focus Load</td></tr>
+</table>
+<div class="proof"><b>הוכחה:</b> כסו את החיישן ביד — במסך Diag ובשורת ‎[mon]‎ ה-lux צונח, ואם auto-brightness פעיל המסך מתעמעם בפועל תוך שנייה-שתיים; באתר הערך מגיע בפעימת הטלמטריה הבאה.</div>
+
+<h2>3.4 מיקרופון MEMS דיגיטלי — דרך קודק ES8311 (I2S)</h2>
+<table class="kv">
+  <tr><th>עיקרון פיזיקלי</th><td>ממברנת MEMS קיבולית ⇒ ADC בתוך הקודק ⇒ דגימות PCM דיגיטליות על באס I2S — <b>אין שום דרך לקרוא אותו כ-analogRead</b></td></tr>
+  <tr><td>חיווט</td><td>מובנה בלוח: DIN=IO6, שעונים MCLK4/BCLK5/LRCK7; תכנות הקודק ב-I2C ‏0x18 (soft-I2C ב-boot)</td></tr>
+  <tr><td>דרייבר</td><td><code>Audio.cpp</code> — רצף אתחול רגיסטרים מלא (כולל התיקון הקריטי: ‏reg ‏0x01=0x3F שמדליק את שעון ה-ADC — בלעדיו המיקרופון "עובד" ומחזיר אפסים); משימת FreeRTOS ייעודית על ליבה 0</td></tr>
+  <tr><td>קצב דגימה</td><td>16kHz, ‏16-bit mono, פריימים של 256 דגימות (~16ms), חלון RMS של ~שנייה</td></tr>
+  <tr><td>עיבוד</td><td><b>AC-RMS</b>: ‏<code>var = mean(v²) − mean(v)²</code> (מסיר DC bias) ⇒ ‏<code>micLevel = rms/1000</code> (0–1) ⇒ וגם <b>dB SPL</b>: ‏<code>20·log10(rms/32768) + 116</code> (offset מכויל, ‏<code>c db</code>). סף התראת רעש: ‏60dB (מתכוונן 40–80 בתפריט)</td></tr>
+  <tr><td>תקלות</td><td><code>micOk</code> = המשימה מדווחת נתונים חיים; כשל אתחול קודק ⇒ ‏boot-ack=NO ב-<code>Audio::probe</code></td></tr>
+</table>
+<div class="proof"><b>הוכחה:</b> פקודת ‎<code>a</code>‎ ב-Serial מדפיסה boot-ACK של הקודק + min/max/RMS גולמיים — מחיאת כף מקפיצה את ה-RMS בסדר גודל. מסך ה-Diag מציג ‏<code>pp</code> (peak-to-peak) שקופץ עם כל רעש, וה-dB חי בשורת ‎[mon]‎ וב-"Room right now" באתר.</div>
+
+<h2>3.5 רמקול — ES8311 DAC + מגבר FM8002E</h2>
+<table class="kv">
+  <tr><th>עיקרון</th><td>סינתזת צלילים בתוכנה: רצפי sine ‏(<code>Note{freq,ms}</code>) נכתבים ל-I2S TX ⇒ DAC ⇒ מגבר class-AB ⇒ רמקול</td></tr>
+  <tr><td>שליטה</td><td>המגבר (AMP_EN=IO1, ‏active-low) נדלק <b>רק בזמן צליל</b> — חיסכון בזרם ורחש; עוצמה = סקיילינג אמפליטודה בתוכנה (3 דרגות)</td></tr>
+  <tr><td>רפרטואר</td><td>8 צלילים: התחלה/השהיה/המשך/סיום/בדיקה/התחלה-מתוזמנת/התראה/RING (צלצול find-my ב-11 תווים בעוצמה מלאה, עוקף כל השתקה)</td></tr>
+  <tr><td>שליטה מהאתר</td><td>מסך Settings באתר קובע: מתג ראשי, עוצמה, אילו צלילים (chimeMask) — נאכף במכשיר בכל poll</td></tr>
+</table>
+<div class="proof"><b>הוכחה:</b> צליל boot נשמע בכל הדלקה (מוכיח חיווט מגבר); "Test sound" בתפריט; ומהאתר — כפתור "Ring my device" מפעיל צלצול תוך ≤60 שניות כשהסטטוס באתר עובר Queued→Sent→Done.</div>
+
+<h2>3.6 מסך מגע — FT6336 (קיבולי) + ILI9341</h2>
+<table class="kv">
+  <tr><th>עיקרון</th><td>מגע קיבולי: שינוי קיבול ברשת אלקטרודות; הבקר מחזיר קואורדינטות מוחלטות ב-I2C</td></tr>
+  <tr><td>דרייבר</td><td><code>Touch.cpp</code> — קריאת רגיסטרים ישירה (0x02 ספירה, 0x03–0x06 ‏X/Y) על Wire המשותף; <b>כיול 4 פינות</b> שנשמר ב-NVS ולומד את האוריינטציה</td></tr>
+  <tr><td>רינדור</td><td>LovyanGFX + sprite ‏RGB332 ‏(75KB, נופל ל-PSRAM בעת הצורך); דחיפת פריים ~30ms</td></tr>
+</table>
+<div class="proof"><b>הוכחה:</b> פקודת ‎<code>t</code>‎ ב-Serial פותחת בדיקת crosshair חיה — כל נגיעה מציירת את הנקודה שנקראה; ‏<code>k</code> מריץ כיול מחדש מלא.</div>
+
+<h2>3.7 אנקודר סיבובי KY-040 + כפתורים</h2>
+<p>
+CLK=IO2, ‏DT=IO14, לחצן ציר על נתיב IO21. משמש לניווט בתפריטים, דפדוף ימים במסך הלו"ז,
+וכוונון ערכים — לצד המגע (המערכת ממזגת את שניהם ב-<code>Inputs.cpp</code>). כפתור BOOT ‏(IO0)
+מחליף ערכת נושא בלחיצה קצרה.
+<span class="proof" style="display:block;margin-top:6px;"><b>הוכחה:</b> פקודת ‎<code>b</code>‎ ב-Serial מדפיסה את מצב הכפתור חי למשך 8 שניות.</span>
+</p>

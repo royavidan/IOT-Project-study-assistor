@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { StateBadge } from "@/components/StateBadge";
 import { ErrorState, LoadingState } from "@/components/EmptyState";
@@ -19,13 +19,32 @@ import {
   unlinkDevice,
 } from "@/features/device/pairing.functions";
 import { summarizeSensorHealth } from "@/features/device/sensor-health";
+import { deriveDeviceFreshness } from "@/features/device/freshness";
 import { LowBatteryBanner } from "@/components/LowBatteryBanner";
 import { BluetoothConnectCard } from "@/features/device/components/BluetoothConnectCard";
+import { PairingCodeInput } from "@/features/device/components/PairingCodeInput";
+import { RemoteControlCard } from "@/features/device/components/RemoteControlCard";
 import { BATTERY_TRACKING_ENABLED } from "@/lib/feature-flags";
-import { Battery, Wifi, AlertTriangle, CheckCircle2, User } from "lucide-react";
+import {
+  Battery,
+  Wifi,
+  AlertTriangle,
+  CheckCircle2,
+  User,
+  Thermometer,
+  Droplets,
+  Sun,
+  Volume2,
+} from "lucide-react";
 
 export const Route = createFileRoute("/device")({
   head: () => ({ meta: [{ title: "Device Setup — MindBox" }] }),
+  // Support a deep link / QR like /device?code=123456 — the code pre-fills (and
+  // auto-submits) the pairing form so a phone never has to type it.
+  validateSearch: (search: Record<string, unknown>): { code?: string } => {
+    const code = typeof search.code === "string" ? search.code.replace(/\D/g, "").slice(0, 6) : "";
+    return code ? { code } : {};
+  },
   component: Device,
 });
 
@@ -38,12 +57,12 @@ const steps = [
   {
     n: 2,
     title: "Connect Wi-Fi",
-    body: "Join the 'MindBox_Setup' Wi-Fi network from your phone and pick your home network in the captive portal.",
+    body: "Join the “MindBox_Setup” Wi-Fi from your phone, then pick your home network in the page that opens automatically. On iPhone: Settings → Wi-Fi. On Android: Settings → Network & internet → Wi-Fi.",
   },
   {
     n: 3,
     title: "Pair this app",
-    body: "Enter the 6-digit code the device shows on its OLED into the form below.",
+    body: "Type the 6-digit code shown on the device screen into the boxes below — or scan its QR code to fill it in automatically.",
   },
 ];
 
@@ -64,6 +83,15 @@ function Device() {
   );
   const { data: status, isLoading, isError, error, refetch } = useDeviceStatus();
 
+  // Freshness is a function of wall-clock time, but react-query only re-renders
+  // when data CHANGES — and a silent device stops changing updated_at. Tick so
+  // "Online" actually decays to "Last seen …".
+  const [freshnessNow, setFreshnessNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setFreshnessNow(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, []);
+
   const [code, setCode] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [messageKind, setMessageKind] = useState<"success" | "error" | "info">("success");
@@ -82,7 +110,9 @@ function Device() {
     mutationFn: () => unlinkDevice(),
     onSuccess: () => {
       setMessageKind("success");
-      setMessage("Signed out. Your MindBox returns to its pairing screen and stops syncing shortly.");
+      setMessage(
+        "Signed out. Your MindBox returns to its pairing screen and stops syncing shortly.",
+      );
       if (user?.id) {
         queryClient.setQueryData<MyDevice | null>(["my-device", user.id], null);
       }
@@ -146,17 +176,37 @@ function Device() {
     },
   });
 
+  const submitCode = useCallback(
+    (raw: string) => {
+      setMessage(null);
+      const trimmed = raw.trim();
+      if (!/^\d{6}$/.test(trimmed)) {
+        setMessageKind("error");
+        setMessage("Enter the 6-digit code shown on your MindBox.");
+        return;
+      }
+      claimMutation.mutate(trimmed);
+    },
+    [claimMutation],
+  );
+
   const onPair = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setMessage(null);
-    const trimmed = code.trim();
-    if (!/^\d{6}$/.test(trimmed)) {
-      setMessageKind("error");
-      setMessage("Enter the 6-digit code shown on your MindBox.");
-      return;
-    }
-    claimMutation.mutate(trimmed);
+    submitCode(code);
   };
+
+  // Deep link / QR support: /device?code=123456 fills the field and pairs once.
+  const search = Route.useSearch();
+  const deepLinkRan = useRef(false);
+  useEffect(() => {
+    if (deepLinkRan.current || myDevice) return;
+    const c = (search.code ?? "").replace(/\D/g, "").slice(0, 6);
+    if (c.length === 6) {
+      deepLinkRan.current = true;
+      setCode(c);
+      submitCode(c);
+    }
+  }, [search.code, myDevice, submitCode]);
 
   return (
     <>
@@ -179,8 +229,7 @@ function Device() {
             <p className="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground">
               <User className="h-4 w-4 shrink-0" aria-hidden />
               <span>
-                Signed in as{" "}
-                <span className="font-medium text-foreground">{accountLabel}</span>
+                Signed in as <span className="font-medium text-foreground">{accountLabel}</span>
               </span>
             </p>
           )}
@@ -208,6 +257,20 @@ function Device() {
               )}
               <div className="flex flex-wrap items-center gap-4">
                 <StateBadge state={status.state} battery={status.battery} />
+                {(() => {
+                  const fresh = deriveDeviceFreshness(status.updatedAt, freshnessNow);
+                  return (
+                    <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <span
+                        aria-hidden
+                        className={`h-2 w-2 rounded-full ${
+                          fresh.online ? "bg-success" : "bg-muted-foreground/40"
+                        }`}
+                      />
+                      {fresh.label}
+                    </span>
+                  );
+                })()}
                 {BATTERY_TRACKING_ENABLED && (
                   <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
                     <Battery className="h-4 w-4" aria-hidden />
@@ -218,7 +281,38 @@ function Device() {
                   <Wifi className="h-4 w-4" aria-hidden />
                   {status.wifi}
                 </span>
+                {status.firmwareVersion && (
+                  <span className="text-sm text-muted-foreground">FW {status.firmwareVersion}</span>
+                )}
               </div>
+
+              {status.room && (
+                <div className="rounded-lg border border-border bg-muted/20 p-3">
+                  <p className="text-xs font-medium text-muted-foreground">Room right now</p>
+                  <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1.5 text-sm">
+                    <span className="inline-flex items-center gap-1.5">
+                      <Thermometer className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                      {status.room.tempC != null ? `${Math.round(status.room.tempC)}°C` : "—"}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Droplets className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                      {status.room.humidityPct != null
+                        ? `${Math.round(status.room.humidityPct)}%`
+                        : "—"}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Sun className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                      {status.room.lightLux != null
+                        ? `${Math.round(status.room.lightLux)} lux`
+                        : "—"}
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <Volume2 className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                      {status.room.noiseDb != null ? `${Math.round(status.room.noiseDb)} dB` : "—"}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {(() => {
                 const health = summarizeSensorHealth(status.sensorHealth);
@@ -356,12 +450,14 @@ function Device() {
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              Signing out releases this MindBox from your account — it returns to its pairing screen and
-              stops syncing your sessions. Re-pair anytime with a new code.
+              Signing out releases this MindBox from your account — it returns to its pairing screen
+              and stops syncing your sessions. Re-pair anytime with a new code.
             </p>
           </CardContent>
         </Card>
       )}
+
+      {myDevice && <RemoteControlCard deviceId={myDevice.id} />}
 
       {!myDevice && (
         <>
@@ -394,21 +490,21 @@ function Device() {
                   <span className="font-medium text-foreground">{accountLabel}</span>.
                 </p>
               )}
-              <form onSubmit={onPair} className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <form onSubmit={onPair} className="space-y-3">
                 <div className="grid gap-1.5">
-                  <Label htmlFor="pair-code">6-digit code</Label>
-                  <Input
-                    id="pair-code"
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    maxLength={6}
-                    placeholder="123456"
+                  <Label>6-digit code</Label>
+                  <PairingCodeInput
                     value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                    className="w-[160px] font-mono tracking-widest"
+                    onChange={setCode}
+                    onComplete={submitCode}
+                    disabled={claimMutation.isPending}
                   />
                 </div>
-                <Button type="submit" disabled={claimMutation.isPending}>
+                <Button
+                  type="submit"
+                  disabled={claimMutation.isPending}
+                  className="w-full sm:w-auto"
+                >
                   {claimMutation.isPending ? "Pairing…" : "Pair device"}
                 </Button>
               </form>
@@ -416,12 +512,13 @@ function Device() {
               {message && (
                 <p
                   role="status"
-                  className={`text-sm ${messageKind === "error"
+                  className={`text-sm ${
+                    messageKind === "error"
                       ? "text-danger"
                       : messageKind === "info"
                         ? "text-sync"
                         : "text-success"
-                    }`}
+                  }`}
                 >
                   {message}
                 </p>

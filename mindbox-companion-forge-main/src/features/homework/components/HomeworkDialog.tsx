@@ -49,6 +49,7 @@ const defaultForm = (): HomeworkUpdateInput => ({
   progressPct: null,
   grade: null,
   weight: null,
+  estimatedMinutes: null,
   notes: "",
 });
 
@@ -95,6 +96,7 @@ export function HomeworkDialog({
         progressPct: editing.progressPct,
         grade: editing.grade,
         weight: editing.weight,
+        estimatedMinutes: editing.estimatedMinutes ?? null,
         notes: editing.notes ?? "",
       });
       setFileName(editing.fileName ?? "");
@@ -214,7 +216,7 @@ export function HomeworkDialog({
                 }
               />
             </div>
-            {form.status === "graded" && (
+            {form.status === "graded" ? (
               <div className="grid gap-2">
                 <Label htmlFor="hw-grade">Grade</Label>
                 <Input
@@ -230,6 +232,29 @@ export function HomeworkDialog({
                     setForm((f) => ({ ...f, grade: parseOptionalNumber(e.target.value) }))
                   }
                 />
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <Label htmlFor="hw-est">Est. study time (min)</Label>
+                <Input
+                  id="hw-est"
+                  type="number"
+                  min={0}
+                  max={1000}
+                  step={15}
+                  onWheel={blurOnWheel}
+                  placeholder="Auto"
+                  value={form.estimatedMinutes == null ? "" : String(form.estimatedMinutes)}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      estimatedMinutes: parseOptionalNumber(e.target.value),
+                    }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional — helps the study planner size your blocks.
+                </p>
               </div>
             )}
           </div>

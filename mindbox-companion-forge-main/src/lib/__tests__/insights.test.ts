@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   computeDashboardInsightTeaser,
-  computeEnvScatterPoints,
   computeHourlyHeatmap,
   computeSessionInsights,
 } from "@/features/insights/insights";
@@ -29,34 +28,24 @@ function session(overrides: Partial<Session> = {}): Session {
 }
 
 describe("computeSessionInsights", () => {
-  it("returns null ideal conditions with too few env sessions", () => {
-    const insights = computeSessionInsights([session(), session({ id: "2" })]);
-    expect(insights.idealConditions).toBeNull();
-  });
-
-  it("derives ideal conditions from top quartile sessions", () => {
-    const sessions = Array.from({ length: 8 }, (_, i) =>
-      session({
-        id: String(i),
-        focusScore: 40 + i * 8,
-        noiseAvg: 0.5 - i * 0.04,
-        tempC: 24 - i * 0.5,
-        lightLux: 200 + i * 30,
-      }),
-    );
-    const insights = computeSessionInsights(sessions);
-    expect(insights.idealConditions).not.toBeNull();
-    expect(insights.idealConditions!.sessionCount).toBeGreaterThanOrEqual(2);
-    expect(insights.idealConditions!.summary).toMatch(/highest-scoring/i);
-  });
-
-  it("groups time-of-day buckets and picks a best slot", () => {
+  it("groups time-of-day buckets and picks the busiest slot (by minutes)", () => {
     const insights = computeSessionInsights([
-      session({ start: "09:00", focusScore: 80 }),
-      session({ id: "2", start: "10:00", focusScore: 75 }),
-      session({ id: "3", start: "20:00", focusScore: 50 }),
+      session({ start: "09:00", durationMin: 60 }),
+      session({ id: "2", start: "10:00", durationMin: 60 }),
+      session({ id: "3", start: "20:00", durationMin: 30 }),
     ]);
     expect(insights.timeOfDay.some((t) => t.label.includes("Morning"))).toBe(true);
+    expect(insights.bestTimeSlot?.label).toContain("Morning");
+  });
+
+  it("best slot follows minutes, NOT load (higher load must not win)", () => {
+    const insights = computeSessionInsights([
+      // Evening has one short but very high-load session…
+      session({ id: "e", start: "20:00", durationMin: 20, focusScore: 95 }),
+      // …Morning has more total minutes at lower load — Morning should win.
+      session({ id: "m1", start: "09:00", durationMin: 60, focusScore: 40 }),
+      session({ id: "m2", start: "10:00", durationMin: 60, focusScore: 40 }),
+    ]);
     expect(insights.bestTimeSlot?.label).toContain("Morning");
   });
 
@@ -69,24 +58,17 @@ describe("computeSessionInsights", () => {
     expect(insights.statusBreakdown).toHaveLength(2);
   });
 
-  it("builds scatter points from sessions with noise", () => {
-    const points = computeEnvScatterPoints([
-      session({ id: "a", noiseAvg: 0.2, focusScore: 80 }),
-      session({ id: "b", noiseAvg: 0.5, focusScore: 55 }),
-    ]);
-    expect(points).toHaveLength(2);
-    expect(points[0].noise).toBe(0.2);
-  });
-
-  it("builds hourly heatmap cells for all 24 hours", () => {
+  it("builds hourly heatmap cells for all 24 hours, intensity by minutes", () => {
     const cells = computeHourlyHeatmap([
-      session({ start: "09:00", focusScore: 70 }),
-      session({ id: "2", start: "09:30", focusScore: 90 }),
-      session({ id: "3", start: "14:00", focusScore: 50 }),
+      session({ start: "09:00", durationMin: 30 }),
+      session({ id: "2", start: "09:30", durationMin: 30 }),
+      session({ id: "3", start: "14:00", durationMin: 20 }),
     ]);
     expect(cells).toHaveLength(24);
     expect(cells[9].sessions).toBe(2);
-    expect(cells[9].avgFocusScore).toBe(80);
+    expect(cells[9].minutes).toBe(60);
+    expect(cells[9].intensity).toBe(100); // busiest hour
+    expect(cells[14].intensity).toBeLessThan(100);
   });
 
   it("dashboard teaser prompts for more sessions when data is sparse", () => {
@@ -95,12 +77,12 @@ describe("computeSessionInsights", () => {
     expect(teaser.headline).toMatch(/unlock/i);
   });
 
-  it("dashboard teaser highlights best time when enough env data exists", () => {
+  it("dashboard teaser highlights the busiest time when enough data exists", () => {
     const sessions = Array.from({ length: 4 }, (_, i) =>
       session({
         id: String(i),
         start: i < 2 ? "09:00" : "20:00",
-        focusScore: i < 2 ? 85 : 50,
+        durationMin: i < 2 ? 60 : 20,
       }),
     );
     const teaser = computeDashboardInsightTeaser(sessions);

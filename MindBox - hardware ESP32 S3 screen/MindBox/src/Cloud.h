@@ -7,7 +7,9 @@
 //   POST /ingest/sessions    completed sessions (drained from LittleFS queue)
 //   POST /ingest/pairing     publish the 6-digit claim code
 //   POST /ingest/unpair      release this box's account link (box-side sign-out)
-//   GET  /ingest/config      pull settings (the site->box DOWNLINK)
+//   POST /ingest/homework    homework progress taps (ST_HOMEWORK quick-update)
+//   GET  /ingest/config      pull settings (the site->box DOWNLINK; also the
+//                            remote-command channel — &ack=<cmdId> ack ride-along)
 // ============================================================================
 #include "types.h"
 #include <time.h>
@@ -44,6 +46,10 @@ namespace Cloud {
   bool uploadSessionJson(uint32_t clientSeq, const String& json);
   void kickUpload();
   int  pendingCount();          // queued (un-uploaded) sessions, for UI
+
+  // Homework progress tap -> small loop-side queue; the net task POSTs
+  // /ingest/homework one per pass (coalesced by id, dropped after ~5 failures).
+  bool postHomework(const char* homeworkId, uint8_t pct);
 
   void publishPairingCode(const char* code);     // non-blocking: task POSTs it
   void requestUnpair();                          // non-blocking: task POSTs /ingest/unpair

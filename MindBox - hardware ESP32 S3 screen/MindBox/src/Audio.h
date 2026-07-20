@@ -18,7 +18,10 @@
 
 namespace Audio {
   enum Chime : uint8_t {
-    CHIME_START = 0, CHIME_PAUSE, CHIME_RESUME, CHIME_COMPLETE, CHIME_TEST
+    CHIME_START = 0, CHIME_PAUSE, CHIME_RESUME, CHIME_COMPLETE, CHIME_TEST,
+    CHIME_SCHED,   // scheduled auto-start splash (rising arpeggio)
+    CHIME_ALERT,   // environment/interference attention (double beep + high hold)
+    CHIME_RING     // find-my: insistent repeat, always played at MAX amplitude
   };
 
   void  begin();                 // I2S up + ES8311 config + audio task (pre-Display)

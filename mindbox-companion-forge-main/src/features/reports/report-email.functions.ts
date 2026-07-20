@@ -15,7 +15,7 @@ const emailReportInput = z.object({
  * reviewers (Story 11).
  */
 export const emailReport = createServerFn({ method: "POST" })
-  .validator(emailReportInput)
+  .inputValidator(emailReportInput)
   .handler(async ({ data }) => {
     const {
       data: { user },

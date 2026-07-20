@@ -12,7 +12,12 @@
 enum SysState {
   ST_BOOTING, ST_IDLE, ST_RUNNING,
   ST_PAUSED, ST_COMPLETE, ST_LOGGING, ST_ERROR, ST_PAIRING, ST_DIAG,
-  ST_RESUME, ST_CYCLE_OFFER, ST_WIFI_SETUP
+  ST_RESUME, ST_CYCLE_OFFER, ST_WIFI_SETUP,
+  // Appended (not inserted): SessionCheckpoint persists SysState values in NVS.
+  ST_AGENDA,      // read-only "Today" agenda screen (inline render, like ST_DIAG)
+  ST_AUTOSTART,   // scheduled-start splash: "Starting: <title>", tap cancels
+  ST_MESSAGE,     // remote message / ring splash: title + body, tap dismisses
+  ST_HOMEWORK     // post-focus homework quick-update (tap +25%, from ST_COMPLETE)
 };
 
 enum Mode { MODE_WORK, MODE_BREAK };
@@ -196,7 +201,31 @@ struct TelemetrySnap {
   uint8_t pauseReason;  // PauseReason
   int     batteryPct;
   char    health[96];   // Sensors::healthJson()
+  // Live environment readings, filled LOOP-side only where the HAS_* sensor is
+  // wired AND the reading is valid; pushTelemetry emits each field only then.
+  float   tempC;        // NAN = absent/invalid
+  int16_t humidityPct;  // -1 = absent/invalid
+  int32_t lightLux;     // -1 = absent
+  int16_t noiseDb;      // -1 = absent/invalid
 };
+
+// One agenda block from the site downlink (agendaStr). Times are minutes from
+// the OWNER's local midnight — pair with CloudSettings.tzOffsetMin, not the box
+// TZ. Only study blocks (AGENDA_STUDY) may scheduled-auto-start a session.
+#define AGENDA_MAX_ITEMS 12
+enum AgendaKind { AGENDA_CLASS = 0, AGENDA_EXAM = 1, AGENDA_STUDY = 2 };
+struct AgendaItem { uint16_t startMin, endMin; uint8_t kind; char title[24]; };
+
+// Top pending homework from the site downlink (hwStr) — the post-focus
+// quick-update screen (ST_HOMEWORK) taps these to POST /ingest/homework.
+#define HW_MAX_ITEMS 3
+struct HwItem { char id[37]; char title[24]; uint8_t pct; };
+
+// Rest-of-week schedule from the site downlink (weekStr): blocks 1..6 days
+// AHEAD of today (today itself rides agendaStr, unchanged). Browsed by the
+// ST_AGENDA day pager; scheduled auto-start never reads these.
+#define WEEK_MAX_ITEMS 36
+struct WeekItem { uint8_t dayOffset; uint16_t startMin, endMin; uint8_t kind; char title[24]; };
 
 // App-managed settings pulled from the downlink, overlaid onto DeviceConfig.
 struct CloudSettings {
@@ -206,14 +235,47 @@ struct CloudSettings {
   int32_t  todayFocusSec;   // server-truth focus today (account-wide, local day)
   char     ownerDisplayName[20];
   char     ownerEmail[32];
+  // Today's agenda + site-owned sound/auto-start config. NB: this struct crosses
+  // task->loop BY VALUE (mutex'd copy in Cloud.cpp); the agenda grows it ~400 B,
+  // which is just static/stack memory — no fixed-size queue to outgrow.
+  AgendaItem agenda[AGENDA_MAX_ITEMS];
+  uint8_t  agendaCount;
+  int16_t  tzOffsetMin;       // owner's minutes ahead of UTC (Israel summer = 180)
+  bool     soundEnabled;      // site-owned while paired (re-applied every poll)
+  uint8_t  soundLevel;        // 0=low 1=med 2=high -> Audio::setVolume
+  uint8_t  chimeMask;         // bit0 start/pause/resume · bit1 complete · bit2 sched auto-start · bit3 alert
+  bool     autoStartEnabled;  // allow scheduled study blocks to auto-start sessions
+  // Site-owned accent + pomodoro timing (adopted once per new timingRev).
+  uint8_t  themeId;           // accent preset 0-4 (Theme::setAccentPreset)
+  uint16_t focusMin, breakMin;
+  uint32_t timingRev;         // epoch-sec of the site's last timing save; 0 = never
+  // Exam mode (DND) + idle badge + server-computed stats.
+  bool     examMode;          // mute all chimes except ring, suppress nudges
+  int16_t  nextExamDays;      // -1 = none, 0 = today (idle "EXAM Nd" badge)
+  char     nextExamTitle[24];
+  int16_t  streakDays;        // -1 = unknown
+  int32_t  weekFocusMin;      // rolling 7 days; -1 = unknown
+  // Top pending homework (hwStr) for the post-focus quick-update screen.
+  HwItem   hw[HW_MAX_ITEMS];
+  uint8_t  hwCount;
+  // Rest-of-week schedule (weekStr) for the ST_AGENDA day pager. Grows this
+  // struct by ~1.1 KB — both sides keep their CloudSettings copy STATIC (not on
+  // a task stack); it still crosses task->loop by mutex'd value copy, no queue.
+  WeekItem week[WEEK_MAX_ITEMS];
+  uint8_t  weekCount;
 };
 
-// Remote command from the app (Part 3), delivered loop<-task via a queue.
-enum CmdType { CMD_NONE, CMD_START, CMD_PAUSE, CMD_RESUME, CMD_END };
+// Remote command from the app, delivered loop<-task via a queue. Numeric values
+// are the wire contract with the web app's command-encode.ts — keep in sync.
+enum CmdType {
+  CMD_NONE = 0, CMD_START = 1, CMD_PAUSE = 2, CMD_RESUME = 3, CMD_END = 4,
+  CMD_RING = 5, CMD_MESSAGE = 6
+};
 struct RemoteCmd {
   uint8_t  type;        // CmdType
   uint8_t  mode;        // Mode (for CMD_START)
   uint16_t durationMin; // for CMD_START
+  char     text[48];    // CMD_MESSAGE body (wire cmdText <= 40 UTF-8 bytes)
 };
 
 // Per-row icon id for the colored-tile menu (glyphs + tile colors live in
@@ -269,6 +331,7 @@ enum MenuAction {
   MENU_ADD_TIME,
   MENU_SYNC_NOW,
   MENU_FACTORY_RESET,
+  MENU_ENTER_AGENDA,         // root "Today" row -> ST_AGENDA (read-only list)
 };
 
 inline const char* modeName(Mode m) { return m == MODE_WORK ? "WORK" : "BREAK"; }

@@ -1,7 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/lib/auth/auth-context";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { Companions } from "@/lib/types";
 
 export interface SessionDetailMeta {
   id: string;
@@ -18,6 +19,7 @@ export interface SessionDetailMeta {
   noiseAvg: number | null;
   tempC: number | null;
   lightLux: number | null;
+  companions: Companions;
 }
 
 /** One row per timestamp, merging the focus-load + environment samples. */
@@ -46,7 +48,7 @@ async function fetchSessionDetail(id: string): Promise<SessionDetail> {
   const { data: session, error: sessionError } = await supabase
     .from("sessions")
     .select(
-      "id, user_id, started_at, ended_at, mode, status, target_duration_sec, actual_focus_sec, breaks, presence_interruptions, focus_load_avg, noise_avg, temp_c, light_lux",
+      "id, user_id, started_at, ended_at, mode, status, target_duration_sec, actual_focus_sec, breaks, presence_interruptions, focus_load_avg, noise_avg, temp_c, light_lux, companions",
     )
     .eq("id", id)
     .maybeSingle();
@@ -111,6 +113,7 @@ async function fetchSessionDetail(id: string): Promise<SessionDetail> {
       noiseAvg: num(s.noise_avg),
       tempC: num(s.temp_c),
       lightLux: num(s.light_lux),
+      companions: s.companions === "with_others" ? "with_others" : "solo",
     },
     series,
   };
@@ -122,5 +125,34 @@ export function useSessionDetail(id: string) {
     queryKey: ["session-detail", id, user?.id],
     queryFn: () => fetchSessionDetail(id),
     enabled: !!user && !!id,
+  });
+}
+
+/** Patch to a session's activity tag (mode) and/or who you studied with. */
+export interface SessionTagPatch {
+  mode?: string;
+  companions?: Companions;
+}
+
+async function updateSessionTag(id: string, patch: SessionTagPatch): Promise<void> {
+  const supabase = getSupabaseBrowserClient();
+  const update: Record<string, unknown> = {};
+  if (patch.mode != null) update.mode = patch.mode;
+  if (patch.companions != null) update.companions = patch.companions;
+  if (Object.keys(update).length === 0) return;
+  const { error } = await supabase.from("sessions").update(update).eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+/** Edit a session's activity + company tag; refreshes detail + the session list. */
+export function useSessionTagActions(id: string) {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: SessionTagPatch) => updateSessionTag(id, patch),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["session-detail", id, user?.id] });
+      void queryClient.invalidateQueries({ queryKey: ["sessions"] });
+    },
   });
 }

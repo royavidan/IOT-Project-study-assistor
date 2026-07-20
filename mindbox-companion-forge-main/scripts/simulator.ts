@@ -20,6 +20,14 @@
  *   --no-sessions    skip session history (telemetry only)
  *   --ticks=<n>      number of telemetry ticks (default: run until Ctrl+C)
  *   --interval=<ms>  telemetry interval (default: 3000)
+ *   --no-env         omit room-condition fields from telemetry (old-firmware compat)
+ *
+ * Device-communication flows (dev server running; device seeded + claimed):
+ *   --config                          print the config downlink like the firmware sees it
+ *   --send-command=<type>[:<arg>][:<text>]  queue a remote command, e.g.
+ *                                     --send-command=start:25 / --send-command=message::Dinner at 7
+ *   --ack=<cmdId>                     GET config with &ack= (marks delivered, serves the next)
+ *   --homework=<uuid>:<pct>           POST /ingest/homework like the box's quick-update screen
  */
 import fs from "node:fs";
 import process from "node:process";
@@ -90,6 +98,11 @@ const LOW_BATTERY = flag("low-battery");
 const SENSOR_FAULT = flag("sensor-fault");
 const SEED_ONLY = flag("seed-only");
 const NO_SESSIONS = flag("no-sessions");
+const CONFIG_ONLY = flag("config");
+const NO_ENV = flag("no-env");
+const SEND_COMMAND = option("send-command", "");
+const ACK_ID = option("ack", "");
+const HOMEWORK = option("homework", "");
 const DEVICE_ID = option("device", "mindbox-sim-01");
 const USER_EMAIL = option("user", "");
 const ticksOpt = option("ticks", "");
@@ -342,7 +355,12 @@ async function telemetryLoop(): Promise<void> {
     else if (battery < 15) state = "warning";
     else state = states[tick % states.length];
 
-    const telemetry: TelemetryPayload = {
+    const telemetry: TelemetryPayload & {
+      tempC?: number;
+      humidityPct?: number;
+      lightLux?: number;
+      noiseDb?: number;
+    } = {
       deviceId: DEVICE_ID,
       ts: new Date().toISOString(),
       state,
@@ -351,6 +369,14 @@ async function telemetryLoop(): Promise<void> {
       sensorHealth,
       firmwareVersion: "0.1.0",
     };
+    // Room conditions (migration 0025). `--no-env` proves the schema stays
+    // backward-compatible with firmware that doesn't send them.
+    if (!NO_ENV) {
+      telemetry.tempC = round(21 + Math.random() * 5, 1);
+      telemetry.humidityPct = Math.round(35 + Math.random() * 30);
+      telemetry.lightLux = Math.round(150 + Math.random() * 300);
+      telemetry.noiseDb = Math.round(30 + Math.random() * 25);
+    }
 
     const res = await post("/ingest/telemetry", telemetry);
     console.log(
@@ -363,10 +389,175 @@ async function telemetryLoop(): Promise<void> {
   }
 }
 
+// --- config downlink -------------------------------------------------------
+
+/**
+ * `--config`: fetch GET /ingest/config exactly like the firmware does and
+ * pretty-print the downlink — the only way to exercise the agenda + sound
+ * fields without hardware. Requires the device to exist (run a plain
+ * `bun run simulate -- --seed-only` first) and be claimed in the app for the
+ * paired fields to appear.
+ */
+async function printConfigDownlink(ackId?: number): Promise<void> {
+  const ackParam = ackId != null && Number.isInteger(ackId) && ackId > 0 ? `&ack=${ackId}` : "";
+  const res = await fetch(
+    `${BASE}/ingest/config?deviceId=${encodeURIComponent(DEVICE_ID)}${ackParam}`,
+    { headers: { "x-device-secret": SECRET } },
+  );
+  const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+  console.log(`GET /ingest/config${ackParam ? ` (ack=${ackId})` : ""} -> ${res.status}`);
+  if (!body) {
+    console.log("(no JSON body)");
+    return;
+  }
+  console.log(JSON.stringify(body, null, 2));
+
+  const agendaStr = typeof body.agendaStr === "string" ? body.agendaStr : "";
+  if (!body.paired) {
+    console.log("\nDevice is unpaired — claim it in the app to see agenda/sound fields.");
+    return;
+  }
+  const fmtMin = (m: string) => `${pad(Math.floor(Number(m) / 60))}:${pad(Number(m) % 60)}`;
+  const kindLabel = (k: string) => (k === "1" ? "exam " : k === "2" ? "study" : "class");
+  console.log("\nDecoded agenda (what the box will show/auto-start):");
+  if (!agendaStr) {
+    console.log("  (empty — no classes/exams/study blocks today)");
+  } else {
+    for (const part of agendaStr.split(";")) {
+      const [startMin, endMin, kind, title] = part.split("|");
+      console.log(`  ${fmtMin(startMin)}-${fmtMin(endMin)}  [${kindLabel(kind)}]  ${title}`);
+    }
+  }
+
+  const weekStr = typeof body.weekStr === "string" ? body.weekStr : "";
+  console.log("Week ahead (box Today-screen paging, days +1..+6):");
+  if (!weekStr) {
+    console.log("  (empty — free week)");
+  } else {
+    for (const part of weekStr.split(";")) {
+      const [day, startMin, endMin, kind, title] = part.split("|");
+      console.log(
+        `  +${day}d ${fmtMin(startMin)}-${fmtMin(endMin)}  [${kindLabel(kind)}]  ${title}`,
+      );
+    }
+  }
+
+  // The four site<->device feature groups (migrations 0024/0025), decoded the
+  // way the firmware will read them.
+  const num = (k: string) => Number(body[k] ?? 0);
+  console.log(
+    `\nTheme: ${num("themeId")}   Timing: focus ${num("focusMin")}m / break ${num("breakMin")}m (rev ${num("timingRev")})`,
+  );
+  console.log(
+    `Exam mode: ${body.examMode ? "ON" : "off"}` +
+      (num("nextExamDays") >= 0
+        ? ` — next "${String(body.nextExamTitle ?? "")}" in ${num("nextExamDays")}d`
+        : " (no exam in the next 14 days)"),
+  );
+  console.log(`Streak: ${num("streakDays")}d · week ${num("weekFocusMin")}m`);
+
+  const hwStr = typeof body.hwStr === "string" ? body.hwStr : "";
+  console.log("Homework (box quick-update list):");
+  if (!hwStr) {
+    console.log("  (none pending)");
+  } else {
+    for (const part of hwStr.split(";")) {
+      const [id, title, pct] = part.split("|");
+      console.log(`  [${String(pct).padStart(3, " ")}%] ${title}  (${id.slice(0, 8)}…)`);
+    }
+  }
+
+  if (num("cmdId") > 0) {
+    console.log(
+      `Command: #${num("cmdId")} type=${num("cmdType")} arg=${num("cmdArg")} text="${String(body.cmdText ?? "")}"` +
+        `\n  -> ack it (and pull the next) with: bun run simulate -- --ack=${num("cmdId")}`,
+    );
+  } else {
+    console.log("Command: none pending");
+  }
+}
+
+/** `--send-command=<type>[:<arg>][:<text>]` — queue a remote command like the /device page. */
+async function sendCommandFromCli(spec: string): Promise<void> {
+  const [type, argPart, ...rest] = spec.split(":");
+  const text = rest.join(":").trim();
+  const arg = argPart ? Number.parseInt(argPart, 10) : Number.NaN;
+  if (!["start", "end", "ring", "message"].includes(type)) {
+    console.error(`Unknown command type "${type}" (use start|end|ring|message).`);
+    process.exit(1);
+  }
+  const { data: dev } = await supabase
+    .from("devices")
+    .select("owner_user_id")
+    .eq("id", DEVICE_ID)
+    .maybeSingle();
+  const owner = (dev as { owner_user_id: string | null } | null)?.owner_user_id;
+  if (!owner) {
+    console.error(`Device "${DEVICE_ID}" has no owner — claim it in the app first.`);
+    process.exit(1);
+  }
+  const { data: row, error } = await supabase
+    .from("device_commands")
+    .insert({
+      device_id: DEVICE_ID,
+      user_id: owner,
+      type,
+      arg: Number.isInteger(arg) ? arg : null,
+      text: text || null,
+    })
+    .select("id")
+    .single();
+  if (error) {
+    console.error(`Failed to queue command: ${error.message}`);
+    process.exit(1);
+  }
+  const id = Number((row as { id: number }).id);
+  console.log(
+    `Queued command #${id} (${type}${Number.isInteger(arg) ? ` ${arg}` : ""}${text ? ` "${text}"` : ""}).`,
+  );
+  console.log(`See it served on the next poll: bun run simulate -- --config`);
+}
+
+/** `--homework=<uuid>:<pct>` — update progress exactly like the box's quick-update screen. */
+async function postHomeworkFromCli(spec: string): Promise<void> {
+  const sep = spec.lastIndexOf(":");
+  const homeworkId = sep === -1 ? spec : spec.slice(0, sep);
+  const pct = sep === -1 ? Number.NaN : Number.parseInt(spec.slice(sep + 1), 10);
+  if (!Number.isInteger(pct) || pct < 0 || pct > 100) {
+    console.error("Usage: --homework=<uuid>:<pct 0-100>");
+    process.exit(1);
+  }
+  const res = await post("/ingest/homework", {
+    deviceId: DEVICE_ID,
+    homeworkId,
+    progressPct: pct,
+  });
+  console.log(`POST /ingest/homework -> ${res.status}: ${JSON.stringify(res.json)}`);
+  if (res.status !== 200) process.exitCode = 1;
+}
+
 // --- main ------------------------------------------------------------------
 
 async function main(): Promise<void> {
   console.log(`MindBox simulator -> ${BASE} (device "${DEVICE_ID}")`);
+
+  if (SEND_COMMAND) {
+    await sendCommandFromCli(SEND_COMMAND);
+    return;
+  }
+  if (ACK_ID) {
+    await printConfigDownlink(Number.parseInt(ACK_ID, 10));
+    return;
+  }
+  if (HOMEWORK) {
+    await postHomeworkFromCli(HOMEWORK);
+    return;
+  }
+  if (CONFIG_ONLY) {
+    await printConfigDownlink();
+    return;
+  }
+
   await seedDevice();
 
   if (!NO_SESSIONS) {

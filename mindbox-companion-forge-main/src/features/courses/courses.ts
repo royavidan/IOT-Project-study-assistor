@@ -208,6 +208,49 @@ export function plannedMeetingCounts(
   return counts;
 }
 
+export interface CourseStanding {
+  /** Headline number, e.g. "78" or "—" when ungraded. */
+  value: string;
+  /** Denominator suffix, e.g. "/ 100" or "/ 90"; null when not applicable. */
+  suffix: string | null;
+  /** Short caption under the number. */
+  caption: string;
+  tone: "neutral" | "good" | "warn";
+}
+
+/**
+ * The single "where do I stand" figure for a course, shared by the card and the
+ * detail header. Prefers the weighted points-out-of-100 standing; falls back to
+ * the graded-homework average vs target; else "no grades yet".
+ */
+export function courseStanding(summary: CourseSummary): CourseStanding {
+  const { gradeBreakdown, gradeAverage, targetGrade, gradeVsTarget } = summary;
+
+  if (gradeBreakdown.components.length > 0) {
+    return {
+      value: String(gradeBreakdown.earnedPoints),
+      suffix: "/ 100",
+      caption:
+        gradeBreakdown.scoredWeight > 0
+          ? `${gradeBreakdown.scoredWeight}/${gradeBreakdown.assignedWeight} pts graded`
+          : `${gradeBreakdown.assignedWeight} pts planned`,
+      tone: "neutral",
+    };
+  }
+
+  if (gradeAverage == null) {
+    return { value: "—", suffix: null, caption: "No grades yet", tone: "neutral" };
+  }
+
+  const onTrack = gradeVsTarget == null || gradeVsTarget >= 0;
+  return {
+    value: String(gradeAverage),
+    suffix: targetGrade != null ? `/ ${targetGrade}` : null,
+    caption: targetGrade != null ? (onTrack ? "On track" : "Below target") : "Average grade",
+    tone: targetGrade == null ? "neutral" : onTrack ? "good" : "warn",
+  };
+}
+
 /** Credit-weighted mean of course grade averages (courses without credits or a
  * grade average are excluded). Returns null when nothing qualifies. */
 export function overallGradeAverage(summaries: CourseSummary[]): number | null {

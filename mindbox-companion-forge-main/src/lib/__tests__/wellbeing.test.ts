@@ -215,3 +215,47 @@ describe("external load", () => {
     expect(withLoad.recovery.factors.some((f) => f.label.startsWith("External"))).toBe(true);
   });
 });
+
+describe("recovery balance — activity-weighted strain", () => {
+  // Identical dates / times / durations; only the recent block's activity varies,
+  // so any difference in recovery comes purely from the strain weighting.
+  const priorDays = [15, 18, 21, 24];
+  const recentDays = [0, 1, 2, 3, 4, 5, 6, 13];
+
+  function history(
+    recentMode: Session["mode"],
+    companions: Session["companions"] = "solo",
+  ): Session[] {
+    return [
+      ...priorDays.map((d) =>
+        session({ date: key(d), mode: "Study", durationMin: 45, start: "09:00" }),
+      ),
+      ...recentDays.map((d) =>
+        session({ date: key(d), mode: recentMode, companions, durationMin: 45, start: "09:00" }),
+      ),
+    ];
+  }
+
+  it("weights homework as more draining than reading (same minutes/dates/times)", () => {
+    const hw = computeWellbeing(history("Homework")).recovery;
+    const read = computeWellbeing(history("Reading")).recovery;
+    expect(hw.ready).toBe(true);
+    expect(read.ready).toBe(true);
+    expect(hw.score).toBeLessThan(read.score);
+  });
+
+  it("studying hard material with others drains less than doing it alone", () => {
+    const solo = computeWellbeing(history("Homework", "solo")).recovery;
+    const group = computeWellbeing(history("Homework", "with_others")).recovery;
+    expect(group.score).toBeGreaterThan(solo.score);
+  });
+
+  it("only the load term shifts — rest days and late-night stay untouched by weighting", () => {
+    const hw = computeWellbeing(history("Homework")).recovery;
+    const read = computeWellbeing(history("Reading")).recovery;
+    const restOf = (r: typeof hw) => r.factors.find((f) => f.label === "Rest days");
+    const lateOf = (r: typeof hw) => r.factors.find((f) => f.label === "Late-night load");
+    expect(restOf(hw)).toEqual(restOf(read));
+    expect(lateOf(hw)).toEqual(lateOf(read));
+  });
+});

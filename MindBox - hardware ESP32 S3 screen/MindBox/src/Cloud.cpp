@@ -77,7 +77,12 @@ static volatile bool s_unpairPending = false;
 static char s_pairCode[8] = {0};
 
 static uint32_t s_netSuspendUntil = 0;
-static const int HTTP_MAX_BODY = 4096; // cap on the response body we read; trusted /ingest JSON is tiny
+// Cap on the response body we read; trusted /ingest JSON is small. The config
+// response carries agendaStr (~450 B for 12 titled blocks), the theme/timing/
+// exam/stats/homework/command fields (~500 B) AND weekStr (up to ~1.4 KB for
+// 36 titled blocks) — 8192 keeps the whole payload comfortably inside the cap
+// (an over-cap body is DROPPED).
+static const int HTTP_MAX_BODY = 8192;
 
 // After a (re)connect, let lwIP settle before the FIRST HTTP request. Starting SNTP (configTime opens a
 // UDP socket + async DNS) and opening the first TCP socket in the SAME task pass races the lwip core and
@@ -231,6 +236,176 @@ static void jStr(const String &b, const char *key, char *out, size_t n)
   out[i] = 0;
 }
 
+// ---- agendaStr decoder: "540|630|2|Calc HW;660|750|0|Algebra" -> AgendaItem[].
+// Manual pointer walk, NOT strtok (its static state is unsafe next to the other
+// tasks). Server contract: items ';'-separated, fields startMin|endMin|kind|title,
+// title <= 23 chars and free of ';'/'|'. Minutes are clamped to 0..1439; an
+// unknown kind maps to AGENDA_CLASS (inert — never auto-starts); a malformed
+// item is skipped; titles are truncated + NUL-terminated. Returns items written.
+static uint8_t parseAgendaStr(const char *s, AgendaItem *out, uint8_t maxItems)
+{
+  uint8_t n = 0;
+  if (!s || !out)
+    return 0;
+  const char *p = s;
+  while (*p && n < maxItems)
+  {
+    long v[3] = {0, 0, 0};
+    bool ok = true;
+    for (int f = 0; f < 3; f++) // three numeric fields, each '|'-terminated
+    {
+      if (*p < '0' || *p > '9')
+      {
+        ok = false;
+        break;
+      }
+      long x = 0;
+      while (*p >= '0' && *p <= '9')
+        x = x * 10 + (*p++ - '0');
+      v[f] = x;
+      if (*p != '|')
+      {
+        ok = false;
+        break;
+      }
+      p++;
+    }
+    if (!ok)
+    { // malformed item — resync on the next ';' and carry on
+      while (*p && *p != ';')
+        p++;
+      if (*p == ';')
+        p++;
+      continue;
+    }
+    AgendaItem &it = out[n];
+    it.startMin = (uint16_t)(v[0] > 1439 ? 1439 : v[0]);
+    it.endMin = (uint16_t)(v[1] > 1439 ? 1439 : v[1]);
+    it.kind = (v[2] <= 2) ? (uint8_t)v[2] : (uint8_t)AGENDA_CLASS;
+    size_t i = 0;
+    while (*p && *p != ';' && i + 1 < sizeof(it.title))
+      it.title[i++] = *p++;
+    it.title[i] = 0;
+    while (*p && *p != ';') // overlong title: drop the tail
+      p++;
+    if (*p == ';')
+      p++;
+    n++;
+  }
+  return n;
+}
+
+// ---- weekStr decoder: "dayOffset|startMin|endMin|kind|title;..." -> WeekItem[].
+// parseAgendaStr's walk with one extra leading numeric field. Server contract:
+// <=36 items (<=10/day), dayOffset 1..6 (days AHEAD of today), same minute
+// grammar, titles <=23 bytes pre-sanitized. dayOffset/minutes are clamped, an
+// unknown kind maps to AGENDA_CLASS, a malformed item is skipped.
+static uint8_t parseWeekStr(const char *s, WeekItem *out, uint8_t maxItems)
+{
+  uint8_t n = 0;
+  if (!s || !out)
+    return 0;
+  const char *p = s;
+  while (*p && n < maxItems)
+  {
+    long v[4] = {0, 0, 0, 0};
+    bool ok = true;
+    for (int f = 0; f < 4; f++) // four numeric fields, each '|'-terminated
+    {
+      if (*p < '0' || *p > '9')
+      {
+        ok = false;
+        break;
+      }
+      long x = 0;
+      while (*p >= '0' && *p <= '9')
+        x = x * 10 + (*p++ - '0');
+      v[f] = x;
+      if (*p != '|')
+      {
+        ok = false;
+        break;
+      }
+      p++;
+    }
+    if (!ok)
+    { // malformed item — resync on the next ';' and carry on
+      while (*p && *p != ';')
+        p++;
+      if (*p == ';')
+        p++;
+      continue;
+    }
+    WeekItem &it = out[n];
+    it.dayOffset = (uint8_t)(v[0] < 1 ? 1 : (v[0] > 6 ? 6 : v[0]));
+    it.startMin = (uint16_t)(v[1] > 1439 ? 1439 : v[1]);
+    it.endMin = (uint16_t)(v[2] > 1439 ? 1439 : v[2]);
+    it.kind = (v[3] <= 2) ? (uint8_t)v[3] : (uint8_t)AGENDA_CLASS;
+    size_t i = 0;
+    while (*p && *p != ';' && i + 1 < sizeof(it.title))
+      it.title[i++] = *p++;
+    it.title[i] = 0;
+    while (*p && *p != ';') // overlong title: drop the tail
+      p++;
+    if (*p == ';')
+      p++;
+    n++;
+  }
+  return n;
+}
+
+// ---- hwStr decoder: "<uuid36>|<title<=23B>|<pct0-100>;..." -> HwItem[].
+// Same manual-pointer-walk style as parseAgendaStr (no strtok). Server contract:
+// <=3 items, uuid is EXACTLY 36 chars, titles are pre-sanitized (no '|'/';').
+// A malformed item (wrong uuid length, missing fields, junk pct) is skipped;
+// pct is clamped to 0..100. Returns items written.
+static uint8_t parseHwStr(const char *s, HwItem *out, uint8_t maxItems)
+{
+  uint8_t n = 0;
+  if (!s || !out)
+    return 0;
+  const char *p = s;
+  while (*p && n < maxItems)
+  {
+    const char *bar = p; // uuid field: must be exactly 36 chars then '|'
+    while (*bar && *bar != '|' && *bar != ';')
+      bar++;
+    bool ok = (*bar == '|') && (bar - p == 36);
+    if (ok)
+    {
+      HwItem &it = out[n];
+      memcpy(it.id, p, 36);
+      it.id[36] = 0;
+      p = bar + 1;
+      size_t i = 0; // title, '|'-terminated (truncate an overlong one)
+      while (*p && *p != '|' && *p != ';' && i + 1 < sizeof(it.title))
+        it.title[i++] = *p++;
+      it.title[i] = 0;
+      while (*p && *p != '|' && *p != ';')
+        p++;
+      if (*p == '|' && (p[1] >= '0' && p[1] <= '9'))
+      {
+        p++;
+        long v = 0;
+        while (*p >= '0' && *p <= '9')
+          v = v * 10 + (*p++ - '0');
+        it.pct = (uint8_t)(v > 100 ? 100 : v);
+        if (*p == 0 || *p == ';')
+          n++; // clean item; junk after pct drops it
+        else
+          ok = false;
+      }
+      else
+        ok = false;
+    }
+    while (*p && *p != ';') // resync on the next ';' (also the ok path's tail)
+      p++;
+    if (*p == ';')
+      p++;
+  }
+  return n;
+}
+
 // ===========================================================================
 // upload-drain state + worker (runs on the task)
 // ===========================================================================
@@ -338,16 +513,36 @@ static void pushTelemetry()
   body += "\"batteryPct\":" + String(s.batteryPct) + ",";
   body += "\"wifiRssi\":" + String(s_rssi) + ",";
   body += "\"sensorHealth\":" + (s.health[0] ? String(s.health) : String("null")) + ",";
+  // Optional env fields — emitted only when the sensor exists AND the loop-side
+  // snapshot holds a valid reading (sentinels: NAN / -1, see TelemetrySnap).
+  if (!isnan(s.tempC))
+    body += "\"tempC\":" + String(s.tempC, 1) + ",";
+  if (s.humidityPct >= 0)
+    body += "\"humidityPct\":" + String((int)s.humidityPct) + ",";
+  if (s.lightLux >= 0)
+    body += "\"lightLux\":" + String((long)s.lightLux) + ",";
+  if (s.noiseDb >= 0)
+    body += "\"noiseDb\":" + String((int)s.noiseDb) + ",";
   body += "\"firmwareVersion\":\"" FW_VERSION "\"";
   body += "}";
   String resp;
   httpRequest("POST", s_baseUrl + "/ingest/telemetry", body, resp);
 }
 
+// Remote-command channel state (net task only, RAM). s_lastCmdId dedupes the
+// server's 75s re-serve of an un-acked command; s_ackCmdId rides the NEXT config
+// GET as &ack=<id> so the server stamps it delivered (and serves the next one).
+static uint32_t s_lastCmdId = 0;
+static uint32_t s_ackCmdId = 0;
+
 static void syncDownlink()
 {
+  String url = s_baseUrl + "/ingest/config?deviceId=" + s_deviceId;
+  uint32_t sentAck = s_ackCmdId;
+  if (sentAck)
+    url += "&ack=" + String((unsigned long)sentAck);
   String resp;
-  int code = httpRequest("GET", s_baseUrl + "/ingest/config?deviceId=" + s_deviceId, "", resp);
+  int code = httpRequest("GET", url, "", resp);
   if (code != 200)
   {
     // Don't fail silently — "no server" was undiagnosable without this. Prints the code AND the exact
@@ -361,7 +556,13 @@ static void syncDownlink()
     }
     return;
   }
-  CloudSettings cs;
+  if (s_ackCmdId == sentAck)
+    s_ackCmdId = 0; // ack delivered (HTTP 200) — unless the parse below re-arms it
+  // CloudSettings is ~2.9 KB now (agenda + week + homework) — keep it OFF the
+  // 16 KB net-task stack. Net-task-only, so a static is safe; re-zero per poll
+  // so slots not overwritten by the parsers stay clean.
+  static CloudSettings cs;
+  memset(&cs, 0, sizeof(cs));
   cs.paired = jBool(resp, "paired", false);
   cs.showTimer = jBool(resp, "showTimer", true);
   cs.hapticsEnabled = jBool(resp, "hapticsEnabled", true);
@@ -373,10 +574,140 @@ static void syncDownlink()
   cs.todayFocusSec = (int32_t)jInt(resp, "todayFocusSec", 0);
   jStr(resp, "ownerDisplayName", cs.ownerDisplayName, sizeof(cs.ownerDisplayName));
   jStr(resp, "ownerEmail", cs.ownerEmail, sizeof(cs.ownerEmail));
+  // Agenda / sound / auto-start downlink. Defaults when a field is absent are
+  // conservative: no agenda, UTC, sound on at medium, ALL chime kinds, and NO
+  // scheduled auto-start unless the server explicitly enables it.
+  {
+    // Worst-case agendaStr: 12 x ("1439|1439|2|" + 23-char title + ';') ~ 432 B.
+    char ag[512];
+    jStr(resp, "agendaStr", ag, sizeof(ag));
+    cs.agendaCount = parseAgendaStr(ag, cs.agenda, AGENDA_MAX_ITEMS);
+  }
+  cs.tzOffsetMin = (int16_t)jInt(resp, "tzOffsetMin", 0);
+  cs.soundEnabled = jBool(resp, "soundEnabled", true);
+  {
+    long lv = jInt(resp, "soundLevel", 1);
+    cs.soundLevel = (uint8_t)(lv < 0 ? 0 : (lv > 2 ? 2 : lv));
+  }
+  cs.chimeMask = (uint8_t)jInt(resp, "chimeMask", 0xFF);
+  cs.autoStartEnabled = jBool(resp, "autoStartEnabled", false);
+  // Site-owned accent + timing (F1). Absent fields fall back to the current
+  // defaults: preset 0, timingRev 0 (= never adopt).
+  {
+    long tid = jInt(resp, "themeId", 0);
+    cs.themeId = (uint8_t)(tid < 0 ? 0 : (tid > 4 ? 4 : tid));
+  }
+  cs.focusMin = (uint16_t)jInt(resp, "focusMin", 0);
+  cs.breakMin = (uint16_t)jInt(resp, "breakMin", 0);
+  cs.timingRev = (uint32_t)jInt(resp, "timingRev", 0);
+  // Exam/DND + idle badge + server-computed stats (F4). -1 = none/unknown.
+  cs.examMode = jBool(resp, "examMode", false);
+  cs.nextExamDays = (int16_t)jInt(resp, "nextExamDays", -1);
+  jStr(resp, "nextExamTitle", cs.nextExamTitle, sizeof(cs.nextExamTitle));
+  cs.streakDays = (int16_t)jInt(resp, "streakDays", -1);
+  cs.weekFocusMin = (int32_t)jInt(resp, "weekFocusMin", -1);
+  {
+    // Worst-case hwStr: 3 x (36 + '|' + 23-byte title + '|' + "100" + ';') ~ 195 B.
+    char hw[224];
+    jStr(resp, "hwStr", hw, sizeof(hw));
+    cs.hwCount = parseHwStr(hw, cs.hw, HW_MAX_ITEMS);
+  }
+  {
+    // Worst-case weekStr: 36 x ("6|1439|1439|2|" + 23-byte title + ';') ~ 1.4 KB.
+    // Static (net-task-only) so the buffer stays off the task stack too.
+    static char wk[1536];
+    jStr(resp, "weekStr", wk, sizeof(wk));
+    cs.weekCount = parseWeekStr(wk, cs.week, WEEK_MAX_ITEMS);
+  }
+  // Remote command (F2): enqueue once per NEW cmdId (the server re-serves an
+  // un-acked command after 75s — s_lastCmdId dedupes the retry), then ack it on
+  // the next poll and re-poll immediately so a burst drains at ~1/s.
+  {
+    uint32_t cmdId = (uint32_t)jInt(resp, "cmdId", 0);
+    if (cmdId > 0 && cmdId != s_lastCmdId)
+    {
+      long type = jInt(resp, "cmdType", 0);
+      if (type >= CMD_START && type <= CMD_MESSAGE)
+      {
+        RemoteCmd rc = {};
+        rc.type = (uint8_t)type;
+        rc.mode = MODE_WORK;
+        long arg = jInt(resp, "cmdArg", 0);
+        if (arg <= 0)
+          arg = 25; // CMD_START duration: default 25, clamped to the session band
+        rc.durationMin = (uint16_t)(arg < 5 ? 5 : (arg > 120 ? 120 : arg));
+        char text[48];
+        jStr(resp, "cmdText", text, sizeof(text));
+        strlcpy(rc.text, text, sizeof(rc.text));
+        if (xQueueSend(s_cmdQueue, &rc, 0) == pdTRUE)
+        {
+          s_lastCmdId = cmdId;
+          s_ackCmdId = cmdId;
+          s_configNow = true; // ack fast + pull the next queued command
+          Serial.printf("[cloud] cmd %lu type=%ld queued\n", (unsigned long)cmdId, type);
+        }
+      }
+      else
+      {
+        s_lastCmdId = cmdId; // unknown type: drop, but still ack so it stops re-serving
+        s_ackCmdId = cmdId;
+        s_configNow = true;
+        Serial.printf("[cloud] cmd %lu unknown type %ld dropped\n", (unsigned long)cmdId, type);
+      }
+    }
+  }
   xSemaphoreTake(s_mux, portMAX_DELAY);
   s_settings = cs;
   s_settingsReady = true;
   xSemaphoreGive(s_mux);
+}
+
+// ===========================================================================
+// Homework progress uplink (F4c): the loop enqueues {uuid, pct} taps; this task
+// drains them one POST per pass through the else-if request chain. A transport
+// failure keeps the entry queued (httpRequest's back-off paces retries); an
+// entry is dropped after ~5 real failed attempts so a dead id can't wedge the
+// queue. Guarded by s_mux (loop writes / task reads).
+// ===========================================================================
+struct HwPost
+{
+  char id[37];
+  uint8_t pct;
+  uint8_t tries;
+};
+static HwPost s_hwPostQ[4];
+static volatile uint8_t s_hwPostN = 0;
+
+static void drainHomeworkQueue()
+{
+  HwPost hp;
+  xSemaphoreTake(s_mux, portMAX_DELAY);
+  bool have = s_hwPostN > 0;
+  if (have)
+    hp = s_hwPostQ[0];
+  xSemaphoreGive(s_mux);
+  if (!have)
+    return;
+  String body = "{\"deviceId\":\"" + s_deviceId + "\",\"homeworkId\":\"" + hp.id +
+                "\",\"progressPct\":" + String((int)hp.pct) + "}";
+  String resp;
+  int code = httpRequest("POST", s_baseUrl + "/ingest/homework", body, resp);
+  if (code == -99)
+    return; // in back-off — not a real attempt, don't burn a try
+  xSemaphoreTake(s_mux, portMAX_DELAY);
+  if (s_hwPostN > 0)
+  {
+    bool drop = (code == 200) || (++s_hwPostQ[0].tries >= 5);
+    if (drop)
+    {
+      for (int i = 1; i < s_hwPostN; i++)
+        s_hwPostQ[i - 1] = s_hwPostQ[i];
+      s_hwPostN = s_hwPostN - 1; // no volatile ++/-- (deprecated in C++20)
+    }
+  }
+  xSemaphoreGive(s_mux);
+  if (code != 200)
+    Serial.printf("[cloud] homework post failed (%d)\n", code);
 }
 
 static void doPairing()
@@ -796,6 +1127,8 @@ static void cloudTask(void *)
         lastSync = millis();
         syncDownlink();
       }
+      else if (s_hwPostN > 0)
+        drainHomeworkQueue();
       else
         drainUploadQueue();
     }
@@ -1058,6 +1391,44 @@ namespace Cloud
   {
 #if ENABLE_CLOUD
     s_uploadSoon = true;
+#endif
+  }
+
+  // Loop-side enqueue of a homework progress tap. Coalesces by id (newest pct
+  // wins — repeated +25% taps on one row use ONE slot); returns false only when
+  // the 4-slot queue is full of other ids.
+  bool postHomework(const char *homeworkId, uint8_t pct)
+  {
+#if ENABLE_CLOUD
+    if (!s_mux || !homeworkId || !homeworkId[0])
+      return false;
+    bool ok = false;
+    xSemaphoreTake(s_mux, portMAX_DELAY);
+    for (int i = 0; i < s_hwPostN; i++)
+    {
+      if (strcmp(s_hwPostQ[i].id, homeworkId) == 0)
+      {
+        s_hwPostQ[i].pct = pct; // newest wins; fresh tries for the new value
+        s_hwPostQ[i].tries = 0;
+        ok = true;
+        break;
+      }
+    }
+    if (!ok && s_hwPostN < 4)
+    {
+      HwPost &hp = s_hwPostQ[s_hwPostN];
+      strlcpy(hp.id, homeworkId, sizeof(hp.id));
+      hp.pct = pct;
+      hp.tries = 0;
+      s_hwPostN = s_hwPostN + 1; // no volatile ++/-- (deprecated in C++20)
+      ok = true;
+    }
+    xSemaphoreGive(s_mux);
+    return ok;
+#else
+    (void)homeworkId;
+    (void)pct;
+    return false;
 #endif
   }
 

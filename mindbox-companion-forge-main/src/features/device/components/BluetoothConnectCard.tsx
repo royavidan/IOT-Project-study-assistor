@@ -46,7 +46,7 @@ export function BluetoothConnectCard({
     <Card className="mt-6">
       <CardHeader className="flex-row items-center gap-2">
         <Bluetooth className="h-4 w-4 text-sync" aria-hidden />
-        <CardTitle className="text-base">Connect via Bluetooth (beta)</CardTitle>
+        <CardTitle className="text-base">Faster on Android &amp; Chrome (optional)</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {supported === false ? (
@@ -59,8 +59,9 @@ export function BluetoothConnectCard({
         ) : (
           <>
             <p className="text-sm text-muted-foreground">
-              Pair over Bluetooth Low Energy — no Wi-Fi needed. Requires MindBox firmware with
-              Bluetooth support.
+              Skip typing — connect over Bluetooth to read the 6-digit code automatically. The code
+              method above always works; this is just a shortcut where Web Bluetooth is supported.
+              Requires MindBox firmware with Bluetooth support.
             </p>
             <Button
               type="button"

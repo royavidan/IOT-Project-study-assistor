@@ -35,6 +35,10 @@ static const char* stName(SysState s) {
     case ST_DIAG:     return "DIAG";
     case ST_RESUME:   return "RESUME";
     case ST_CYCLE_OFFER: return "CYCLE";
+    case ST_AGENDA:   return "AGENDA";
+    case ST_AUTOSTART: return "AUTOSTART";
+    case ST_MESSAGE:  return "MESSAGE";
+    case ST_HOMEWORK: return "HOMEWORK";
     default:          return "?";
   }
 }

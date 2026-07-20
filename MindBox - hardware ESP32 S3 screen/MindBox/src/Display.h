@@ -18,6 +18,21 @@ namespace Display {
   void render(const UiModel& m);       // per-state screens (RUNNING -> TimerScreen)
   void renderMenu(const MenuView& m);  // native styled list + duration editor
 
+  // Agenda day page (ST_AGENDA pager). nowMin = owner-local minutes-of-day for
+  // the now/next highlight (day 0 only), or -1. dayIdx 0 = today, 1..6 = a
+  // paged week day; header = "TODAY" or "Sun 20/7"; hasPrev/hasNext draw the
+  // ‹/› swipe affordances. Read-only; back exits.
+  void renderAgenda(const AgendaItem* items, uint8_t count, int nowMin,
+                    uint8_t dayIdx, const char* header, bool hasPrev, bool hasNext);
+  // Scheduled-start splash (ST_AUTOSTART): title + countdown + "tap to cancel".
+  void renderAutoStart(const char* title, int secsLeft);
+  // Remote message / ring splash (ST_MESSAGE): big title, wrapped body,
+  // "tap to dismiss" + auto-dismiss countdown. Modeled on renderAutoStart.
+  void renderMessage(const char* title, const char* body, int secsLeft);
+  // Post-focus homework quick-update (ST_HOMEWORK): up to HW_MAX_ITEMS rows
+  // (title + progress bar + pct) and a Skip row; sel == count highlights Skip.
+  void renderHomework(const HwItem* items, uint8_t count, uint8_t sel);
+
   // low-level primitives (OLED-coordinate space, scaled to the TFT)
   void clear();
   void show();

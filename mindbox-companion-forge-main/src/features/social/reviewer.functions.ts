@@ -47,7 +47,7 @@ function toReadableReviewerError(error: { message?: string } | null, fallback: s
 }
 
 export const createReviewerInvite = createServerFn({ method: "POST" })
-  .validator(reviewerInviteInput)
+  .inputValidator(reviewerInviteInput)
   .handler(async ({ data }) => {
     const {
       data: { user },
@@ -136,7 +136,7 @@ export const listReviewerGrants = createServerFn({ method: "GET" }).handler(asyn
 });
 
 export const revokeReviewerInvite = createServerFn({ method: "POST" })
-  .validator(revokeInviteInput)
+  .inputValidator(revokeInviteInput)
   .handler(async ({ data }) => {
     const {
       data: { user },
@@ -164,7 +164,7 @@ export const revokeReviewerInvite = createServerFn({ method: "POST" })
   });
 
 export const acceptReviewerInvite = createServerFn({ method: "POST" })
-  .validator(acceptInviteInput)
+  .inputValidator(acceptInviteInput)
   .handler(async ({ data }) => {
     const {
       data: { user },

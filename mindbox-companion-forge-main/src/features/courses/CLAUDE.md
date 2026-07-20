@@ -1,13 +1,14 @@
 # Feature: courses
 
 Real course entity + per-course roll-up (`/courses`, `/courses/$id`).
+
 - `courses.ts` — pure domain + aggregation: `buildCourseSummaries` rolls schedule events + homework
   into per-course `CourseSummary` (meeting counts by subtype, next exam, homework completion %,
   graded-homework average vs target, **`gradeBreakdown`**) + an `OverallSummary` (credit-weighted average).
   `plannedMeetingCounts(events, code, weeklyBounds)` = per-subtype semester occurrence totals (for "watched
   8/12"; falls back to weekly templates with no term). No React/Supabase.
 - `grades.ts` — **weighted "points out of 100" grade scheme** (pure, unit-tested). `buildGradeBreakdown(homework,
-  exams)` → components (homework with `weight` + graded `grade`; exams with `examWeight`/`examScore`),
+exams)` → components (homework with `weight` + graded `grade`; exams with `examWeight`/`examScore`),
   `earnedPoints`/`assignedWeight`/`scoredWeight`. `contribution`/`componentContributionLabel` ("4 / 5"),
   `projectFinalWithExam(breakdown, examId, score)` for the focused what-if.
 - `queries.ts` — `useCourses`, `useCourseActions` (add/update/remove + **upsert** by `(user_id, code)` +
@@ -17,8 +18,8 @@ Real course entity + per-course roll-up (`/courses`, `/courses/$id`).
 - `components/{CourseCard,CourseDialog,CourseGradesTab,WatchedMeetingsCard}`. `CourseCard` has an optional
   `onDelete` (trash + `AlertDialog`, overlaid outside the nav `Link`) and shows next-exam-in-days + earned/100.
   `CourseGradesTab` = standing + per-component breakdown (inline exam weight/score via `useScheduleActions().setExamGrade`)
-  + the exam projector; `WatchedMeetingsCard` = per-subtype watched steppers (Meetings tab). The `/courses/$id`
-  Delete also confirms and navigates back to `/courses` on success.
+  - the exam projector; `WatchedMeetingsCard` = per-subtype watched steppers (Meetings tab). The `/courses/$id`
+    Delete also confirms and navigates back to `/courses` on success.
 
 Courses link to `schedule_events` and `homework_assignments` by the free-text **`course_code`** (the
 join key — `matchesCode` is case-insensitive so old rows aren't orphaned). The detail route keys on the

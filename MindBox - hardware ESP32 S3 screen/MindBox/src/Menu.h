@@ -10,6 +10,8 @@ namespace Menu {
   void setContext(bool wifi, bool paired, const char* deviceId);
   void invalidate();
   void setLiveFocusSec(uint32_t sec);
+  void setExamInfo(int16_t days, const char* title);   // root "EXAM Nd" badge; days < 0 clears
+  void setCloudStats(int16_t streakDays, int32_t weekMin); // STATS rows; -1 = unknown ("--")
 
   int activeDurationMin();
 

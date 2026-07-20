@@ -44,6 +44,52 @@ each peripheral is owned by one module. The non-portable parts are the SoC-speci
 | LED ring *(stubbed)* | WS2812B ×16 | single-wire (NeoPixel/RMT) | `PIN_LED_RING 5` (gated by `HAS_LED_RING`) | Adafruit_NeoPixel · `LedRing.cpp` | API complete (`show()/status()`); compiled out until `HAS_LED_RING=1`. |
 | Battery *(stubbed)* | LiPo via resistor divider | analog, ADC1 | `PIN_BATTERY_ADC 36` (gated by `HAS_BATTERY`) | `Sensors.cpp` | `batteryPct()` returns a placeholder until `HAS_BATTERY=1`. |
 
+### Pin map — every used GPIO, in order (`config.h` is authoritative)
+
+Same facts as the table above, re-sorted **by GPIO** so you can check the board pin-by-pin while wiring.
+"Shared?" is **No** for every pin except the I2C bus — and that sharing is the I2C protocol working as
+intended (one master, many addressed slaves), **not** two peripherals contending for one line.
+
+| GPIO | `config.h` macro | Connected to | Direction / mode | Shared? |
+|---|---|---|---|---|
+| **4**  | `PIN_BUTTON`      | Side tact button → GND | digital in, `INPUT_PULLUP` (active-low) | No |
+| **5**  | `PIN_LED_RING`    | WS2812B ring DIN *(stub, `HAS_LED_RING=0`)* | digital out (RMT); 5V + 470 Ω + 1000 µF | No · strapping pin (boot-HIGH) |
+| **18** | `PIN_ENC_CLK`     | KY-040 encoder **A** | digital in, ISR | No |
+| **19** | `PIN_ENC_DT`      | KY-040 encoder **B** | digital in, ISR | No |
+| **21** | `PIN_I2C_SDA`     | **I2C SDA** → VL53L1X ToF **and** OLED | I2C data, 400 kHz | **Yes — I2C bus** |
+| **22** | `PIN_I2C_SCL`     | **I2C SCL** → VL53L1X ToF **and** OLED | I2C clock, 400 kHz | **Yes — I2C bus** |
+| **23** | `PIN_ENC_SW`      | KY-040 shaft button → GND | digital in | No (deliberately not 21 = SDA) |
+| **25** | `PIN_HAPTIC`      | ERM motor via NPN/MOSFET (motor on 5V) | digital out (opt. LEDC PWM) | No (not GPIO 2 = onboard LED) |
+| **26** | `PIN_DHT11`       | DHT11 DATA (1-wire) | digital I/O + **4.7k–10k pull-up to 3V3** | No |
+| **32** | `PIN_SPDT`        | SPDT Work/Break toggle *(opt, `USE_SPDT_TOGGLE=0`)* | digital in, `INPUT_PULLUP` | No |
+| **34** | `PIN_MIC`         | GY-MAX9814 mic OUT | analog in, **ADC1** (input-only) | No |
+| **35** | `PIN_LIGHT_ADC`   | KY-018 photoresistor AO | analog in, **ADC1** (input-only) | No |
+| **36** | `PIN_BATTERY_ADC` | LiPo divider *(stub, `HAS_BATTERY=0`)* | analog in, **ADC1** (input-only) | No |
+
+**I2C addresses on the shared bus:** VL53L1X ToF `0x29` · OLED `0x3C` (falls back to `0x3D`) — distinct,
+so no collision. **Power:** 3V3 → encoder / OLED / ToF / DHT11 / KY-018 logic; 5V (VIN) → haptic motor +
+WS2812B; common GND. The boot self-test (`Diagnostics::selfTest`) prints an I2C scan so the live address
+list is visible on every boot.
+
+```
+                 ESP32 — DOIT DevKit V1
+  ┌──────────────────────────────────────────────────────┐
+  │  I2C bus (one master, two slaves — this is normal I2C)│
+  │    GPIO21 SDA ─┬─ VL53L1X ToF  @0x29                  │
+  │    GPIO22 SCL ─┴─ OLED SH1106/SSD1306  @0x3C/0x3D     │
+  │                                                        │
+  │  KY-040 encoder   GPIO18 A · GPIO19 B · GPIO23 SW      │
+  │  Side button      GPIO4   → GND (INPUT_PULLUP)         │
+  │  SPDT toggle       GPIO32  (optional, INPUT_PULLUP)    │
+  │  Haptic motor     GPIO25  → NPN/MOSFET → motor (5V)    │
+  │  DHT11 temp/hum   GPIO26  (+ 4.7k–10k pull-up)         │
+  │  Mic  MAX9814     GPIO34  (ADC1, input-only)           │
+  │  Light KY-018     GPIO35  (ADC1, input-only)           │
+  │  Battery divider  GPIO36  (ADC1, stub)                 │
+  │  WS2812B ring     GPIO5   (stub, 5V data)              │
+  └──────────────────────────────────────────────────────┘
+```
+
 ### Wiring traps already encoded in `config.h` (don't relearn the hard way)
 - **`PIN_ENC_SW` must not be 21** — GPIO 21 is I2C SDA on this board.
 - **Button must not be GPIO 34–39** — those are input-only with **no internal pull-up**, so

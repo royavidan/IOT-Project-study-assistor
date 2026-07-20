@@ -23,7 +23,8 @@ import {
   submitSimulatorTelemetry,
 } from "@/features/simulator/simulator.functions";
 import { DEFAULT_SIM_ENV, randomSimulatorEnv } from "@/features/simulator/simulator-env";
-import type { DeviceState, SessionMode, SessionStatus } from "@/lib/types";
+import { getDefaultCompanions } from "@/lib/default-companions";
+import type { Companions, DeviceState, SessionMode, SessionStatus } from "@/lib/types";
 import { ArrowRight, Dices, FlaskConical, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/simulator")({
@@ -31,7 +32,7 @@ export const Route = createFileRoute("/simulator")({
   component: Simulator,
 });
 
-const MODES: SessionMode[] = ["Deep Focus", "Study", "Reading", "Review"];
+const MODES: SessionMode[] = ["Deep Focus", "Study", "Reading", "Review", "Homework"];
 const STATUSES: SessionStatus[] = ["completed", "interrupted", "aborted"];
 const DEVICE_STATES: DeviceState[] = ["idle", "work", "break", "sync", "warning", "danger"];
 const SENSOR_HEALTH = ["ok", "fault", "invalid"] as const;
@@ -43,6 +44,7 @@ type SimSessionForm = {
   durationMin: number;
   mode: SessionMode;
   status: SessionStatus;
+  companions: Companions;
   breaks: number;
   presenceInterruptions: number;
   focusScore: string;
@@ -85,6 +87,7 @@ function Simulator() {
     durationMin: 25,
     mode: "Study" as SessionMode,
     status: "completed" as SessionStatus,
+    companions: getDefaultCompanions(),
     breaks: 0,
     presenceInterruptions: 0,
     focusScore: "",
@@ -115,6 +118,7 @@ function Simulator() {
           durationMin: sessionForm.durationMin,
           mode: sessionForm.mode,
           status: sessionForm.status,
+          companions: sessionForm.companions,
           breaks: sessionForm.breaks,
           presenceInterruptions: sessionForm.presenceInterruptions,
           focusScore: sessionForm.focusScore
@@ -355,6 +359,26 @@ function Simulator() {
                         {s}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label>Studied with</Label>
+                <Select
+                  value={sessionForm.companions}
+                  onValueChange={(v) =>
+                    setSessionForm((f) => ({ ...f, companions: v as Companions }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="solo">Solo</SelectItem>
+                    <SelectItem value="with_others">With friends</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

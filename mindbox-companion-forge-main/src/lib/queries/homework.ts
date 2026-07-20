@@ -13,6 +13,8 @@ export interface HomeworkInput {
   progressPct?: number | null;
   /** Points this assignment is worth toward the final grade. Null = not counted. */
   weight?: number | null;
+  /** Optional planner effort estimate (minutes). Null = derive from weight. */
+  estimatedMinutes?: number | null;
   notes?: string | null;
 }
 
@@ -34,6 +36,7 @@ function mapRow(row: Record<string, unknown>): HomeworkAssignment {
     grade: row.grade == null ? null : Number(row.grade),
     progressPct: row.progress_pct == null ? null : Number(row.progress_pct),
     weight: row.weight == null ? null : Number(row.weight),
+    estimatedMinutes: row.estimated_minutes == null ? null : Number(row.estimated_minutes),
     notes: row.notes ? String(row.notes) : null,
     createdAt: String(row.created_at ?? ""),
     updatedAt: String(row.updated_at ?? ""),
@@ -73,6 +76,8 @@ function toDbRow(
     status: input.status ?? "pending",
     progress_pct: clampProgress(input.progressPct),
     weight: input.weight == null ? null : Math.max(0, input.weight),
+    estimated_minutes:
+      input.estimatedMinutes == null ? null : Math.max(0, Math.round(input.estimatedMinutes)),
     file_name: fileData?.fileName || null,
     file_size_bytes: fileData?.fileSizeBytes || null,
     file_url: fileData?.fileUrl || null,
@@ -85,7 +90,7 @@ async function fetchHomeworkAssignments(): Promise<HomeworkAssignment[]> {
   const { data, error } = await supabase
     .from("homework_assignments")
     .select(
-      "id, course_code, title, description, due_date, status, file_url, file_name, file_size_bytes, grade, progress_pct, weight, notes, created_at, updated_at",
+      "id, course_code, title, description, due_date, status, file_url, file_name, file_size_bytes, grade, progress_pct, weight, estimated_minutes, notes, created_at, updated_at",
     )
     .order("due_date", { ascending: true });
   if (error) throw new Error(error.message);

@@ -13,6 +13,8 @@
 static DHT s_dht(PIN_DHT11, DHT11);
 static float    s_tempC = NAN;
 static bool     s_tempOk = false;
+static float    s_humid = NAN;
+static bool     s_humidOk = false;
 static uint32_t s_lastDhtRead = 0;
 #endif
 
@@ -63,6 +65,10 @@ static bool refreshDht(bool force) {
     s_tempOk = false;                   // on-demand read genuinely failed
     return false;
   }
+  // Humidity rides the same DHT transaction (the lib caches one frame) — no
+  // extra pin traffic. Keep the last good value if only the humidity is off.
+  float h = s_dht.readHumidity();
+  if (!isnan(h) && h >= 0.0f && h <= 100.0f) { s_humid = h; s_humidOk = true; }
   t += Storage::tempOffsetC();
   if (t < TEMP_MIN_VALID || t > TEMP_MAX_VALID) {
     s_tempOk = false;
@@ -318,6 +324,24 @@ bool readTemp(float& c) {
   return true;
 #else
   c = NAN; return false;
+#endif
+}
+
+bool readHumidity(float& pct) {
+#if HAS_TEMP
+  if (millis() < SENSOR_WARMUP_MS) {
+    pct = NAN;
+    return false;
+  }
+  refreshDht(false);                    // throttled refresh; keeps the last good value
+  if (!s_humidOk) {
+    pct = NAN;
+    return false;
+  }
+  pct = s_humid;
+  return true;
+#else
+  pct = NAN; return false;
 #endif
 }
 

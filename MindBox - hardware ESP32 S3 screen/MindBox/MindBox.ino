@@ -96,6 +96,7 @@ void setup() {
   Serial.println("[boot] display");
   Display::init();                    // brings up Panel + sprite
   Theme::setDark(Storage::darkTheme());   // restore the last-chosen theme
+  Theme::setAccentPreset(Storage::themeAccent());   // + the site-chosen accent preset
   bootMsg("display ok");
   // Surface WHY we last reset (brownout / panic / task-wdt) on-screen — no serial cable
   // needed. If the box reboot-loops, this is the word to read to know power vs. crash.

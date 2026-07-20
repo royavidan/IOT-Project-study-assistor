@@ -43,6 +43,9 @@ export function ScheduleTimeline({
         const duration = item.endMinutes - item.startMinutes;
         const eventId = item.type === "course" ? item.id.split(":")[0] : null;
         const isFocus = item.type === "focus";
+        // Planner-generated study blocks share the focus session's slim style so
+        // a full plan doesn't flood the day timeline with heavy cards.
+        const slim = isFocus || !!item.planGenerated;
 
         return (
           <li key={item.id} className="relative flex gap-4 pb-6 last:pb-0">
@@ -66,10 +69,15 @@ export function ScheduleTimeline({
               />
             </div>
 
-            {isFocus ? (
-              // Focus sessions are lighter than academic events — a slim single line.
+            {slim ? (
+              // Focus sessions + planner-generated study blocks are lighter than
+              // academic events — a slim single line.
               <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-1.5">
-                <Brain className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
+                {isFocus ? (
+                  <Brain className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden />
+                ) : (
+                  <NotebookPen className="h-3.5 w-3.5 shrink-0 text-info" aria-hidden />
+                )}
                 {item.href ? (
                   <Link to={item.href} className="truncate text-sm font-medium hover:underline">
                     {item.label}
@@ -77,8 +85,12 @@ export function ScheduleTimeline({
                 ) : (
                   <span className="truncate text-sm font-medium">{item.label}</span>
                 )}
-                <span className="shrink-0 rounded-full bg-success/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-success">
-                  Focus
+                <span
+                  className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                    isFocus ? "bg-success/10 text-success" : "bg-info/10 text-info"
+                  }`}
+                >
+                  {isFocus ? "Focus" : "Study"}
                 </span>
                 <span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">
                   {fmtMins(item.startMinutes)} – {fmtMins(item.endMinutes)} ·{" "}

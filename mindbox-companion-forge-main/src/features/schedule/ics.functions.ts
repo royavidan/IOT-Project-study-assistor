@@ -101,7 +101,7 @@ const importInput = z.object({
 });
 
 export const importIcsFn = createServerFn({ method: "POST" })
-  .validator(importInput)
+  .inputValidator(importInput)
   .handler(async ({ data }) => {
     const { user, supabase } = await requireUser();
 
@@ -148,7 +148,7 @@ export const importIcsFn = createServerFn({ method: "POST" })
 const syncInput = z.object({ importId: z.string().uuid() });
 
 export const syncIcsImportFn = createServerFn({ method: "POST" })
-  .validator(syncInput)
+  .inputValidator(syncInput)
   .handler(async ({ data }) => {
     const { user, supabase } = await requireUser();
 

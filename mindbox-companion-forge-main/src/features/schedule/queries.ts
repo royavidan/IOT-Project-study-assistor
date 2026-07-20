@@ -18,6 +18,8 @@ export interface ScheduleEventInput {
   startTime: string;
   endTime: string;
   notes?: string | null;
+  /** Study blocks only: mark planner-generated blocks so they can be regenerated. */
+  planGenerated?: boolean;
 }
 
 function mapRow(row: Record<string, unknown>): ScheduleEvent {
@@ -37,6 +39,7 @@ function mapRow(row: Record<string, unknown>): ScheduleEvent {
     notes: row.notes ? String(row.notes) : null,
     examWeight: row.exam_weight == null ? null : Number(row.exam_weight),
     examScore: row.exam_score == null ? null : Number(row.exam_score),
+    planGenerated: Boolean(row.plan_generated),
   };
 }
 
@@ -75,6 +78,7 @@ function toDbRow(userId: string, input: ScheduleEventInput) {
     start_time: input.startTime.trim(),
     end_time: input.endTime.trim(),
     notes: input.notes?.trim() || null,
+    plan_generated: input.planGenerated ?? false,
   };
 }
 
@@ -83,7 +87,7 @@ async function fetchScheduleEvents(): Promise<ScheduleEvent[]> {
   const { data, error } = await supabase
     .from("schedule_events")
     .select(
-      "id, title, course_code, location, color, category, subtype, kind, day_of_week, event_date, start_time, end_time, notes, exam_weight, exam_score",
+      "id, title, course_code, location, color, category, subtype, kind, day_of_week, event_date, start_time, end_time, notes, exam_weight, exam_score, plan_generated",
     )
     .order("start_time", { ascending: true });
   if (error) throw new Error(error.message);
@@ -134,6 +138,43 @@ async function removeScheduleEvent(id: string): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Replace planner-generated study blocks in a date range with a fresh set.
+ * Deletes only `plan_generated` one-off study blocks in `[fromKey, toKey]`
+ * (hand-made study blocks are untouched), then inserts the approved ones.
+ * Not transactional — if the insert fails after the delete, the user can simply
+ * regenerate. RLS scopes every row to the signed-in user.
+ */
+async function replaceGeneratedStudyBlocks(
+  fromKey: string,
+  toKey: string,
+  inputs: ScheduleEventInput[],
+): Promise<void> {
+  const supabase = getSupabaseBrowserClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) throw new Error("You must be signed in.");
+
+  const { error: delError } = await supabase
+    .from("schedule_events")
+    .delete()
+    .eq("user_id", user.id)
+    .eq("category", "study")
+    .eq("plan_generated", true)
+    .eq("kind", "once")
+    .gte("event_date", fromKey)
+    .lte("event_date", toKey);
+  if (delError) throw new Error(delError.message);
+
+  if (inputs.length === 0) return;
+  const rows = inputs.map((i) =>
+    toDbRow(user.id, { ...i, category: "study", kind: "once", planGenerated: true }),
+  );
+  const { error: insError } = await supabase.from("schedule_events").insert(rows);
+  if (insError) throw new Error(insError.message);
+}
+
 /** Update only an exam's weight + recorded score (won't touch other fields). */
 async function setExamGrade(
   id: string,
@@ -178,6 +219,18 @@ export function useScheduleActions() {
       onSuccess: invalidate,
     }),
     remove: useMutation({ mutationFn: removeScheduleEvent, onSuccess: invalidate }),
+    replaceGenerated: useMutation({
+      mutationFn: ({
+        fromKey,
+        toKey,
+        inputs,
+      }: {
+        fromKey: string;
+        toKey: string;
+        inputs: ScheduleEventInput[];
+      }) => replaceGeneratedStudyBlocks(fromKey, toKey, inputs),
+      onSuccess: invalidate,
+    }),
     setExamGrade: useMutation({
       mutationFn: ({
         id,

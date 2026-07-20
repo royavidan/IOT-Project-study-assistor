@@ -1,0 +1,53 @@
+<!-- Chapter 11: diagnostics -->
+<h1>11. דיאגנוסטיקה — איך מוכיחים כל טענה</h1>
+
+<div class="lead">
+זהו ה"ארגז כלים" שהופך כל טענה חומרתית ל<b>נראית</b> — בדיוק מה שהצוות המנחה ביקש. שני משטחים:
+<b>Serial @115200</b> (על USB-CDC) ו<b>מסך ה-<code>ST_DIAG</code></b> שמראה נתונים חיים בלי מחשב בכלל.
+</div>
+
+<h2>11.1 תפריט פקודות Serial</h2>
+<table>
+  <tr><th class="ltr">מקש</th><th>מה מציג / עושה</th></tr>
+  <tr><td class="ltr">m</td><td>מוניטור 1Hz — שורה חיה עם מצב, טיימר, מרחק ToF, רעש, אור, טמפ', Wi-Fi, כפתור, תור</td></tr>
+  <tr><td class="ltr">a</td><td>probe שמע/מיקרופון — ACK של הקודק + raw I2S min/max/RMS (מוכיח מיקרופון חי)</td></tr>
+  <tr><td class="ltr">c</td><td>כיול חיישנים + קריאות חיות</td></tr>
+  <tr><td class="ltr">b</td><td>בדיקת כפתור חיה (8s) — מסמן חיווט תקוע-LOW</td></tr>
+  <tr><td class="ltr">t / k</td><td>probe מגע חי (crosshair) / כיול מגע מחדש</td></tr>
+  <tr><td class="ltr">q</td><td>סטטוס תור ההעלאה — כמה ממתינים, ה-seq הישן ביותר, כמה נזרקו</td></tr>
+  <tr><td class="ltr">w</td><td>הזנת Wi-Fi/URL/secret</td></tr>
+  <tr><td class="ltr">d / h</td><td>dump חד-פעמי / עזרה</td></tr>
+</table>
+<p class="small">מקור: <span class="src">Diagnostics.cpp L293-310</span>.</p>
+
+<h2>11.2 self-test ב-boot</h2>
+<p>
+בכל הדלקה מודפס דוח שמוכיח, שורה-שורה, שהמערכת בריאה:
+</p>
+<pre>firmware 0.2.0-s3
+reset reason: <power-on | panic | task-wdt | brownout>
+heap: free / total   ·   PSRAM: found, <size>
+render: sprite-internal            <-- ה-sprite ב-RAM פנימי (פרק 5)
+I2C scan: 0x38 (touch)  0x29 (ToF) <-- שני התקנים על באס אחד (פרק 2)
+display: ILI9341
+ToF: present=<0/1> dist=<n>mm
+mic: level=<n>   ES8311 ACK: ok   raw min/max/rms
+light: <lux>     temp: <c>C
+wifi: <connected/off></pre>
+<p class="small">מקור: <span class="src">Diagnostics.cpp selfTest() L234-288</span>.</p>
+
+<h2>11.3 מוניטור חי (1Hz) ומסך Diag</h2>
+<p>
+פקודת <code>m</code> מדפיסה כל שנייה: מצב, טיימר <code>M:SS</code>, mode, דגל נוכחות, <code>dist=Nmm</code>,
+רעש, lux, טמפ', ToF ok, Wi-Fi on/off, כפתור גולמי, דגל fault, מספר סשנים בבאפר, וכמות ממתינה בתור.
+מסך <code>ST_DIAG</code> מראה את אותו מידע <b>ללא מחשב</b>: שם דרייבר, ToF+mm, רעש dB + מצב כפתור,
+ובמיוחד <b><code>8311:ACK rdy:1 pp:&lt;n&gt;</code></b> — ה-ACK של הקודק, דגל שה-I2S זורם, וה-peak-to-peak
+של השנייה האחרונה שקופץ כשמדברים. <span class="src">Diagnostics.cpp L51-90 · StateMachine.cpp L838-870</span>
+</p>
+
+<div class="proof">
+<b>למה זה עונה בדיוק לדרישת המנחה:</b> ההנחיה הייתה "אם תגידו שיש חיישן שמקבל בזמן אמת נתונים ומתקשר
+עם מערכת — שאוכל לראות את זה". פקודת <code>m</code> מראה את החיישנים משתנים חי; ה-self-test מוכיח את
+מפת החומרה; מסך ה-Diag מראה הכול בלי מחשב; והאתר (פרק 10) מראה את אותם נתונים אחרי מסע הענן. פרק 12
+מרכז את הכול לתסריט של 30 דקות.
+</div>

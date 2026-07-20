@@ -1,10 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { Lightbulb } from "lucide-react";
 
 import { ErrorState, LoadingState } from "@/components/EmptyState";
 import {
-  EnvFocusScatterChart,
   HourlyHeatmapGrid,
   TimeOfDayHeatmapChart,
   WeeklyTrendChart,
@@ -12,25 +10,23 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { WellbeingPanel } from "@/features/insights/components/WellbeingPanel";
-import { InfoHint } from "@/components/InfoHint";
+import { FocusBatteryCard } from "@/features/insights/components/FocusBatteryCard";
+import { LoadReviewCard } from "@/features/insights/components/LoadReviewCard";
+import { StudyConditionsCard } from "@/features/insights/components/StudyConditionsCard";
+import { StudyTimeEffectCard } from "@/features/insights/components/StudyTimeEffectCard";
 import { useSessionScope } from "@/hooks/use-session-scope";
 import { dateKeyDaysAgo } from "@/lib/dates";
 import {
-  computeEnvScatterPoints,
   computeHourlyHeatmap,
   computeSessionInsights,
   countSessionsWithEnv,
 } from "@/features/insights/insights";
 import { computeWellbeing } from "@/lib/wellbeing";
 import { useExternalLoads } from "@/features/insights/external-load";
+import { externalLoadFromSchedule } from "@/features/insights/schedule-load";
+import { useScheduleEvents } from "@/features/schedule/queries";
+import { sumStrainMinutes } from "@/lib/study-strain";
 import { dailyAggregates } from "@/lib/queries/sessions";
-
-function fmtCorr(r: number | null): string {
-  if (r == null) return "—";
-  const sign = r > 0 ? "+" : "";
-  return `${sign}${r.toFixed(2)}`;
-}
 
 interface Props {
   student?: string;
@@ -50,16 +46,34 @@ export function InsightsView({ student, initialFrom, initialTo }: Props) {
   );
 
   const insights = useMemo(() => computeSessionInsights(filtered), [filtered]);
-  const scatterPoints = useMemo(() => computeEnvScatterPoints(filtered), [filtered]);
   const hourlyHeat = useMemo(() => computeHourlyHeatmap(filtered), [filtered]);
   const weeklyTrend = useMemo(() => dailyAggregates(filtered, from, to), [filtered, from, to]);
   const envCount = useMemo(() => countSessionsWithEnv(filtered), [filtered]);
   const externalLoads = useExternalLoads();
+  const scheduleEvents = useScheduleEvents();
+  // Attended classes (lectures/tutorials/labs) from the real timetable feed the
+  // Focus Battery automatically — no need to re-type them. Over a fixed ~30-day
+  // window (the recovery model looks back 14 days and ignores dates outside it).
+  const scheduleLoads = useMemo(
+    () =>
+      isReviewerView
+        ? []
+        : externalLoadFromSchedule(
+            scheduleEvents.data ?? [],
+            dateKeyDaysAgo(29),
+            dateKeyDaysAgo(0),
+          ),
+    [scheduleEvents.data, isReviewerView],
+  );
   // External commitments are the viewer's own config, so only apply them when
   // looking at your own data (not a student you're reviewing).
   const wellbeing = useMemo(
-    () => computeWellbeing(filtered, isReviewerView ? [] : (externalLoads.data ?? [])),
-    [filtered, isReviewerView, externalLoads.data],
+    () =>
+      computeWellbeing(
+        filtered,
+        isReviewerView ? [] : [...(externalLoads.data ?? []), ...scheduleLoads],
+      ),
+    [filtered, isReviewerView, externalLoads.data, scheduleLoads],
   );
 
   if (sessionsQuery.isLoading) return <LoadingState label="Analyzing your sessions…" />;
@@ -73,7 +87,14 @@ export function InsightsView({ student, initialFrom, initialTo }: Props) {
     );
   }
 
-  const hasEnoughForCharts = filtered.length >= 3 && envCount >= 3;
+  const hasTrends = filtered.length >= 3;
+
+  const rawHours = filtered.reduce((sum, s) => sum + Math.max(0, s.durationMin), 0) / 60;
+  const strainHours = sumStrainMinutes(filtered) / 60;
+  const strainNote =
+    filtered.length > 0
+      ? `${rawHours.toFixed(1)}h studied ≈ ${strainHours.toFixed(1)} strain-hours once activity and company are weighted. Timetabled lectures count automatically.`
+      : undefined;
 
   return (
     <>
@@ -105,18 +126,24 @@ export function InsightsView({ student, initialFrom, initialTo }: Props) {
         </CardContent>
       </Card>
 
-      {wellbeing.ready && <WellbeingPanel report={wellbeing} />}
+      <FocusBatteryCard report={wellbeing} note={strainNote} />
 
-      {!hasEnoughForCharts ? (
+      <LoadReviewCard />
+
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
+        <StudyConditionsCard sessions={filtered} />
+        <StudyTimeEffectCard sessions={filtered} />
+      </div>
+
+      {!hasTrends ? (
         <Card>
           <CardContent className="space-y-2 p-8 text-center text-sm text-muted-foreground">
             <p>
-              Log at least <strong className="text-foreground">3 sessions</strong> with environment
-              readings (noise, temperature, light) to unlock charts and correlations.
+              Log at least <strong className="text-foreground">3 sessions</strong> to unlock your
+              focus trends and best-hours heatmap.
             </p>
             <p>
-              You have {filtered.length} session{filtered.length === 1 ? "" : "s"} and {envCount}{" "}
-              with env data in this range.
+              You have {filtered.length} session{filtered.length === 1 ? "" : "s"} in this range.
             </p>
             {!isReviewerView && (
               <Link to="/simulator" className="inline-block text-sync hover:underline">
@@ -127,57 +154,30 @@ export function InsightsView({ student, initialFrom, initialTo }: Props) {
         </Card>
       ) : (
         <>
-          {insights.idealConditions && (
-            <Card className="mb-6 border-work/20 bg-work-muted/30">
-              <CardHeader className="flex-row items-center gap-2">
-                <Lightbulb className="h-4 w-4 text-work" aria-hidden />
-                <CardTitle className="text-base">Ideal workspace conditions</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p>{insights.idealConditions.summary}</p>
-                <p className="text-muted-foreground">
-                  Based on your top {insights.idealConditions.sessionCount} session
-                  {insights.idealConditions.sessionCount === 1 ? "" : "s"} (avg Focus Load Est.{" "}
-                  {insights.idealConditions.avgFocusScore}).
-                </p>
-              </CardContent>
-            </Card>
-          )}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-base">Weekly focus trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <WeeklyTrendChart data={weeklyTrend} />
+            </CardContent>
+          </Card>
 
           <div className="mb-6 grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Weekly focus trend</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <WeeklyTrendChart data={weeklyTrend} />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Noise vs Focus Load Estimate</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <EnvFocusScatterChart points={scatterPoints} />
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="mb-6 grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Best time of day</CardTitle>
+                <CardTitle className="text-base">When you study</CardTitle>
               </CardHeader>
               <CardContent>
                 {insights.bestTimeSlot && (
                   <p className="mb-3 text-sm text-muted-foreground">
-                    Highest average in{" "}
+                    Most focus time in{" "}
                     <span className="font-medium text-foreground">
                       {insights.bestTimeSlot.label}
                     </span>{" "}
-                    ({insights.bestTimeSlot.avgFocusScore} across {insights.bestTimeSlot.sessions}{" "}
-                    session{insights.bestTimeSlot.sessions === 1 ? "" : "s"}).
+                    ({insights.bestTimeSlot.totalMinutes} min across{" "}
+                    {insights.bestTimeSlot.sessions} session
+                    {insights.bestTimeSlot.sessions === 1 ? "" : "s"}).
                   </p>
                 )}
                 <TimeOfDayHeatmapChart slots={insights.timeOfDay} />
@@ -186,7 +186,7 @@ export function InsightsView({ student, initialFrom, initialTo }: Props) {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Hourly focus heatmap</CardTitle>
+                <CardTitle className="text-base">Hours you study most</CardTitle>
               </CardHeader>
               <CardContent>
                 <HourlyHeatmapGrid cells={hourlyHeat} />
@@ -194,74 +194,55 @@ export function InsightsView({ student, initialFrom, initialTo }: Props) {
             </Card>
           </div>
 
-          <div className="mb-6 grid gap-4 sm:grid-cols-2">
-            <Card>
-              <CardHeader className="flex-row items-center gap-2">
-                <CardTitle className="text-base">Environment ↔ focus</CardTitle>
-                <InfoHint label="About correlations">
-                  Pearson correlation between each environment metric and your Focus Load Estimate
-                  (heuristic, not clinical). Values near +1 / −1 suggest a stronger pattern.
-                </InfoHint>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {insights.envCorrelations.map((c) => (
-                  <div key={c.metric}>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">{c.label}</span>
-                      <span className="tabular-nums text-muted-foreground">
-                        {fmtCorr(c.correlation)}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{c.interpretation}</p>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">By mode & completion</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="divide-y divide-border">
-                  {insights.modeBreakdown.map((row) => (
-                    <div
-                      key={row.mode}
-                      className="flex items-center justify-between py-2 text-sm first:pt-0 last:pb-0"
-                    >
-                      <span>{row.mode}</span>
-                      <span className="tabular-nums text-muted-foreground">
-                        {row.count} · avg {row.avgFocusScore} · {row.totalMinutes} min
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <div className="space-y-2 border-t border-border pt-3">
-                  {insights.statusBreakdown.map((row) => (
-                    <div key={row.status} className="flex items-center gap-3 text-sm">
-                      <span className="w-24 capitalize">{row.status}</span>
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="text-base">By mode & completion</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2.5">
+                {insights.modeBreakdown.map((row) => {
+                  const maxMin = Math.max(1, ...insights.modeBreakdown.map((r) => r.totalMinutes));
+                  return (
+                    <div key={row.mode} className="flex items-center gap-3 text-sm">
+                      <span className="w-24 shrink-0">{row.mode}</span>
                       <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                         <div
-                          className="h-full rounded-full bg-sync"
-                          style={{ width: `${row.pct}%` }}
+                          className="h-full rounded-full bg-work"
+                          style={{ width: `${(row.totalMinutes / maxMin) * 100}%` }}
                         />
                       </div>
-                      <span className="w-12 text-right tabular-nums text-muted-foreground">
-                        {row.pct}%
+                      <span className="w-28 shrink-0 text-right tabular-nums text-muted-foreground">
+                        {row.totalMinutes} min · {row.count}×
                       </span>
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            Focus Load Estimate is a transparent heuristic (0–100), not a validated scientific
-            measurement.
-          </p>
+                  );
+                })}
+              </div>
+              <div className="space-y-2 border-t border-border pt-3">
+                {insights.statusBreakdown.map((row) => (
+                  <div key={row.status} className="flex items-center gap-3 text-sm">
+                    <span className="w-24 capitalize">{row.status}</span>
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-sync"
+                        style={{ width: `${row.pct}%` }}
+                      />
+                    </div>
+                    <span className="w-12 text-right tabular-nums text-muted-foreground">
+                      {row.pct}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         </>
       )}
+
+      <p className="text-xs text-muted-foreground">
+        "Focus Load" and the Focus Battery are transparent heuristics (0–100), not validated
+        scientific or clinical measurements.
+      </p>
     </>
   );
 }

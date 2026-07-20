@@ -7,13 +7,20 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
+  CHIME_BITS,
   DEFAULT_SETTINGS,
   useSaveSettings,
   useSettings,
   type AppSettings,
 } from "@/lib/queries/settings";
+import { MODE_CONFIGS, PLAN_MODES, type PlanMode } from "@/features/planner/planner";
+import { DEVICE_THEME_PRESETS } from "@/features/device/theme-presets";
+import { STUDY_PLANNER_ENABLED } from "@/lib/feature-flags";
 import { ExternalLoadCard } from "@/features/insights/components/ExternalLoadCard";
+import { useDefaultCompanions } from "@/lib/default-companions";
+import type { Companions } from "@/lib/types";
 
 export const Route = createFileRoute("/settings")({
   head: () => ({ meta: [{ title: "Settings — MindBox" }] }),
@@ -232,6 +239,304 @@ function Settings() {
         </CardContent>
       </Card>
 
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">MindBox device</CardTitle>
+          <CardDescription>
+            Sounds, schedule, screen theme and timing. Delivered to your MindBox within a minute of
+            saving — the website owns these while the device is paired.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <Label htmlFor="device-sound" className="text-sm font-medium">
+                Speaker sounds
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Master switch for every chime on the box (quiet hours always mute it).
+              </p>
+            </div>
+            <Switch
+              id="device-sound"
+              className="shrink-0"
+              checked={form.deviceSoundEnabled}
+              onCheckedChange={(v) => setForm((f) => ({ ...f, deviceSoundEnabled: v }))}
+            />
+          </div>
+
+          <div className={form.deviceSoundEnabled ? "space-y-5" : "space-y-5 opacity-50"}>
+            <div className="space-y-2">
+              <Label>Volume</Label>
+              <ToggleGroup
+                type="single"
+                value={String(form.deviceSoundLevel)}
+                onValueChange={(v) =>
+                  v &&
+                  setForm((f) => ({
+                    ...f,
+                    deviceSoundLevel: Number(v) as AppSettings["deviceSoundLevel"],
+                  }))
+                }
+                variant="outline"
+                className="grid w-full max-w-md grid-cols-3"
+                disabled={!form.deviceSoundEnabled}
+              >
+                <ToggleGroupItem value="0" className="min-h-10 text-xs">
+                  Soft
+                </ToggleGroupItem>
+                <ToggleGroupItem value="1" className="min-h-10 text-xs">
+                  Medium
+                </ToggleGroupItem>
+                <ToggleGroupItem value="2" className="min-h-10 text-xs">
+                  Loud
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+
+            <div className="space-y-2.5">
+              <Label>Which chimes play</Label>
+              {(
+                [
+                  { bit: CHIME_BITS.session, label: "Session start / pause / resume" },
+                  { bit: CHIME_BITS.complete, label: "Session complete" },
+                  { bit: CHIME_BITS.autoStart, label: "Scheduled block starting" },
+                  { bit: CHIME_BITS.alerts, label: "Environment alerts (noise / heat / light)" },
+                ] as const
+              ).map(({ bit, label }) => (
+                <div key={bit} className="flex items-center justify-between gap-4">
+                  <span className="text-sm">{label}</span>
+                  <Switch
+                    className="shrink-0"
+                    disabled={!form.deviceSoundEnabled}
+                    checked={(form.deviceChimeMask & (1 << bit)) !== 0}
+                    onCheckedChange={(v) =>
+                      setForm((f) => ({
+                        ...f,
+                        deviceChimeMask: v
+                          ? f.deviceChimeMask | (1 << bit)
+                          : f.deviceChimeMask & ~(1 << bit),
+                      }))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-4 border-t border-border pt-4">
+            <div className="min-w-0">
+              <Label htmlFor="auto-start" className="text-sm font-medium">
+                Auto-start planned sessions
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                When a study block from your calendar begins, the box chimes and starts the session
+                by itself (tap to cancel on the device).
+              </p>
+            </div>
+            <Switch
+              id="auto-start"
+              className="shrink-0"
+              checked={form.autoStartScheduled}
+              onCheckedChange={(v) => setForm((f) => ({ ...f, autoStartScheduled: v }))}
+            />
+          </div>
+
+          <div className="space-y-2.5 border-t border-border pt-4">
+            <div>
+              <Label className="text-sm font-medium">Screen theme</Label>
+              <p className="text-xs text-muted-foreground">
+                Accent colors for the box UI (timer ring, menus). Screen brightness is set on the
+                device itself.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {DEVICE_THEME_PRESETS.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  aria-pressed={form.deviceThemeId === p.id}
+                  onClick={() => setForm((f) => ({ ...f, deviceThemeId: p.id }))}
+                  className={
+                    "flex items-center gap-2 rounded-md border px-3 py-2 text-xs transition-colors " +
+                    (form.deviceThemeId === p.id
+                      ? "border-primary bg-primary/10 font-medium"
+                      : "border-border hover:bg-muted/50")
+                  }
+                >
+                  <span className="flex -space-x-1">
+                    <span
+                      className="h-4 w-4 rounded-full border border-background"
+                      style={{ backgroundColor: p.accent }}
+                    />
+                    <span
+                      className="h-4 w-4 rounded-full border border-background"
+                      style={{ backgroundColor: p.break }}
+                    />
+                    <span
+                      className="h-4 w-4 rounded-full border border-background"
+                      style={{ backgroundColor: p.longBreak }}
+                    />
+                  </span>
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2.5 border-t border-border pt-4">
+            <div>
+              <Label className="text-sm font-medium">Session timing</Label>
+              <p className="text-xs text-muted-foreground">
+                Focus/break lengths for the box timer. A save here lands on the device once — you
+                can still adjust on the device afterwards (until the next site save).
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="device-focus" className="text-xs">
+                  Focus (min)
+                </Label>
+                <Input
+                  id="device-focus"
+                  type="number"
+                  min={5}
+                  max={120}
+                  className="w-24"
+                  value={form.deviceFocusMin}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, deviceFocusMin: Number(e.target.value) }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="device-break" className="text-xs">
+                  Break (min)
+                </Label>
+                <Input
+                  id="device-break"
+                  type="number"
+                  min={1}
+                  max={60}
+                  className="w-24"
+                  value={form.deviceBreakMin}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, deviceBreakMin: Number(e.target.value) }))
+                  }
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-4 border-t border-border pt-4">
+            <div className="min-w-0">
+              <Label htmlFor="exam-mode" className="text-sm font-medium">
+                Exam mode (do not disturb)
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Mutes chimes and coaching nudges on the box and shows an exam countdown. Turns on
+                automatically on days with an exam in your calendar — this switch only extends it.
+              </p>
+            </div>
+            <Switch
+              id="exam-mode"
+              className="shrink-0"
+              checked={form.examMode}
+              onCheckedChange={(v) => setForm((f) => ({ ...f, examMode: v }))}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      {STUDY_PLANNER_ENABLED && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="text-base">Study planner</CardTitle>
+            <CardDescription>
+              Defaults for “Auto-plan study time” on the calendar. The planner fills these working
+              hours with study blocks, ramps up before deadlines, and stays under a healthy cap.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="space-y-2">
+              <Label>Default strategy</Label>
+              <ToggleGroup
+                type="single"
+                value={form.studyPlanMode}
+                onValueChange={(v) => v && setForm((f) => ({ ...f, studyPlanMode: v as PlanMode }))}
+                variant="outline"
+                className="grid w-full max-w-md grid-cols-3"
+              >
+                {PLAN_MODES.map((m) => (
+                  <ToggleGroupItem key={m} value={m} className="min-h-10 whitespace-nowrap text-xs">
+                    {MODE_CONFIGS[m].label}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+              <p className="text-xs text-muted-foreground">
+                {MODE_CONFIGS[form.studyPlanMode].blurb}
+              </p>
+            </div>
+
+            <div className="grid max-w-md gap-3 sm:grid-cols-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="plan-start">Study from</Label>
+                <Input
+                  id="plan-start"
+                  type="time"
+                  value={form.planDayStart}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      planDayStart: e.target.value || DEFAULT_SETTINGS.planDayStart,
+                    }))
+                  }
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="plan-end">Study until</Label>
+                <Input
+                  id="plan-end"
+                  type="time"
+                  value={form.planDayEnd}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      planDayEnd: e.target.value || DEFAULT_SETTINGS.planDayEnd,
+                    }))
+                  }
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="plan-cap">Daily cap (min)</Label>
+                <Input
+                  id="plan-cap"
+                  type="number"
+                  min={30}
+                  max={600}
+                  step={15}
+                  placeholder="Auto"
+                  onWheel={(e) => e.currentTarget.blur()}
+                  value={form.planDailyCapMin ?? ""}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      planDailyCapMin:
+                        e.target.value === "" ? null : Number.parseInt(e.target.value, 10) || null,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Leave the daily cap blank to use each strategy's built-in limit (
+              {Math.round(MODE_CONFIGS[form.studyPlanMode].dailyCapMin / 60)}h for{" "}
+              {MODE_CONFIGS[form.studyPlanMode].label}).
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
       {form.shareWithReviewers && (
         <p className="mb-6 text-xs text-muted-foreground">
           Weekly PDF reports are emailed to you and your active reviewers at most once every 7 days
@@ -247,7 +552,41 @@ function Settings() {
         </Button>
       </div>
 
+      <StudyContextDefaultCard />
       <ExternalLoadCard />
     </>
+  );
+}
+
+function StudyContextDefaultCard() {
+  const [companions, setCompanions] = useDefaultCompanions();
+  return (
+    <Card className="mb-6">
+      <CardHeader>
+        <CardTitle className="text-base">Study context default</CardTitle>
+        <CardDescription>
+          How you usually study. New sessions start with this; you can still retag any session on
+          its detail page. It nudges your Focus Battery, not your grade.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-1.5">
+          <Label>Usually I study</Label>
+          <ToggleGroup
+            type="single"
+            value={companions}
+            onValueChange={(v) => v && setCompanions(v as Companions)}
+            className="justify-start"
+          >
+            <ToggleGroupItem value="solo" className="min-h-10 text-xs">
+              Solo
+            </ToggleGroupItem>
+            <ToggleGroupItem value="with_others" className="min-h-10 text-xs">
+              With friends
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

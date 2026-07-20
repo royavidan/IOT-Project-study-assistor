@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { CalendarClock, GraduationCap, Trash2 } from "lucide-react";
+import { CalendarClock, Eye, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,7 +15,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import type { CourseSummary } from "@/features/courses/courses";
+import { courseStanding, type CourseSummary } from "@/features/courses/courses";
 import { cn } from "@/lib/utils";
 
 function meetingsSummary(m: CourseSummary["meetings"]): string {
@@ -25,6 +25,12 @@ function meetingsSummary(m: CourseSummary["meetings"]): string {
   if (m.lab) parts.push(`${m.lab} lab${m.lab === 1 ? "" : "s"}`);
   return parts.length ? parts.join(" · ") : "No meetings yet";
 }
+
+const STANDING_TONE: Record<string, string> = {
+  neutral: "text-foreground",
+  good: "text-success",
+  warn: "text-warning-foreground",
+};
 
 export function CourseCard({
   summary,
@@ -37,6 +43,8 @@ export function CourseCard({
 }) {
   const { course, meetings, nextExam, homeworkTotal, homeworkByStatus, completionPct } = summary;
   const done = homeworkByStatus.submitted + homeworkByStatus.graded;
+  const watched = course.watchedLectures + course.watchedTutorials + course.watchedLabs;
+  const standing = courseStanding(summary);
 
   return (
     <Card className="relative overflow-hidden transition-colors hover:border-primary/40">
@@ -93,78 +101,62 @@ export function CourseCard({
             </div>
           </div>
 
-          <p className="text-sm text-muted-foreground">{meetingsSummary(meetings)}</p>
-
-          <div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Homework</span>
-              <span className="font-medium text-foreground">
-                {done}/{homeworkTotal} done · {completionPct}%
-              </span>
+          {/* Progress-led: standing + homework completion side by side. */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Standing</p>
+              <p
+                className={cn(
+                  "mt-0.5 text-2xl font-semibold tracking-tight",
+                  STANDING_TONE[standing.tone],
+                )}
+              >
+                {standing.value}
+                {standing.suffix && (
+                  <span className="ml-1 text-sm font-normal text-muted-foreground">
+                    {standing.suffix}
+                  </span>
+                )}
+              </p>
+              <p className="text-xs text-muted-foreground">{standing.caption}</p>
             </div>
-            <Progress
-              value={completionPct}
-              className="mt-1.5 h-2"
-              aria-label="Homework completion"
-            />
+            <div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Homework</span>
+                <span className="font-medium text-foreground">
+                  {done}/{homeworkTotal}
+                </span>
+              </div>
+              <Progress
+                value={completionPct}
+                className="mt-1.5 h-2"
+                aria-label="Homework completion"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">{completionPct}% done</p>
+            </div>
           </div>
 
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <div className="flex items-center gap-1.5 text-muted-foreground">
-              <CalendarClock className="h-4 w-4" />
+          <div className="flex items-center justify-between gap-3 border-t border-border pt-3 text-xs text-muted-foreground">
+            <span className="min-w-0 truncate">
+              {meetingsSummary(meetings)}
+              {watched > 0 && <span> · {watched} watched</span>}
+            </span>
+            <span className="flex shrink-0 items-center gap-1.5">
               {nextExam ? (
-                <span>
-                  Next exam{" "}
-                  <span className="font-medium text-foreground">
-                    {nextExam.daysUntil <= 0
-                      ? "today"
-                      : `in ${nextExam.daysUntil} day${nextExam.daysUntil === 1 ? "" : "s"}`}
-                  </span>
-                </span>
+                <>
+                  <CalendarClock className="h-3.5 w-3.5" />
+                  {nextExam.daysUntil <= 0 ? "Exam today" : `Exam in ${nextExam.daysUntil}d`}
+                </>
               ) : (
-                <span>No upcoming exam</span>
+                <>
+                  <Eye className="h-3.5 w-3.5" />
+                  No exam
+                </>
               )}
-            </div>
-            <GradePill summary={summary} />
+            </span>
           </div>
         </CardContent>
       </Link>
     </Card>
-  );
-}
-
-function GradePill({ summary }: { summary: CourseSummary }) {
-  const { gradeAverage, targetGrade, gradeVsTarget, gradeBreakdown } = summary;
-
-  // Prefer the weighted "points out of 100" standing when a grade scheme exists.
-  if (gradeBreakdown.components.length > 0) {
-    return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-        <GraduationCap className="h-3 w-3" />
-        {gradeBreakdown.earnedPoints}
-        <span className="opacity-70">/ 100</span>
-      </span>
-    );
-  }
-
-  if (gradeAverage == null) {
-    return <span className="text-xs text-muted-foreground">No grades yet</span>;
-  }
-  const onTrack = gradeVsTarget == null || gradeVsTarget >= 0;
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
-        targetGrade == null
-          ? "bg-muted text-muted-foreground"
-          : onTrack
-            ? "bg-success/10 text-success"
-            : "bg-warning-muted text-warning-foreground",
-      )}
-    >
-      <GraduationCap className="h-3 w-3" />
-      {gradeAverage}
-      {targetGrade != null && <span className="opacity-70">/ {targetGrade}</span>}
-    </span>
   );
 }

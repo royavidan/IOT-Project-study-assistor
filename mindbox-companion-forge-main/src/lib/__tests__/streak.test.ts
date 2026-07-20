@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { computeStreakFromDateKeys, toDateKey } from "@/lib/streak";
+import { computeStreakFromDateKeys, computeStreakFromDateKeySet, toDateKey } from "@/lib/streak";
 
 describe("computeStreakFromDateKeys", () => {
   it("returns 0 when there are no session days", () => {
@@ -28,5 +28,29 @@ describe("computeStreakFromDateKeys", () => {
   it("toDateKey formats local dates", () => {
     const d = new Date(2026, 5, 9, 15, 30);
     expect(toDateKey(d)).toBe("2026-06-09");
+  });
+});
+
+describe("computeStreakFromDateKeySet (server-side, key-walking)", () => {
+  it("counts consecutive owner-local days ending today", () => {
+    const days = new Set(["2026-07-15", "2026-07-16", "2026-07-17"]);
+    expect(computeStreakFromDateKeySet(days, "2026-07-17")).toBe(3);
+  });
+
+  it("anchors on yesterday when today is empty", () => {
+    const days = new Set(["2026-07-15", "2026-07-16"]);
+    expect(computeStreakFromDateKeySet(days, "2026-07-17")).toBe(2);
+  });
+
+  it("breaks on a gap and handles empty/invalid input", () => {
+    const days = new Set(["2026-07-13", "2026-07-16", "2026-07-17"]);
+    expect(computeStreakFromDateKeySet(days, "2026-07-17")).toBe(2);
+    expect(computeStreakFromDateKeySet(new Set(), "2026-07-17")).toBe(0);
+    expect(computeStreakFromDateKeySet(new Set(["2026-07-17"]), "garbage")).toBe(0);
+  });
+
+  it("walks across a month boundary", () => {
+    const days = new Set(["2026-06-29", "2026-06-30", "2026-07-01"]);
+    expect(computeStreakFromDateKeySet(days, "2026-07-01")).toBe(3);
   });
 });

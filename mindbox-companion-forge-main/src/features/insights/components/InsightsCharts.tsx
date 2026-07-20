@@ -3,19 +3,17 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
-  Scatter,
-  ScatterChart,
   Tooltip as RTooltip,
   XAxis,
   YAxis,
-  ZAxis,
 } from "recharts";
 
 import type { DailyAggregate } from "@/lib/types";
-import type { EnvScatterPoint, HourlyHeatCell, TimeOfDaySlot } from "@/features/insights/insights";
+import type { HourlyHeatCell, TimeOfDaySlot } from "@/features/insights/insights";
 
 const tooltipStyle = {
   background: "var(--color-popover)",
@@ -24,6 +22,7 @@ const tooltipStyle = {
   fontSize: 12,
 };
 
+/** Green ramp — used for study-time density (more time = greener). */
 function heatColor(intensity: number, hasData: boolean): string {
   if (!hasData) return "var(--color-muted)";
   if (intensity >= 75) return "var(--color-work)";
@@ -36,7 +35,7 @@ export function WeeklyTrendChart({ data }: { data: DailyAggregate[] }) {
   const chartData = data.map((d) => ({
     day: d.date.slice(5),
     minutes: d.minutes,
-    score: d.avgScore,
+    load: d.avgScore,
     sessions: d.sessions,
   }));
 
@@ -47,9 +46,9 @@ export function WeeklyTrendChart({ data }: { data: DailyAggregate[] }) {
   }
 
   return (
-    <div className="h-56 w-full">
+    <div className="h-64 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+        <LineChart data={chartData} margin={{ top: 4, right: 4, left: -8, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
           <XAxis
             dataKey="day"
@@ -58,107 +57,59 @@ export function WeeklyTrendChart({ data }: { data: DailyAggregate[] }) {
             interval="preserveStartEnd"
           />
           <YAxis
-            yAxisId="score"
+            yAxisId="min"
+            tick={{ fontSize: 11 }}
+            stroke="var(--color-muted-foreground)"
+            label={{
+              value: "minutes",
+              angle: -90,
+              position: "insideLeft",
+              fontSize: 11,
+              offset: 12,
+            }}
+          />
+          <YAxis
+            yAxisId="load"
+            orientation="right"
             domain={[0, 100]}
             tick={{ fontSize: 11 }}
             stroke="var(--color-muted-foreground)"
-          />
-          <YAxis
-            yAxisId="min"
-            orientation="right"
-            tick={{ fontSize: 11 }}
-            stroke="var(--color-muted-foreground)"
-            hide
+            label={{ value: "load", angle: 90, position: "insideRight", fontSize: 11 }}
           />
           <RTooltip
             contentStyle={tooltipStyle}
             formatter={(value, name) => {
-              if (name === "score") return [`${value}`, "Avg Focus Load Est."];
-              if (name === "minutes") return [`${value} min`, "Focus time"];
+              if (name === "Focus minutes") return [`${value} min`, name];
+              if (name === "Focus Load") return [`${value}`, name];
               return [value, name];
             }}
           />
-          <Line
-            yAxisId="score"
-            type="monotone"
-            dataKey="score"
-            stroke="var(--color-sync)"
-            strokeWidth={2}
-            dot={{ r: 2 }}
-            name="score"
-          />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
           <Line
             yAxisId="min"
             type="monotone"
             dataKey="minutes"
             stroke="var(--color-work)"
             strokeWidth={2}
+            dot={{ r: 2 }}
+            name="Focus minutes"
+          />
+          <Line
+            yAxisId="load"
+            type="monotone"
+            dataKey="load"
+            stroke="var(--color-warning)"
+            strokeWidth={2}
             strokeDasharray="4 4"
             dot={false}
-            name="minutes"
+            name="Focus Load"
           />
         </LineChart>
       </ResponsiveContainer>
-      <p className="mt-2 text-xs text-muted-foreground">
-        Solid line: avg Focus Load Estimate · dashed: focus minutes per day
+      <p className="mt-1 text-xs text-muted-foreground">
+        Focus minutes (left axis) vs Focus Load — a strain estimate, not a grade (right axis,
+        0–100).
       </p>
-    </div>
-  );
-}
-
-export function EnvFocusScatterChart({ points }: { points: EnvScatterPoint[] }) {
-  if (points.length < 2) {
-    return (
-      <p className="py-8 text-center text-sm text-muted-foreground">
-        Need at least two sessions with noise readings.
-      </p>
-    );
-  }
-
-  return (
-    <div className="h-56 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <ScatterChart margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-          <XAxis
-            type="number"
-            dataKey="noise"
-            name="Noise"
-            domain={[0, 1]}
-            tick={{ fontSize: 11 }}
-            stroke="var(--color-muted-foreground)"
-            label={{ value: "Noise (0–1)", position: "insideBottom", offset: -2, fontSize: 11 }}
-          />
-          <YAxis
-            type="number"
-            dataKey="focusScore"
-            name="Focus"
-            domain={[0, 100]}
-            tick={{ fontSize: 11 }}
-            stroke="var(--color-muted-foreground)"
-            label={{
-              value: "Focus Load Est.",
-              angle: -90,
-              position: "insideLeft",
-              fontSize: 11,
-            }}
-          />
-          <ZAxis range={[40, 40]} />
-          <RTooltip
-            cursor={{ strokeDasharray: "3 3" }}
-            contentStyle={tooltipStyle}
-            formatter={(value, name) => {
-              if (name === "Noise") return [value, "Noise"];
-              if (name === "Focus") return [value, "Focus Load Est."];
-              return [value, name];
-            }}
-            labelFormatter={(_, payload) =>
-              payload?.[0]?.payload?.label ? String(payload[0].payload.label) : ""
-            }
-          />
-          <Scatter data={points} fill="var(--color-sync)" fillOpacity={0.85} />
-        </ScatterChart>
-      </ResponsiveContainer>
     </div>
   );
 }
@@ -170,31 +121,41 @@ export function TimeOfDayHeatmapChart({ slots }: { slots: TimeOfDaySlot[] }) {
     );
   }
 
-  const maxScore = Math.max(...slots.map((s) => s.avgFocusScore), 1);
+  const maxMin = Math.max(...slots.map((s) => s.totalMinutes), 1);
   const chartData = slots.map((s) => ({
     ...s,
     shortLabel: s.label.split(" (")[0],
-    intensity: Math.round((s.avgFocusScore / maxScore) * 100),
+    intensity: Math.round((s.totalMinutes / maxMin) * 100),
   }));
 
   return (
     <div className="h-56 w-full">
       <ResponsiveContainer width="100%" height="100%">
-        <BarChart data={chartData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
+        <BarChart data={chartData} margin={{ top: 4, right: 8, left: -12, bottom: 4 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
           <XAxis
             dataKey="shortLabel"
             tick={{ fontSize: 11 }}
             stroke="var(--color-muted-foreground)"
           />
-          <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} stroke="var(--color-muted-foreground)" />
+          <YAxis
+            tick={{ fontSize: 11 }}
+            stroke="var(--color-muted-foreground)"
+            label={{
+              value: "minutes",
+              angle: -90,
+              position: "insideLeft",
+              fontSize: 11,
+              offset: 12,
+            }}
+          />
           <RTooltip
             cursor={{ fill: "var(--color-muted)" }}
             contentStyle={tooltipStyle}
-            formatter={(value) => [`${value}`, "Avg Focus Load Est."]}
+            formatter={(value) => [`${value} min`, "Focus time"]}
             labelFormatter={(label) => String(label)}
           />
-          <Bar dataKey="avgFocusScore" radius={[4, 4, 0, 0]}>
+          <Bar dataKey="totalMinutes" radius={[4, 4, 0, 0]}>
             {chartData.map((entry) => (
               <Cell key={entry.label} fill={heatColor(entry.intensity, entry.sessions > 0)} />
             ))}
@@ -216,21 +177,33 @@ export function HourlyHeatmapGrid({ cells }: { cells: HourlyHeatCell[] }) {
             key={cell.hour}
             title={
               cell.sessions > 0
-                ? `${cell.label}: avg ${cell.avgFocusScore} (${cell.sessions} session${cell.sessions === 1 ? "" : "s"})`
+                ? `${cell.label}: ${cell.minutes} min (${cell.sessions} session${cell.sessions === 1 ? "" : "s"})`
                 : `${cell.label}: no sessions`
             }
             className="aspect-square rounded-sm border border-border/50"
             style={{ background: heatColor(cell.intensity, cell.sessions > 0) }}
             aria-label={
               cell.sessions > 0
-                ? `${cell.label}, average focus ${cell.avgFocusScore}`
+                ? `${cell.label}, ${cell.minutes} minutes studied`
                 : `${cell.label}, no data`
             }
           />
         ))}
       </div>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
-        <span>00:00 → 23:00 (darker green = higher avg Focus Load Est.)</span>
+        <span className="flex items-center gap-1.5">
+          Less
+          <span className="flex gap-0.5">
+            {[15, 35, 65, 90].map((i) => (
+              <span
+                key={i}
+                className="h-3 w-3 rounded-sm"
+                style={{ background: heatColor(i, true) }}
+              />
+            ))}
+          </span>
+          more study time · 00:00 → 23:00
+        </span>
         <span>
           {active.length} active hour{active.length === 1 ? "" : "s"}
         </span>

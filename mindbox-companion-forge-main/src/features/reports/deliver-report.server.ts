@@ -26,6 +26,7 @@ export function mapSessionRow(row: Record<string, unknown>): Session {
     tempC: row.temp_c == null ? null : Number(row.temp_c),
     lightLux: row.light_lux == null ? null : Number(row.light_lux),
     presenceInterruptions: Number(row.presence_interruptions ?? 0),
+    companions: row.companions === "with_others" ? "with_others" : "solo",
     userId: String(row.user_id ?? ""),
     endedAt: row.ended_at ? String(row.ended_at) : undefined,
   };
@@ -42,7 +43,7 @@ export async function fetchSessionsForOwner(
   const { data, error } = await admin
     .from("sessions")
     .select(
-      "id, user_id, started_at, ended_at, actual_focus_sec, mode, status, focus_load_avg, breaks, noise_avg, temp_c, light_lux, presence_interruptions",
+      "id, user_id, started_at, ended_at, actual_focus_sec, mode, status, focus_load_avg, breaks, noise_avg, temp_c, light_lux, presence_interruptions, companions",
     )
     .eq("user_id", ownerUserId)
     .gte("started_at", fromIso)

@@ -16,9 +16,10 @@ import { dateKeyDaysAgo } from "@/lib/dates";
 import { useExternalLoadActions, useExternalLoads } from "@/features/insights/external-load";
 
 /**
- * Manage "general load" — lectures, labs, anything outside MindBox sessions.
- * Entries feed the Recovery balance estimate (study + commitments) on Insights.
- * Adds/removes persist immediately (own rows, RLS-protected).
+ * Manage "general load" — non-class commitments (a job, sport, commute) outside
+ * MindBox sessions. Lectures/tutorials/labs already in your timetable are counted
+ * automatically, so they don't belong here. Entries feed the Recovery balance
+ * estimate (study + commitments). Adds/removes persist immediately (RLS-protected).
  */
 export function ExternalLoadCard() {
   const { data, isLoading } = useExternalLoads();
@@ -56,8 +57,9 @@ export function ExternalLoadCard() {
       <CardHeader>
         <CardTitle className="text-base">Other commitments</CardTitle>
         <CardDescription>
-          Add non-MindBox load like lectures or labs. It factors into your Recovery balance on
-          Insights (study + commitments), so the estimate reflects your real week.
+          Add non-class load like a job, sport, or commute. Your timetabled lectures and tutorials
+          already count automatically — this fills in the rest so your Recovery balance reflects
+          your real week.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
