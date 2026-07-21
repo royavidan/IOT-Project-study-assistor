@@ -125,7 +125,7 @@ void render(const UiModel& m) {
     g->drawString(m.clockStr, 8, 8);
   }
 
-  // Live environment status row (top): temp / noise / away icons — lit (accent) when active now, else dim.
+  // Live environment status row (top): temp / noise / light / away icons — lit (accent) when active now, else dim.
   {
     const int iy = 14, step = 30;
     int n = 0;
@@ -133,6 +133,9 @@ void render(const UiModel& m) {
     n++;
 #endif
 #if HAS_ANY_MIC
+    n++;
+#endif
+#if HAS_LIGHT
     n++;
 #endif
 #if HAS_PRESENCE
@@ -144,6 +147,9 @@ void render(const UiModel& m) {
 #endif
 #if HAS_ANY_MIC
     Icons::drawMenuIcon(g, MI_NOISE,    ex, iy, m.envLoud ? C_ACCENT : pal.muted); ex += step;
+#endif
+#if HAS_LIGHT
+    Icons::drawMenuIcon(g, MI_LIGHT,    ex, iy, m.envDim  ? C_ACCENT : pal.muted); ex += step;
 #endif
 #if HAS_PRESENCE
     Icons::drawMenuIcon(g, MI_PRESENCE, ex, iy, m.envAway ? C_ACCENT : pal.muted); ex += step;

@@ -119,6 +119,14 @@ inline void drawMenuIcon(lgfx::LovyanGFX* g, uint8_t icon, int cx, int cy, uint1
       g->fillRect(cx + 2, cy - 2, 3, 9, col);
       g->fillRect(cx + 7, cy + 3, 3, 4, col);
       break;
+    case MI_LIGHT:                                   // sun: core + rays
+      g->fillCircle(cx, cy, 4, col);
+      for (int a = 0; a < 360; a += 45) {
+        float r = a * 0.01745329f;
+        g->drawLine(cx + (int)(6 * cosf(r)), cy + (int)(6 * sinf(r)),
+                    cx + (int)(9 * cosf(r)), cy + (int)(9 * sinf(r)), col);
+      }
+      break;
     default: break;                                  // MI_NONE
   }
 }

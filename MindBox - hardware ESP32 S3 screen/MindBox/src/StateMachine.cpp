@@ -225,6 +225,13 @@ static UiModel buildModel() {
 #else
   m.envHot = false;
 #endif
+#if HAS_LIGHT
+  { float lux, var;
+    m.envDim = Sensors::readLight(lux, var) &&
+               (lux < s_cfg.lightMinLux || lux > s_cfg.lightMaxLux); }
+#else
+  m.envDim = false;
+#endif
   m.paired         = Storage::paired();
   m.deviceId       = s_devShort.c_str();
   m.pairCode       = s_pairCode;

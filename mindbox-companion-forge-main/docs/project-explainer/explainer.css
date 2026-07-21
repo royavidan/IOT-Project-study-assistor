@@ -1,0 +1,218 @@
+/* MindBox — Project Explainer: light, readable A4 print stylesheet (English, LTR). */
+
+* { box-sizing: border-box; }
+:root { color-scheme: light only; }
+
+body {
+  font-family: "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.62;
+  color: #2b2b36;
+  background: #fff;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Headings ---- */
+h1 {
+  page-break-before: always;
+  font-size: 23pt;
+  font-weight: 700;
+  color: #14213d;
+  letter-spacing: -0.01em;
+  margin: 0 0 4px;
+}
+h1 .num {
+  display: inline-block;
+  color: #e5352b;
+  font-size: 15pt;
+  font-weight: 700;
+  margin-right: 10px;
+  vertical-align: middle;
+}
+h1.no-break { page-break-before: avoid; }
+
+h2 {
+  font-size: 14.5pt;
+  font-weight: 700;
+  color: #16213e;
+  margin: 22px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid #eceef2;
+  page-break-after: avoid;
+}
+h3 {
+  font-size: 11.5pt;
+  font-weight: 700;
+  color: #0f3460;
+  margin: 16px 0 4px;
+  page-break-after: avoid;
+}
+
+p { margin: 8px 0; }
+b, strong { color: #14213d; }
+ul, ol { margin: 8px 0; padding-left: 22px; }
+li { margin: 3px 0; }
+a { color: #0f6ec4; text-decoration: none; }
+
+/* ---- Lead paragraph under a chapter title ---- */
+.lead {
+  font-size: 12pt;
+  color: #4a4a57;
+  margin: 2px 0 14px;
+}
+
+/* ---- The "gist": one-line summary chip at the top of a chapter ---- */
+.gist {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  background: #f6f8fb;
+  border-left: 4px solid #14213d;
+  border-radius: 0 8px 8px 0;
+  padding: 10px 14px;
+  margin: 6px 0 16px;
+  font-size: 10.5pt;
+  page-break-inside: avoid;
+}
+.gist b { color: #14213d; }
+
+/* ---- Callout boxes ---- */
+.plain, .key, .tryit, .tech, .note {
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 12px 0;
+  page-break-inside: avoid;
+  font-size: 10.5pt;
+}
+.plain { background: #eef5fd; border-left: 4px solid #0f6ec4; }     /* In plain English */
+.key   { background: #fff7e8; border-left: 4px solid #f0a000; }     /* Key idea */
+.tryit { background: #ebf8ef; border-left: 4px solid #2e9b4f; }     /* See it in the demo */
+.tech  { background: #f4f4f7; border-left: 4px solid #9aa0ac; font-size: 9.7pt; color: #4a4a57; } /* deeper detail */
+.note  { background: #fdeef0; border-left: 4px solid #e5352b; }     /* watch-out */
+.plain .tag, .key .tag, .tryit .tag, .tech .tag, .note .tag {
+  display: block;
+  font-weight: 700;
+  font-size: 8.5pt;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.plain .tag { color: #0f6ec4; }
+.key .tag   { color: #b9770a; }
+.tryit .tag { color: #21804a; }
+.tech .tag  { color: #6b7280; }
+.note .tag  { color: #c0261d; }
+
+/* ---- Code ---- */
+code {
+  font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+  font-size: 9pt;
+  background: #eef0f4;
+  color: #1f2a44;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+pre {
+  font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+  font-size: 9pt;
+  line-height: 1.5;
+  background: #14213d;
+  color: #e8eaf0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  overflow: hidden;
+  white-space: pre-wrap;
+  page-break-inside: avoid;
+  margin: 12px 0;
+}
+pre code { background: none; color: inherit; padding: 0; }
+
+/* ---- Tables ---- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0 14px;
+  font-size: 9.6pt;
+  page-break-inside: auto;
+}
+th {
+  background: #14213d;
+  color: #fff;
+  text-align: left;
+  font-weight: 600;
+  padding: 7px 10px;
+}
+td {
+  border-bottom: 1px solid #e7e9ef;
+  padding: 6px 10px;
+  vertical-align: top;
+}
+tr:nth-child(even) td { background: #f8f9fb; }
+tr { page-break-inside: avoid; }
+
+/* ---- Feature cards grid ---- */
+.cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+.card {
+  flex: 1 1 30%;
+  min-width: 150px;
+  background: #f8f9fb;
+  border: 1px solid #e7e9ef;
+  border-radius: 10px;
+  padding: 10px 12px;
+  page-break-inside: avoid;
+}
+.card h4 { margin: 0 0 4px; font-size: 10.5pt; color: #14213d; }
+.card p { margin: 0; font-size: 9.6pt; color: #4a4a57; }
+
+/* ---- Small helpers ---- */
+.pill {
+  display: inline-block;
+  background: #eef0f4;
+  color: #14213d;
+  border-radius: 20px;
+  font-size: 8.5pt;
+  font-weight: 600;
+  padding: 2px 9px;
+  margin: 0 2px;
+}
+.pill.on  { background: #ebf8ef; color: #21804a; }
+.pill.off { background: #fdeef0; color: #c0261d; }
+.src {
+  font-family: Consolas, monospace;
+  font-size: 8pt;
+  color: #98a0ae;
+}
+.small { font-size: 9pt; color: #6b7280; }
+
+/* ---- Diagrams ---- */
+.diagram { text-align: center; margin: 16px 0; page-break-inside: avoid; }
+.figcap { font-size: 8.8pt; color: #6b7280; margin-top: 4px; }
+
+/* ---- Cover ---- */
+.cover {
+  height: 251mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 0 6mm;
+}
+.cover .dot { width: 30px; height: 30px; border-radius: 50%; background: #e5352b; margin-bottom: 26px; }
+.cover .kicker { font-size: 11pt; letter-spacing: 0.14em; text-transform: uppercase; color: #e5352b; font-weight: 700; }
+.cover h1 { border: none; page-break-before: avoid; font-size: 46pt; line-height: 1.02; margin: 8px 0 6px; color: #14213d; }
+.cover .tagline { font-size: 16pt; color: #4a4a57; max-width: 150mm; }
+.cover .meta { margin-top: 40px; font-size: 10.5pt; color: #6b7280; line-height: 1.8; }
+.cover .meta b { color: #14213d; }
+
+/* ---- Table of contents ---- */
+.toc { font-size: 11.5pt; list-style: none; padding: 0; }
+.toc li { margin: 7px 0; padding-left: 0; display: flex; gap: 12px; align-items: baseline; }
+.toc .n { color: #e5352b; font-weight: 700; min-width: 26px; }
+.toc .t b { color: #14213d; }
+.toc .t span { color: #6b7280; font-size: 10pt; }

@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MindBox — Project Explainer</title>
+<style>/* MindBox — Project Explainer: light, readable A4 print stylesheet (English, LTR). */
+
+* { box-sizing: border-box; }
+:root { color-scheme: light only; }
+
+body {
+  font-family: "Segoe UI", -apple-system, "Helvetica Neue", Arial, sans-serif;
+  font-size: 11pt;
+  line-height: 1.62;
+  color: #2b2b36;
+  background: #fff;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Headings ---- */
+h1 {
+  page-break-before: always;
+  font-size: 23pt;
+  font-weight: 700;
+  color: #14213d;
+  letter-spacing: -0.01em;
+  margin: 0 0 4px;
+}
+h1 .num {
+  display: inline-block;
+  color: #e5352b;
+  font-size: 15pt;
+  font-weight: 700;
+  margin-right: 10px;
+  vertical-align: middle;
+}
+h1.no-break { page-break-before: avoid; }
+
+h2 {
+  font-size: 14.5pt;
+  font-weight: 700;
+  color: #16213e;
+  margin: 22px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid #eceef2;
+  page-break-after: avoid;
+}
+h3 {
+  font-size: 11.5pt;
+  font-weight: 700;
+  color: #0f3460;
+  margin: 16px 0 4px;
+  page-break-after: avoid;
+}
+
+p { margin: 8px 0; }
+b, strong { color: #14213d; }
+ul, ol { margin: 8px 0; padding-left: 22px; }
+li { margin: 3px 0; }
+a { color: #0f6ec4; text-decoration: none; }
+
+/* ---- Lead paragraph under a chapter title ---- */
+.lead {
+  font-size: 12pt;
+  color: #4a4a57;
+  margin: 2px 0 14px;
+}
+
+/* ---- The "gist": one-line summary chip at the top of a chapter ---- */
+.gist {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  background: #f6f8fb;
+  border-left: 4px solid #14213d;
+  border-radius: 0 8px 8px 0;
+  padding: 10px 14px;
+  margin: 6px 0 16px;
+  font-size: 10.5pt;
+  page-break-inside: avoid;
+}
+.gist b { color: #14213d; }
+
+/* ---- Callout boxes ---- */
+.plain, .key, .tryit, .tech, .note {
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 12px 0;
+  page-break-inside: avoid;
+  font-size: 10.5pt;
+}
+.plain { background: #eef5fd; border-left: 4px solid #0f6ec4; }     /* In plain English */
+.key   { background: #fff7e8; border-left: 4px solid #f0a000; }     /* Key idea */
+.tryit { background: #ebf8ef; border-left: 4px solid #2e9b4f; }     /* See it in the demo */
+.tech  { background: #f4f4f7; border-left: 4px solid #9aa0ac; font-size: 9.7pt; color: #4a4a57; } /* deeper detail */
+.note  { background: #fdeef0; border-left: 4px solid #e5352b; }     /* watch-out */
+.plain .tag, .key .tag, .tryit .tag, .tech .tag, .note .tag {
+  display: block;
+  font-weight: 700;
+  font-size: 8.5pt;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.plain .tag { color: #0f6ec4; }
+.key .tag   { color: #b9770a; }
+.tryit .tag { color: #21804a; }
+.tech .tag  { color: #6b7280; }
+.note .tag  { color: #c0261d; }
+
+/* ---- Code ---- */
+code {
+  font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+  font-size: 9pt;
+  background: #eef0f4;
+  color: #1f2a44;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+pre {
+  font-family: "Cascadia Code", Consolas, "Courier New", monospace;
+  font-size: 9pt;
+  line-height: 1.5;
+  background: #14213d;
+  color: #e8eaf0;
+  border-radius: 8px;
+  padding: 12px 14px;
+  overflow: hidden;
+  white-space: pre-wrap;
+  page-break-inside: avoid;
+  margin: 12px 0;
+}
+pre code { background: none; color: inherit; padding: 0; }
+
+/* ---- Tables ---- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0 14px;
+  font-size: 9.6pt;
+  page-break-inside: auto;
+}
+th {
+  background: #14213d;
+  color: #fff;
+  text-align: left;
+  font-weight: 600;
+  padding: 7px 10px;
+}
+td {
+  border-bottom: 1px solid #e7e9ef;
+  padding: 6px 10px;
+  vertical-align: top;
+}
+tr:nth-child(even) td { background: #f8f9fb; }
+tr { page-break-inside: avoid; }
+
+/* ---- Feature cards grid ---- */
+.cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+.card {
+  flex: 1 1 30%;
+  min-width: 150px;
+  background: #f8f9fb;
+  border: 1px solid #e7e9ef;
+  border-radius: 10px;
+  padding: 10px 12px;
+  page-break-inside: avoid;
+}
+.card h4 { margin: 0 0 4px; font-size: 10.5pt; color: #14213d; }
+.card p { margin: 0; font-size: 9.6pt; color: #4a4a57; }
+
+/* ---- Small helpers ---- */
+.pill {
+  display: inline-block;
+  background: #eef0f4;
+  color: #14213d;
+  border-radius: 20px;
+  font-size: 8.5pt;
+  font-weight: 600;
+  padding: 2px 9px;
+  margin: 0 2px;
+}
+.pill.on  { background: #ebf8ef; color: #21804a; }
+.pill.off { background: #fdeef0; color: #c0261d; }
+.src {
+  font-family: Consolas, monospace;
+  font-size: 8pt;
+  color: #98a0ae;
+}
+.small { font-size: 9pt; color: #6b7280; }
+
+/* ---- Diagrams ---- */
+.diagram { text-align: center; margin: 16px 0; page-break-inside: avoid; }
+.figcap { font-size: 8.8pt; color: #6b7280; margin-top: 4px; }
+
+/* ---- Cover ---- */
+.cover {
+  height: 251mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 0 6mm;
+}
+.cover .dot { width: 30px; height: 30px; border-radius: 50%; background: #e5352b; margin-bottom: 26px; }
+.cover .kicker { font-size: 11pt; letter-spacing: 0.14em; text-transform: uppercase; color: #e5352b; font-weight: 700; }
+.cover h1 { border: none; page-break-before: avoid; font-size: 46pt; line-height: 1.02; margin: 8px 0 6px; color: #14213d; }
+.cover .tagline { font-size: 16pt; color: #4a4a57; max-width: 150mm; }
+.cover .meta { margin-top: 40px; font-size: 10.5pt; color: #6b7280; line-height: 1.8; }
+.cover .meta b { color: #14213d; }
+
+/* ---- Table of contents ---- */
+.toc { font-size: 11.5pt; list-style: none; padding: 0; }
+.toc li { margin: 7px 0; padding-left: 0; display: flex; gap: 12px; align-items: baseline; }
+.toc .n { color: #e5352b; font-weight: 700; min-width: 26px; }
+.toc .t b { color: #14213d; }
+.toc .t span { color: #6b7280; font-size: 10pt; }
+</style>
+</head>
+<body>
+<!-- 00: cover + table of contents -->
+<div class="cover">
+  <div class="dot"></div>
+  <div class="kicker">IoT Project · Group 13 · Technion</div>
+  <h1>MindBox</h1>
+  <div class="tagline">A smart focus box that <b>measures your study environment in real time</b> — and helps you actually focus.</div>
+  <div class="meta">
+    <b>What it is:</b> an ESP32-S3 device + companion web app for focused studying.<br>
+    <b>Board:</b> LCDWIKI ES3C28P (ESP32-S3, 2.8" touchscreen) · <b>Firmware:</b> 0.2.0-s3<br>
+    <b>Team:</b> Taiyo Yemin · Maor Lisker · Roy Avidan<br><br>
+    <span class="small">A short, plain-English guide: what MindBox does, how it works, how it survives things going wrong, and how to see it for yourself.</span>
+  </div>
+</div>
+
+<h1 class="no-break">Contents</h1>
+<ol class="toc">
+  <li><span class="n">1</span><span class="t"><b>The big picture</b><br><span>What MindBox does and how the pieces fit together</span></span></li>
+  <li><span class="n">2</span><span class="t"><b>How it's built</b><br><span>The sensors, the pin-sharing trick, two cores, and a screen that never freezes</span></span></li>
+  <li><span class="n">3</span><span class="t"><b>The Focus-Load number</b><br><span>How raw sensor signals become one 0–100 score</span></span></li>
+  <li><span class="n">4</span><span class="t"><b>Cloud, app &amp; the 16 features</b><br><span>How the box talks to the internet and what you see on screen</span></span></li>
+  <li><span class="n">5</span><span class="t"><b>Edge cases &amp; resilience</b><br><span>What happens when the internet drops, power is cut, or a sensor fails — and what to look for</span></span></li>
+  <li><span class="n">6</span><span class="t"><b>See it work</b><br><span>Claim → proof, plus the demo accounts you can log into</span></span></li>
+</ol>
+
+<div class="gist">
+  <b>How to read this:</b>
+  <span>Blue boxes explain things in plain English · amber boxes hold the one key idea · green boxes show how to see a feature live · red boxes are watch-outs.</span>
+</div>
+
+<!-- 01: the big picture -->
+<h1><span class="num">1</span>The big picture</h1>
+<p class="lead">MindBox is a box you keep on your desk. It runs your study timer, senses your environment,
+and coaches your focus — working with a website that shows your history and controls the box from anywhere.</p>
+
+<div class="gist">
+  <b>In one line:</b>
+  <span>A desk device that <b>measures</b> your study conditions (noise, light, temperature, and whether
+  you're there), runs focus sessions, and syncs to a website — even when the Wi-Fi drops.</span>
+</div>
+
+<div class="plain">
+  <span class="tag">Why it exists</span>
+  Most study timers are passive — they count minutes but don't know if you're really focusing. MindBox turns
+  your environment into something you can <b>see and measure</b>: the difference between a stopwatch and a
+  coach who notices the room got loud and you wandered off.
+</div>
+
+<h2>1.1 What the box does</h2>
+<div class="cards">
+  <div class="card"><h4>⏱ Runs sessions</h4><p>Pomodoro work/break timers you set with a physical knob — no phone needed.</p></div>
+  <div class="card"><h4>🎤 Senses</h4><p>Noise, temperature, humidity, light, and whether you're at the desk.</p></div>
+  <div class="card"><h4>📊 Scores focus</h4><p>Blends those signals into a live 0–100 "focus load" number.</p></div>
+  <div class="card"><h4>📡 Syncs</h4><p>Sends sessions to a website for history, stats, streaks, remote control.</p></div>
+  <div class="card"><h4>🔌 Works offline</h4><p>Keeps running with no internet, then syncs automatically when it's back.</p></div>
+  <div class="card"><h4>🤝 Shares</h4><p>Friend leaderboards, and read-only reports for a parent, tutor, or coach.</p></div>
+</div>
+
+<h2>1.2 How the pieces fit together</h2>
+<div class="diagram">
+<svg width="720" height="220" viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
+  <rect x="8" y="20" width="220" height="180" rx="12" fill="#f8f9fb" stroke="#14213d" stroke-width="2"/>
+  <text x="118" y="44" text-anchor="middle" font-weight="700" fill="#14213d" font-size="13">MindBox device</text>
+  <text x="118" y="60" text-anchor="middle" fill="#6b7280" font-size="10">ESP32-S3</text>
+  <rect x="22" y="72" width="192" height="22" rx="5" fill="#e5352b" opacity="0.10" stroke="#e5352b"/><text x="118" y="87" text-anchor="middle" fill="#b3271e" font-size="10.5">Touchscreen + speaker</text>
+  <rect x="22" y="100" width="192" height="22" rx="5" fill="#fff" stroke="#c9cdd6"/><text x="118" y="115" text-anchor="middle" font-size="10">Mic · ToF · Temp · Light</text>
+  <rect x="22" y="128" width="192" height="24" rx="5" fill="#14213d"/><text x="118" y="144" text-anchor="middle" fill="#fff" font-size="10">2 cores · focus-load engine</text>
+  <rect x="22" y="158" width="192" height="24" rx="5" fill="#0f3460"/><text x="118" y="174" text-anchor="middle" fill="#fff" font-size="10">Offline memory + clock</text>
+
+  <path d="M231 90 H 300" stroke="#2e9b4f" stroke-width="3" marker-end="url(#g)"/><text x="265" y="82" text-anchor="middle" fill="#21804a" font-size="10">sends data</text>
+  <path d="M300 140 H 231" stroke="#0f6ec4" stroke-width="3" marker-end="url(#b)"/><text x="265" y="158" text-anchor="middle" fill="#0f6ec4" font-size="10">gets settings</text>
+
+  <rect x="303" y="55" width="150" height="110" rx="12" fill="#f8f9fb" stroke="#14213d" stroke-width="2"/>
+  <text x="378" y="80" text-anchor="middle" font-weight="700" fill="#14213d" font-size="13">Cloud server</text>
+  <rect x="317" y="92" width="122" height="26" rx="5" fill="#2e9b4f" opacity="0.10" stroke="#2e9b4f"/><text x="378" y="109" text-anchor="middle" font-size="10">Ingest API (secured)</text>
+  <rect x="317" y="124" width="122" height="30" rx="5" fill="#fff" stroke="#c9cdd6"/><text x="378" y="143" text-anchor="middle" font-size="10">Supabase database</text>
+
+  <path d="M456 95 H 525" stroke="#9aa0ac" stroke-width="2.5" marker-end="url(#gy)"/>
+  <path d="M525 125 H 456" stroke="#9aa0ac" stroke-width="2.5" marker-end="url(#gy)"/>
+
+  <rect x="528" y="55" width="184" height="110" rx="12" fill="#f8f9fb" stroke="#14213d" stroke-width="2"/>
+  <text x="620" y="80" text-anchor="middle" font-weight="700" fill="#14213d" font-size="13">Web app</text>
+  <text x="620" y="102" text-anchor="middle" font-size="10">Dashboard · live status</text>
+  <text x="620" y="122" text-anchor="middle" font-size="10">Remote control · reports</text>
+  <text x="620" y="142" text-anchor="middle" font-size="10">Leaderboard · AI planner</text>
+
+  <defs>
+    <marker id="g" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#2e9b4f"/></marker>
+    <marker id="b" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#0f6ec4"/></marker>
+    <marker id="gy" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#9aa0ac"/></marker>
+  </defs>
+</svg>
+<div class="figcap">The <b>device</b> senses and runs sessions · the <b>server</b> stores everything · the <b>web app</b> shows it and controls the box.</div>
+</div>
+
+<h2>1.3 A study session, start to finish</h2>
+<ol>
+  <li><b>Set up</b> — turn the knob to pick a duration; tap to start (no phone).</li>
+  <li><b>Focus</b> — the box senses noise, light, temperature, and your presence while a hardware timer counts down.</li>
+  <li><b>Coach</b> — room gets loud or you leave? It reacts: a chime, an "away" pause, a focus-load bump.</li>
+  <li><b>Finish &amp; sync</b> — a completion chime and on-screen summary; the session (with minute-by-minute data) uploads to the website. No Wi-Fi? It's saved and uploads later.</li>
+</ol>
+
+<div class="tryit">
+  <span class="tag">See it live</span>
+  Open the <code>/device</code> page next to the box — the online dot, battery, and "Room right now"
+  readings update within seconds of the box sending data. The clearest proof the whole chain works.
+</div>
+
+<!-- 02: how it's built (hardware + firmware) -->
+<h1><span class="num">2</span>How it's built</h1>
+<p class="lead">A dual-core ESP32-S3 touchscreen board with a handful of everyday sensors — plus a few
+smart software decisions that keep it fast and reliable.</p>
+
+<div class="gist">
+  <b>In one line:</b>
+  <span>Sensors on a 4-pin-only board (so two of them <b>share a pin</b>), driven by <b>two processor
+  cores</b> — one keeps the screen smooth, the other handles the slow internet in the background.</span>
+</div>
+
+<h2>2.1 The sensors</h2>
+<table>
+  <tr><th>Part</th><th>What it's for</th><th>Talks over</th></tr>
+  <tr><td>ILI9341 touchscreen</td><td>timer, status, menus (tap &amp; swipe)</td><td>SPI</td></tr>
+  <tr><td>FT6336 touch</td><td>reads your finger</td><td>I2C</td></tr>
+  <tr><td>VL53L1X ToF</td><td>are you at the desk? (laser distance)</td><td>I2C</td></tr>
+  <tr><td>ES8311 mic</td><td>room noise level</td><td>I2S</td></tr>
+  <tr><td>Speaker + amp</td><td>chimes &amp; "ring my device"</td><td>I2S</td></tr>
+  <tr><td>KY-040 encoder</td><td>set duration (turn) + button (press)</td><td>digital</td></tr>
+  <tr><td>DHT11</td><td>temperature &amp; humidity</td><td>1-wire</td></tr>
+  <tr><td>KY-018 light</td><td>brightness → auto-dims the screen</td><td>analog</td></tr>
+</table>
+<p class="small"><b>On:</b> <span class="pill on">touch</span><span class="pill on">presence</span><span class="pill on">mic</span><span class="pill on">speaker</span><span class="pill on">light</span><span class="pill on">temp</span><span class="pill on">Wi-Fi</span> &nbsp;
+<b>Replaced by the screen + speaker:</b> <span class="pill off">LED ring</span><span class="pill off">vibration</span><span class="pill off">physical toggle</span></p>
+
+<h2>2.2 The clever bit: two sensors on one pin</h2>
+<p>The board breaks out only <b>four</b> spare pins, so <b>IO21 does double duty</b>: it's both the
+encoder's push-button <i>and</i> the DHT11 temperature sensor's data line.</p>
+<div class="key">
+  <span class="tag">Key idea</span>
+  The button and the temperature sensor <b>share one pin</b> — safe because the DHT11's pull-up holds the
+  line "high" (just what the button needs), and the firmware simply <b>skips a temperature read while the
+  button is pressed</b>. The knob's <i>rotation</i> is on different pins, so it never clashes.
+  <span class="src">config.h:117, config.h:122</span>
+</div>
+
+<h2>2.3 Two cores keep it smooth</h2>
+<div class="plain">
+  <span class="tag">In plain English</span>
+  One worker (<b>Core 1</b>) keeps the screen, touch, and sensors responsive. A second worker
+  (<b>Core 0</b>) handles slow Wi-Fi and audio in the background. A separate <b>hardware timer</b> counts
+  the session down — so even a slow 18-second internet call never freezes the screen or loses a second.
+</div>
+
+<h2>2.4 Why the screen never freezes</h2>
+<p>Only Core 1 draws — into one off-screen image that's pushed to the display in a single fast copy. Because
+there's a single writer, there's <b>no tearing and no need for locks</b>. The image is kept small (8-bit
+colour) to leave memory free for Wi-Fi.</p>
+
+<h2>2.5 The session is a state machine</h2>
+<p>The box moves through clear states — the human flow is:</p>
+<pre>BOOTING → IDLE ⇄ RUNNING ⇄ PAUSED → COMPLETE → (HOMEWORK) → IDLE
+                   ↑                                     ↓
+                RESUME  ←— (power cut, restored)     ERROR (hardware fault)</pre>
+
+<div class="tryit">
+  <span class="tag">See it live</span>
+  Turn the knob (menu moves), press it (selects), breathe on the sensor (temperature rises) — three things
+  through one shared pin, no conflict. And drop the Wi-Fi mid-session: the screen and timer keep going without
+  a stutter (that's Core 0 taking the hit, not Core 1).
+</div>
+
+<!-- 03: the focus-load number -->
+<h1><span class="num">3</span>The Focus-Load number</h1>
+<p class="lead">Behind all the sensors sits one small, honest formula that folds everything into a single
+0–100 score you can read at a glance.</p>
+
+<div class="gist">
+  <b>In one line:</b>
+  <span>The <b>Focus Load Estimate (FLE)</b> mixes how far you are into the session, how noisy the room is,
+  how much the light flickers, and whether you're at the desk — an <b>estimate</b>, not a brain reading.</span>
+</div>
+
+<div class="plain">
+  <span class="tag">In plain English</span>
+  It's like a "conditions" score — the way a weather app turns temperature, wind, and humidity into one
+  "feels like" number. <b>Low</b> = calm, easy conditions. <b>High</b> = the environment is working against you.
+</div>
+
+<h2>3.1 The formula</h2>
+<pre>FLE = round( 100 × ( 0.30·progress + 0.30·noise + 0.20·lightVariance + 0.20·presence ) )</pre>
+<p>Each input is squeezed to 0–1 first. The weights are the four ingredients' share of the 100 points:</p>
+<div class="cards">
+  <div class="card"><h4>Progress · 30</h4><p>How far into the session (elapsed ÷ target) — a gentle fatigue proxy.</p></div>
+  <div class="card"><h4>Noise · 30</h4><p>Room loudness from the mic (0 = library, 1 = loud).</p></div>
+  <div class="card"><h4>Light variance · 20</h4><p>How much the light flickers (steady = calm, jumpy = higher).</p></div>
+  <div class="card"><h4>Presence · 20</h4><p>Are you at the desk (count capped at 5, then scaled).</p></div>
+</div>
+<p class="small">Source of truth: <span class="src">focus_load.h</span> — the same formula runs on the device, the simulator, and the website (drift-guarded), so the number is identical everywhere.</p>
+
+<h2>3.2 What the numbers feel like</h2>
+<table>
+  <tr><th>Situation</th><th>FLE</th></tr>
+  <tr><td>Fresh, quiet, at the desk</td><td><b>20</b></td></tr>
+  <tr><td>Mid-session, moderate noise, present</td><td><b>52</b></td></tr>
+  <tr><td>…then you leave the desk</td><td><b>32</b> (−20)</td></tr>
+  <tr><td>Late, loud, flickering light, present</td><td><b>90</b></td></tr>
+</table>
+<p class="small">Rules of thumb: a loud room adds up to <b>+30</b>; leaving the desk removes <b>−20</b>; every 0.1 of extra noise ≈ <b>+3</b>.</p>
+
+<div class="key">
+  <span class="tag">Adaptive coaching</span>
+  When the score climbs to <b>75</b>, the box steers you toward a break (a shorter work interval),
+  rate-limited to once every 5 minutes so it never nags.
+</div>
+
+<div class="tryit">
+  <span class="tag">See it live</span>
+  Watch the number on the screen (or Serial <code>m</code>): <b>clap</b> and it jumps (noise ↑); <b>walk away</b>
+  and it drops ~20 (presence ↓) — matching the rules above.
+</div>
+
+<!-- 04: cloud, app & the 16 features -->
+<h1><span class="num">4</span>Cloud, app &amp; the 16 features</h1>
+<p class="lead">The box talks to a server over a few small, secured messages; the website turns that into
+live dashboards, remote control, and everything the 16 user stories promise.</p>
+
+<div class="gist">
+  <b>In one line:</b>
+  <span>The box is like a phone texting short, secret-signed updates to a server; the website reads them and
+  can text back settings and commands.</span>
+</div>
+
+<h2>4.1 How the box talks to the cloud</h2>
+<p>Every message carries a shared secret header — a wrong or missing secret is rejected (<b>401</b>).</p>
+<table>
+  <tr><th>Message</th><th>Direction</th><th>What it carries</th></tr>
+  <tr><td>sessions</td><td>box → server</td><td>a finished session (+ minute-by-minute data)</td></tr>
+  <tr><td>telemetry</td><td>box → server</td><td>a 30-second heartbeat: state, battery, Wi-Fi, room conditions</td></tr>
+  <tr><td>config</td><td>server → box</td><td>every 60s: the box's settings + any remote command</td></tr>
+  <tr><td>pairing / unpair</td><td>box → server</td><td>claiming / releasing the box</td></tr>
+  <tr><td>homework</td><td>box → server</td><td>homework progress bumps</td></tr>
+</table>
+<div class="note">
+  <span class="tag">Honest detail</span>
+  The website's "live" updates are <b>polling</b> (it asks the server every few seconds), not push —
+  simpler, and easy to demonstrate.
+</div>
+
+<h2>4.2 What you see on the website</h2>
+<table>
+  <tr><th>Screen</th><th>Shows</th></tr>
+  <tr><td><code>/device</code></td><td>online dot, battery, Wi-Fi, "Room right now" — updates ~every 10s</td></tr>
+  <tr><td>Dashboard</td><td>today's focus, streak, device state</td></tr>
+  <tr><td>Session detail</td><td>minute-by-minute focus + environment graphs</td></tr>
+  <tr><td>Remote control</td><td>Start / End / Ring / Message (Queued → Sent → Done)</td></tr>
+  <tr><td>Leaderboard · Exports · Reviewers</td><td>friend streaks · PDF/CSV/email reports · read-only sharing</td></tr>
+  <tr><td>Calendar</td><td>schedule + a <b>"Smart (AI)" planner</b> (Gemini)</td></tr>
+</table>
+
+<h2>4.3 The 16 user stories at a glance</h2>
+<table>
+  <tr><th>#</th><th>Story</th><th>What it does</th><th></th></tr>
+  <tr><td>1</td><td>Physical Controls</td><td>knob + button + touch to run sessions</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>2</td><td>Hardware Feedback</td><td>screen + chimes (replaces LED ring + buzzer)</td><td><span class="pill off">evolved</span></td></tr>
+  <tr><td>3</td><td>Local Timer Setup</td><td>set duration with the knob, offline</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>4</td><td>Offline Buffering</td><td>save sessions with no Wi-Fi, sync later</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>5</td><td>Session History</td><td>list, graphs, date range, focus streak</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>6</td><td>Multi-User Leaderboard</td><td>streak ranking among friends</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>7</td><td>User Identification</td><td>switch profiles on the box</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>8</td><td>Environmental Sensing</td><td>log noise, temperature, light</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>9</td><td>Presence Detection</td><td>pause/alert when you leave the desk</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>10</td><td>Focus Load Estimation</td><td>the live 0–100 score (Chapter 3)</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>11</td><td>Export Delivery</td><td>download/email PDF &amp; CSV reports</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>12</td><td>Motivation Nudges</td><td>a nudge after long inactivity</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>13</td><td>Read-Only Reviewer</td><td>share reports with a parent/tutor</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>14</td><td>Wi-Fi Setup</td><td>connect via on-screen setup</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>15</td><td>Device Status Signals</td><td>boot/status on the screen (replaces LED ring)</td><td><span class="pill off">evolved</span></td></tr>
+  <tr><td>16</td><td>Adaptive Interval Coaching</td><td>adjust work/rest by focus load</td><td><span class="pill on">done</span></td></tr>
+</table>
+<div class="note">
+  <span class="tag">Hardware evolution</span>
+  The original plan's LED ring, vibration motor, and physical toggle became the <b>touchscreen</b> (visual
+  status) and the <b>speaker</b> (chimes) + touch mode-switching. Same jobs, richer hardware.
+</div>
+
+<!-- 05: edge cases & resilience -->
+<h1><span class="num">5</span>Edge cases &amp; resilience</h1>
+<p class="lead">Real desks are messy: the Wi-Fi drops, someone trips over the USB cable, a sensor comes
+loose. MindBox is built to survive all of that — and to <b>show you</b> that it did.</p>
+
+<div class="gist">
+  <b>In one line:</b>
+  <span>Nothing is lost when things go wrong: the session keeps running, the data is saved locally, and it
+  all syncs the moment things recover — with a visible trail so you can prove it.</span>
+</div>
+
+<h2>5.1 What happens if the internet drops?</h2>
+<div class="plain">
+  <span class="tag">In plain English</span>
+  The box doesn't need the internet to do its job. If the Wi-Fi falls mid-session, <b>the timer keeps
+  counting</b> (it runs on a hardware clock, not on the network), the session data is <b>saved to the box's
+  own flash memory</b>, and the box quietly retries the connection every 15 seconds. When Wi-Fi returns, the
+  saved session <b>uploads automatically</b> — nothing is lost.
+</div>
+<div class="cards">
+  <div class="card"><h4>During the outage</h4><p>Session runs normally on screen. Finished sessions queue up in on-device storage. The box retries Wi-Fi every 15s.</p></div>
+  <div class="card"><h4>When it comes back</h4><p>Queued sessions upload oldest-first. If the clock hadn't synced yet, the times are corrected from internet time (NTP).</p></div>
+  <div class="card"><h4>No duplicates</h4><p>Each session has a unique id, so re-sending after a flaky connection never creates a double.</p></div>
+</div>
+<div class="tryit">
+  <span class="tag">What to look for</span>
+  Kill the hotspot mid-session → the screen &amp; timer keep going. Type Serial <code>q</code> → the session
+  shows as <b>queued</b>. Turn Wi-Fi back on → within a minute it appears on the website with the correct
+  times. The <code>/device</code> online dot goes grey after ~90s of silence, then green again on reconnect.
+</div>
+
+<h2>5.2 The full resilience table</h2>
+<table>
+  <tr><th>When this goes wrong…</th><th>What the box does</th><th>What to look for</th></tr>
+  <tr>
+    <td><b>Wi-Fi / internet drops</b></td>
+    <td>Timer keeps running (hardware clock); sessions buffer to flash; retries every 15s; auto-syncs on return.</td>
+    <td>Screen keeps counting; Serial <code>q</code> = queued; appears online after reconnect.</td>
+  </tr>
+  <tr>
+    <td><b>Power cut mid-session</b></td>
+    <td>A checkpoint is saved to non-volatile memory on every start/pause/resume.</td>
+    <td>On reboot: the reset reason + a <b>"Resume session?"</b> prompt.</td>
+  </tr>
+  <tr>
+    <td><b>A sensor fails / unplugs</b></td>
+    <td>Keeps the last good value; clamps out impossible readings; a real fault flips to an ERROR state.</td>
+    <td>Red <b>Fault</b> row on <code>/device</code>; the status badge turns "danger".</td>
+  </tr>
+  <tr>
+    <td><b>Sensor bus locks up (I2C)</b></td>
+    <td>The presence sensor is a "canary" — pinged every 2s; if the bus jams, the box auto-recovers it (pulses the clock line); if it can't, it shows ERROR.</td>
+    <td>Recovers silently; ERROR screen only if truly stuck.</td>
+  </tr>
+  <tr>
+    <td><b>Weak USB supply (brownout)</b></td>
+    <td>The Wi-Fi power spike can sag a weak 5V rail. We cap the radio's power to soften it; the honest real fix is a stronger supply.</td>
+    <td>Boot screen shows reset reason <b>"brownout"</b> — so a power sag is never mistaken for a code crash.</td>
+  </tr>
+  <tr>
+    <td><b>Clock not set yet (offline boot)</b></td>
+    <td>Offline sessions are stamped with a placeholder time, then corrected from internet time once online.</td>
+    <td>Times look right on the website after the first sync.</td>
+  </tr>
+  <tr>
+    <td><b>Unauthorized data / wrong secret</b></td>
+    <td>Every upload must carry the shared secret header; anything else is refused.</td>
+    <td>A request without the secret returns <b>401</b>; with it, the real data.</td>
+  </tr>
+  <tr>
+    <td><b>Slow / half-open server call</b></td>
+    <td>Network work runs on the second core with a watchdog; a stalled call can't freeze the UI or the timer.</td>
+    <td>Screen stays smooth even while the box struggles to reach the server.</td>
+  </tr>
+</table>
+
+<div class="key">
+  <span class="tag">The design principle</span>
+  Every failure has a <b>graceful fallback</b> and a <b>visible signal</b>. The box never silently loses
+  data, and it always tells you (on screen or on the site) what went wrong — which is exactly what you want
+  to be able to demonstrate.
+</div>
+
+<!-- 06: see it work -->
+<h1><span class="num">6</span>See it work</h1>
+<p class="lead">Every claim in this document can be checked in seconds. Here's what to do and what you'll see —
+plus ready-made accounts so the website is full of data on day one.</p>
+
+<div class="gist">
+  <b>In one line:</b>
+  <span>Open <code>/device</code> next to the box, run a short session, and watch the readings, graphs, and
+  remote controls respond live.</span>
+</div>
+
+<h2>6.1 Claim → proof</h2>
+<table>
+  <tr><th>Claim</th><th>Do this</th><th>You'll see</th></tr>
+  <tr><td>Reports to the cloud every 30s</td><td>open <code>/device</code>, wait</td><td>green Online dot; "Room right now" updates</td></tr>
+  <tr><td>Real mic measures noise</td><td>clap near the box</td><td>Serial <code>a</code> RMS jumps; value rises on the site</td></tr>
+  <tr><td>Presence sensor works</td><td>wave a hand; walk away in a session</td><td>distance changes; timer shows "Away"</td></tr>
+  <tr><td>Temp / humidity</td><td>breathe on the DHT11</td><td>temperature climbs within seconds</td></tr>
+  <tr><td>Light + auto-dim</td><td>cover the light sensor</td><td>reading drops; the screen dims</td></tr>
+  <tr><td>Site controls the box</td><td>"Ring my device" on <code>/device</code></td><td>box chimes; status Queued → Sent → Done</td></tr>
+  <tr><td>Offline + sync</td><td>kill Wi-Fi, run a session, reconnect</td><td>queued, then appears with correct times</td></tr>
+  <tr><td>Survives power loss</td><td>yank USB mid-session, replug</td><td>boots to "Resume session?"</td></tr>
+  <tr><td>Data is authenticated</td><td>call the API without the secret</td><td>rejected with <b>401</b></td></tr>
+</table>
+
+<h2>6.2 Demo accounts</h2>
+<p>Pre-loaded on the live website so every history/stats/leaderboard feature has data. <b>Password for all:
+<code>MindboxDemo2026!</code></b></p>
+<table>
+  <tr><th>Email</th><th>Use it to show</th></tr>
+  <tr><td><code>mindbox.primary@example.com</code></td><td><b>Main account</b> — 30-day history, streak, focus &amp; environment graphs, homework, courses, schedule. <b>Pair the box to this one.</b></td></tr>
+  <tr><td><code>mindbox.friend1@example.com</code></td><td>a friend with a streak → the leaderboard</td></tr>
+  <tr><td><code>mindbox.friend2@example.com</code></td><td>a second friend → the leaderboard</td></tr>
+  <tr><td><code>mindbox.reviewer@example.com</code></td><td>read-only reviewer view of the main account</td></tr>
+  <tr><td><code>mindbox.new@example.com</code></td><td>an empty account → onboarding + a motivation nudge</td></tr>
+</table>
+
+<div class="note">
+  <span class="tag">Be honest in the demo</span>
+  The demo-account data is generated by the project's own <b>simulator</b> (itself a documented feature) —
+  fine to present, just not real personal history.
+</div>
+
+<div class="tryit">
+  <span class="tag">The 30-second proof</span>
+  Log into the main account, open <code>/device</code>, and start a short session on the box. Watch the live
+  readings move, the session graph fill in, and a "Ring" command light up the box — the whole device → cloud
+  → website loop, in front of you.
+</div>
+
+</body>
+</html>

@@ -171,6 +171,7 @@ struct UiModel {
   bool        sessionTempHot;    // COMPLETE summary: avg temp out of comfort band -> light the icon
   bool        envHot;            // live (running): temp out of comfort band right now
   bool        envLoud;           // live (running): noise above comfort right now
+  bool        envDim;            // live (running): light out of comfort band right now (too dim / glare)
   bool        envAway;           // live (running): ToF says away right now
   uint8_t     interference;      // live Interference shown on the running screen
   uint8_t     sessionInterf;     // worst Interference this session (DONE summary)
@@ -287,7 +288,7 @@ enum MenuIcon {
   MI_NONE = 0, MI_START, MI_MODE, MI_SETTINGS, MI_PRESENCE, MI_DISPLAY,
   MI_COACHING, MI_STATS, MI_HISTORY, MI_GOAL, MI_DEVICE, MI_PAIR, MI_WIFI,
   MI_DIAG, MI_ABOUT, MI_BACK,
-  MI_TEMP, MI_NOISE   // env-status glyphs (lit when hot / loud); MI_PRESENCE reused for away
+  MI_TEMP, MI_NOISE, MI_LIGHT   // env-status glyphs (lit when hot / loud / dim); MI_PRESENCE reused for away
 };
 
 // Pointer-menu row for Display::renderMenu (cursor + scroll lists).

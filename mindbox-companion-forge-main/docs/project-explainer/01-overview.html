@@ -1,0 +1,78 @@
+<!-- 01: the big picture -->
+<h1><span class="num">1</span>The big picture</h1>
+<p class="lead">MindBox is a box you keep on your desk. It runs your study timer, senses your environment,
+and coaches your focus — working with a website that shows your history and controls the box from anywhere.</p>
+
+<div class="gist">
+  <b>In one line:</b>
+  <span>A desk device that <b>measures</b> your study conditions (noise, light, temperature, and whether
+  you're there), runs focus sessions, and syncs to a website — even when the Wi-Fi drops.</span>
+</div>
+
+<div class="plain">
+  <span class="tag">Why it exists</span>
+  Most study timers are passive — they count minutes but don't know if you're really focusing. MindBox turns
+  your environment into something you can <b>see and measure</b>: the difference between a stopwatch and a
+  coach who notices the room got loud and you wandered off.
+</div>
+
+<h2>1.1 What the box does</h2>
+<div class="cards">
+  <div class="card"><h4>⏱ Runs sessions</h4><p>Pomodoro work/break timers you set with a physical knob — no phone needed.</p></div>
+  <div class="card"><h4>🎤 Senses</h4><p>Noise, temperature, humidity, light, and whether you're at the desk.</p></div>
+  <div class="card"><h4>📊 Scores focus</h4><p>Blends those signals into a live 0–100 "focus load" number.</p></div>
+  <div class="card"><h4>📡 Syncs</h4><p>Sends sessions to a website for history, stats, streaks, remote control.</p></div>
+  <div class="card"><h4>🔌 Works offline</h4><p>Keeps running with no internet, then syncs automatically when it's back.</p></div>
+  <div class="card"><h4>🤝 Shares</h4><p>Friend leaderboards, and read-only reports for a parent, tutor, or coach.</p></div>
+</div>
+
+<h2>1.2 How the pieces fit together</h2>
+<div class="diagram">
+<svg width="720" height="220" viewBox="0 0 720 220" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
+  <rect x="8" y="20" width="220" height="180" rx="12" fill="#f8f9fb" stroke="#14213d" stroke-width="2"/>
+  <text x="118" y="44" text-anchor="middle" font-weight="700" fill="#14213d" font-size="13">MindBox device</text>
+  <text x="118" y="60" text-anchor="middle" fill="#6b7280" font-size="10">ESP32-S3</text>
+  <rect x="22" y="72" width="192" height="22" rx="5" fill="#e5352b" opacity="0.10" stroke="#e5352b"/><text x="118" y="87" text-anchor="middle" fill="#b3271e" font-size="10.5">Touchscreen + speaker</text>
+  <rect x="22" y="100" width="192" height="22" rx="5" fill="#fff" stroke="#c9cdd6"/><text x="118" y="115" text-anchor="middle" font-size="10">Mic · ToF · Temp · Light</text>
+  <rect x="22" y="128" width="192" height="24" rx="5" fill="#14213d"/><text x="118" y="144" text-anchor="middle" fill="#fff" font-size="10">2 cores · focus-load engine</text>
+  <rect x="22" y="158" width="192" height="24" rx="5" fill="#0f3460"/><text x="118" y="174" text-anchor="middle" fill="#fff" font-size="10">Offline memory + clock</text>
+
+  <path d="M231 90 H 300" stroke="#2e9b4f" stroke-width="3" marker-end="url(#g)"/><text x="265" y="82" text-anchor="middle" fill="#21804a" font-size="10">sends data</text>
+  <path d="M300 140 H 231" stroke="#0f6ec4" stroke-width="3" marker-end="url(#b)"/><text x="265" y="158" text-anchor="middle" fill="#0f6ec4" font-size="10">gets settings</text>
+
+  <rect x="303" y="55" width="150" height="110" rx="12" fill="#f8f9fb" stroke="#14213d" stroke-width="2"/>
+  <text x="378" y="80" text-anchor="middle" font-weight="700" fill="#14213d" font-size="13">Cloud server</text>
+  <rect x="317" y="92" width="122" height="26" rx="5" fill="#2e9b4f" opacity="0.10" stroke="#2e9b4f"/><text x="378" y="109" text-anchor="middle" font-size="10">Ingest API (secured)</text>
+  <rect x="317" y="124" width="122" height="30" rx="5" fill="#fff" stroke="#c9cdd6"/><text x="378" y="143" text-anchor="middle" font-size="10">Supabase database</text>
+
+  <path d="M456 95 H 525" stroke="#9aa0ac" stroke-width="2.5" marker-end="url(#gy)"/>
+  <path d="M525 125 H 456" stroke="#9aa0ac" stroke-width="2.5" marker-end="url(#gy)"/>
+
+  <rect x="528" y="55" width="184" height="110" rx="12" fill="#f8f9fb" stroke="#14213d" stroke-width="2"/>
+  <text x="620" y="80" text-anchor="middle" font-weight="700" fill="#14213d" font-size="13">Web app</text>
+  <text x="620" y="102" text-anchor="middle" font-size="10">Dashboard · live status</text>
+  <text x="620" y="122" text-anchor="middle" font-size="10">Remote control · reports</text>
+  <text x="620" y="142" text-anchor="middle" font-size="10">Leaderboard · AI planner</text>
+
+  <defs>
+    <marker id="g" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#2e9b4f"/></marker>
+    <marker id="b" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#0f6ec4"/></marker>
+    <marker id="gy" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 z" fill="#9aa0ac"/></marker>
+  </defs>
+</svg>
+<div class="figcap">The <b>device</b> senses and runs sessions · the <b>server</b> stores everything · the <b>web app</b> shows it and controls the box.</div>
+</div>
+
+<h2>1.3 A study session, start to finish</h2>
+<ol>
+  <li><b>Set up</b> — turn the knob to pick a duration; tap to start (no phone).</li>
+  <li><b>Focus</b> — the box senses noise, light, temperature, and your presence while a hardware timer counts down.</li>
+  <li><b>Coach</b> — room gets loud or you leave? It reacts: a chime, an "away" pause, a focus-load bump.</li>
+  <li><b>Finish &amp; sync</b> — a completion chime and on-screen summary; the session (with minute-by-minute data) uploads to the website. No Wi-Fi? It's saved and uploads later.</li>
+</ol>
+
+<div class="tryit">
+  <span class="tag">See it live</span>
+  Open the <code>/device</code> page next to the box — the online dot, battery, and "Room right now"
+  readings update within seconds of the box sending data. The clearest proof the whole chain works.
+</div>

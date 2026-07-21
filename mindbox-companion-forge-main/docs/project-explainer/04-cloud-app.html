@@ -1,0 +1,63 @@
+<!-- 04: cloud, app & the 16 features -->
+<h1><span class="num">4</span>Cloud, app &amp; the 16 features</h1>
+<p class="lead">The box talks to a server over a few small, secured messages; the website turns that into
+live dashboards, remote control, and everything the 16 user stories promise.</p>
+
+<div class="gist">
+  <b>In one line:</b>
+  <span>The box is like a phone texting short, secret-signed updates to a server; the website reads them and
+  can text back settings and commands.</span>
+</div>
+
+<h2>4.1 How the box talks to the cloud</h2>
+<p>Every message carries a shared secret header — a wrong or missing secret is rejected (<b>401</b>).</p>
+<table>
+  <tr><th>Message</th><th>Direction</th><th>What it carries</th></tr>
+  <tr><td>sessions</td><td>box → server</td><td>a finished session (+ minute-by-minute data)</td></tr>
+  <tr><td>telemetry</td><td>box → server</td><td>a 30-second heartbeat: state, battery, Wi-Fi, room conditions</td></tr>
+  <tr><td>config</td><td>server → box</td><td>every 60s: the box's settings + any remote command</td></tr>
+  <tr><td>pairing / unpair</td><td>box → server</td><td>claiming / releasing the box</td></tr>
+  <tr><td>homework</td><td>box → server</td><td>homework progress bumps</td></tr>
+</table>
+<div class="note">
+  <span class="tag">Honest detail</span>
+  The website's "live" updates are <b>polling</b> (it asks the server every few seconds), not push —
+  simpler, and easy to demonstrate.
+</div>
+
+<h2>4.2 What you see on the website</h2>
+<table>
+  <tr><th>Screen</th><th>Shows</th></tr>
+  <tr><td><code>/device</code></td><td>online dot, battery, Wi-Fi, "Room right now" — updates ~every 10s</td></tr>
+  <tr><td>Dashboard</td><td>today's focus, streak, device state</td></tr>
+  <tr><td>Session detail</td><td>minute-by-minute focus + environment graphs</td></tr>
+  <tr><td>Remote control</td><td>Start / End / Ring / Message (Queued → Sent → Done)</td></tr>
+  <tr><td>Leaderboard · Exports · Reviewers</td><td>friend streaks · PDF/CSV/email reports · read-only sharing</td></tr>
+  <tr><td>Calendar</td><td>schedule + a <b>"Smart (AI)" planner</b> (Gemini)</td></tr>
+</table>
+
+<h2>4.3 The 16 user stories at a glance</h2>
+<table>
+  <tr><th>#</th><th>Story</th><th>What it does</th><th></th></tr>
+  <tr><td>1</td><td>Physical Controls</td><td>knob + button + touch to run sessions</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>2</td><td>Hardware Feedback</td><td>screen + chimes (replaces LED ring + buzzer)</td><td><span class="pill off">evolved</span></td></tr>
+  <tr><td>3</td><td>Local Timer Setup</td><td>set duration with the knob, offline</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>4</td><td>Offline Buffering</td><td>save sessions with no Wi-Fi, sync later</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>5</td><td>Session History</td><td>list, graphs, date range, focus streak</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>6</td><td>Multi-User Leaderboard</td><td>streak ranking among friends</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>7</td><td>User Identification</td><td>switch profiles on the box</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>8</td><td>Environmental Sensing</td><td>log noise, temperature, light</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>9</td><td>Presence Detection</td><td>pause/alert when you leave the desk</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>10</td><td>Focus Load Estimation</td><td>the live 0–100 score (Chapter 3)</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>11</td><td>Export Delivery</td><td>download/email PDF &amp; CSV reports</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>12</td><td>Motivation Nudges</td><td>a nudge after long inactivity</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>13</td><td>Read-Only Reviewer</td><td>share reports with a parent/tutor</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>14</td><td>Wi-Fi Setup</td><td>connect via on-screen setup</td><td><span class="pill on">done</span></td></tr>
+  <tr><td>15</td><td>Device Status Signals</td><td>boot/status on the screen (replaces LED ring)</td><td><span class="pill off">evolved</span></td></tr>
+  <tr><td>16</td><td>Adaptive Interval Coaching</td><td>adjust work/rest by focus load</td><td><span class="pill on">done</span></td></tr>
+</table>
+<div class="note">
+  <span class="tag">Hardware evolution</span>
+  The original plan's LED ring, vibration motor, and physical toggle became the <b>touchscreen</b> (visual
+  status) and the <b>speaker</b> (chimes) + touch mode-switching. Same jobs, richer hardware.
+</div>

@@ -15,7 +15,8 @@
     "simulate": "tsx scripts/simulator.ts",
     "cleanup": "tsx scripts/cleanup-simulator.ts",
     "doc": "tsx scripts/build-system-doc.ts",
-    "doc:submission": "tsx scripts/build-submission-doc.ts"
+    "doc:submission": "tsx scripts/build-submission-doc.ts",
+    "doc:explainer": "tsx scripts/build-explainer-doc.ts"
   },
   "dependencies": {
     "@google/genai": "^2.12.0",
