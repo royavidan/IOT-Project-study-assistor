@@ -4,6 +4,7 @@
 #include "Haptics.h"
 #include "Sound.h"
 #include "Storage.h"
+#include "Sensors.h"
 #include "Theme.h"
 #include "Panel.h"
 #include "Cloud.h"
@@ -103,6 +104,14 @@ static const char* endAwayLabel(uint8_t idx) {
     case 0:  return "5m";
     case 1:  return "10m";
     default: return "Off";
+  }
+}
+
+static const char* presenceSensLabel(uint8_t idx) {
+  switch (idx > 2 ? 1 : idx) {
+    case 0:  return "Low";
+    case 2:  return "High";
+    default: return "Med";
   }
 }
 
@@ -240,7 +249,7 @@ static int itemCount(Screen s) {
     case SCR_MODE:     return 8;   // presets · focus · break · cycles · long-break · every · auto-start
     case SCR_SETTINGS: return 6;   // Presence · Display · Coaching · Stats · Quiet · Environment
     case SCR_DISPLAY:  return 9;   // Show timer · Haptics · Strength · Sound · Volume · Brightness · Theme · Test motor · Test sound
-    case SCR_PRESENCE: return 3;
+    case SCR_PRESENCE: return 4;   // Auto-pause · Pause after · End if away · Sensitivity
     case SCR_COACHING: return 4;
     case SCR_QUIET:    return 3;   // Enabled · From · To
     case SCR_ALERTS:   return 10;  // temp(+min/max) · noise(+max) · light(+min/max) · away · nudge
@@ -339,6 +348,14 @@ static void cyclePauseAfter() {
 static void cycleEndAway() {
   s_cfg->presenceEndIdx = (s_cfg->presenceEndIdx + 1) % 3;
   Storage::saveConfig(*s_cfg);
+  Haptics::click();
+  markDirty();
+}
+
+static void cyclePresenceSens() {
+  s_cfg->presenceSensIdx = (s_cfg->presenceSensIdx + 1) % 3;
+  Storage::saveConfig(*s_cfg);
+  Sensors::setPresenceSensitivity(s_cfg->presenceSensIdx);   // apply live (also applied from NVS at boot)
   Haptics::click();
   markDirty();
 }
@@ -720,6 +737,7 @@ MenuAction tick(int rotDir, int sideBtn) {
       if (s_cursor == 0) toggleAutoPause();
       else if (s_cursor == 1) cyclePauseAfter();
       else if (s_cursor == 2) cycleEndAway();
+      else if (s_cursor == 3) cyclePresenceSens();
       break;
 
     case SCR_COACHING:
@@ -967,7 +985,8 @@ const MenuView& view() {
       case SCR_PRESENCE:
         if (idx == 0) fillRow(row, "Auto-pause", s_cfg->autoPause ? "ON" : "OFF", sel);
         else if (idx == 1) fillRow(row, "Pause after", pauseAfterLabel(s_cfg->presencePauseIdx), sel);
-        else fillRow(row, "End if away", endAwayLabel(s_cfg->presenceEndIdx), sel);
+        else if (idx == 2) fillRow(row, "End if away", endAwayLabel(s_cfg->presenceEndIdx), sel);
+        else fillRow(row, "Sensitivity", presenceSensLabel(s_cfg->presenceSensIdx), sel);
         break;
 
       case SCR_COACHING:

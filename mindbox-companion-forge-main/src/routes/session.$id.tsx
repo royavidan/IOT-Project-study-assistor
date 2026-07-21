@@ -8,7 +8,10 @@ import { Button } from "@/components/ui/button";
 import { InfoHint } from "@/components/InfoHint";
 import { useSessionDetail } from "@/features/sessions/session-detail";
 import { useAuth } from "@/lib/auth/auth-context";
-import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { printReportHtml } from "@/features/reports/print-report";
+import { getSessionReportHtml } from "@/features/reports/report.functions";
+import { ArrowLeft, FileText, ShieldCheck } from "lucide-react";
 import {
   CartesianGrid,
   Line,
@@ -48,6 +51,13 @@ function SessionDetail() {
   const { user } = useAuth();
   const { data, isLoading, isError, error, refetch } = useSessionDetail(id);
 
+  const reportMutation = useMutation({
+    mutationFn: () => getSessionReportHtml({ data: { sessionId: id } }),
+    onSuccess: ({ html }) => {
+      if (html) printReportHtml(html, `mindbox-session_${id}.html`);
+    },
+  });
+
   if (isLoading) return <LoadingState label="Loading session…" />;
   if (isError || !data) {
     return (
@@ -72,6 +82,17 @@ function SessionDetail() {
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {!isReviewerView && <DeleteSessionDialog sessionId={id} />}
+            {!isReviewerView && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => reportMutation.mutate()}
+                disabled={reportMutation.isPending}
+              >
+                <FileText className="h-4 w-4" />{" "}
+                {reportMutation.isPending ? "Building…" : "Session report"}
+              </Button>
+            )}
             <Button variant="outline" size="sm" asChild>
               <Link to="/progress" search={{ tab: "sessions" }}>
                 <ArrowLeft className="h-4 w-4" /> Back to sessions

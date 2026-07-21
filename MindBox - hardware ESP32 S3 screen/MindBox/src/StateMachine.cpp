@@ -425,6 +425,20 @@ static bool inQuietHours() {
   return (s < e) ? (mins >= s && mins < e) : (mins >= s || mins < e);  // handle wrap
 }
 
+// Box-local UTC offset (seconds) at epoch ep, from the TZ set at NTP init (same
+// source as the header clock's localtime_r) via the field-difference of local vs
+// UTC broken-down time — portable on this newlib (no tm_gmtoff / timegm). Used
+// as the agenda fallback when the server's tzOffsetMin is 0.
+static long boxLocalOffsetSec(time_t ep) {
+  struct tm g, l;
+  gmtime_r(&ep, &g);
+  localtime_r(&ep, &l);
+  int dd = l.tm_yday - g.tm_yday;            // 0 or +/-1, or +/-365 at a year edge
+  if (dd > 1) dd = -1; else if (dd < -1) dd = 1;   // year-boundary wrap correction
+  return (((long)dd * 24 + (l.tm_hour - g.tm_hour)) * 60
+          + (l.tm_min - g.tm_min)) * 60 + (l.tm_sec - g.tm_sec);
+}
+
 // Header label for an ST_AGENDA page: "TODAY", or weekday + date for a paged
 // day ("Sun 20/7"), from the tz-shifted epoch via gmtime_r so the fields are
 // the OWNER's calendar. gmtime's tm_wday (0 = Sunday) agrees with the epoch-day
@@ -442,7 +456,12 @@ static void agendaDayLabel(char* out, size_t n) {
     snprintf(out, n, "+%dd", (int)s_agendaDay);
     return;
   }
-  time_t shifted = ep + (time_t)s_tzOffsetMin * 60 + (time_t)s_agendaDay * 86400;
+  // Owner offset from the server; when it's absent/zero, fall back to the box's
+  // TZ-correct local offset (same path as the header clock) so a missing server
+  // offset doesn't render UTC (3h behind in Israel summer).
+  int64_t offSec = (int64_t)s_tzOffsetMin * 60;
+  if (s_tzOffsetMin == 0) offSec = boxLocalOffsetSec(ep);
+  time_t shifted = ep + (time_t)offSec + (time_t)s_agendaDay * 86400;
   struct tm t;
   gmtime_r(&shifted, &t);   // gmtime on the shifted epoch = owner-local calendar
   snprintf(out, n, "%s %d/%d", DOW[t.tm_wday], t.tm_mday, t.tm_mon + 1);
@@ -454,7 +473,11 @@ static bool ownerLocalNow(int& minOfDay, uint32_t& dayKey) {
   if (!Cloud::haveClock()) return false;
   time_t ep = Cloud::nowEpoch();
   if (ep <= 0) return false;
-  int64_t local = (int64_t)ep + (int64_t)s_tzOffsetMin * 60;
+  // When the server offset is absent/zero, fall back to the box's TZ-correct
+  // local offset (header-clock path) so we don't treat epoch as UTC in Israel.
+  int64_t offSec = (int64_t)s_tzOffsetMin * 60;
+  if (s_tzOffsetMin == 0) offSec = boxLocalOffsetSec(ep);
+  int64_t local = (int64_t)ep + offSec;
   if (local < 0) local = 0;
   dayKey   = (uint32_t)(local / 86400);
   minOfDay = (int)((local % 86400) / 60);
@@ -660,9 +683,16 @@ static void handleRemoteCmd(const RemoteCmd& rc) {
       if (idleLike()) {
         s_pendingCycleOffer = false;
         s_pendingSetComplete = false;
-        clearSet();   // a remote start runs as a single interval, like a scheduled block
-        Serial.printf("[cmd] remote start %um\n", (unsigned)rc.durationMin);
-        startSessionMode(MODE_WORK, rc.durationMin);   // normal start chime path
+        if (rc.durationMin == 0) {
+          // arg 0 => run the FULL configured session (multi-block set + breaks +
+          // long break), the same entry the menu "Start" uses.
+          Serial.println("[cmd] remote start (full session)");
+          startSession();
+        } else {
+          clearSet();   // a one-off single interval, like a scheduled block
+          Serial.printf("[cmd] remote start %um\n", (unsigned)rc.durationMin);
+          startSessionMode(MODE_WORK, rc.durationMin);   // normal start chime path
+        }
       } else {
         Serial.println("[cmd] start ignored (session active)");
       }
@@ -1025,12 +1055,26 @@ void tick() {
         s_breakDur = cs.breakMin;
         Storage::setWorkDuration(s_workDur);
         Storage::setBreakDuration(s_breakDur);
+        // Adopt the rest of the site's pomodoro rhythm in the SAME once-per-rev
+        // block: cycles per set, and the long break AFTER the last focus block
+        // of the set (longBreakEvery = cycleCount matches the website semantics).
+        if (cs.cycles >= 1 && cs.cycles <= 8) {
+          s_cycleCount = cs.cycles;
+          Storage::setCycleCount(s_cycleCount);
+        }
+        if (cs.longBreakMin >= 1 && cs.longBreakMin <= 60) {
+          s_cfg.longBreakMin     = cs.longBreakMin;
+          s_cfg.longBreakEnabled = true;
+          s_cfg.longBreakEvery   = s_cycleCount;   // long break after the last one
+          Storage::saveConfig(s_cfg);              // long-break lives in DeviceConfig NVS
+        }
         Storage::setLastTimingRev(cs.timingRev);
         if (s_state == ST_IDLE) Inputs::setMinutes(s_workDur);  // refresh the shown duration
         Menu::invalidate();
         s_uiDirty = true;
-        Serial.printf("[cloud] adopted site timing %d/%d (rev %lu)\n",
-                      s_workDur, s_breakDur, (unsigned long)cs.timingRev);
+        Serial.printf("[cloud] adopted site timing %d/%d x%d lb%d (rev %lu)\n",
+                      s_workDur, s_breakDur, s_cycleCount, (int)s_cfg.longBreakMin,
+                      (unsigned long)cs.timingRev);
       }
 
       // Exam DND + idle badge + server stats + homework cache (all RAM only —

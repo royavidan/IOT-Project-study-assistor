@@ -39,6 +39,10 @@ export interface AppSettings {
   deviceFocusMin: number;
   /** Pomodoro break length (min) pushed to the box. */
   deviceBreakMin: number;
+  /** Long break length (min) — taken after `deviceCycles` focus blocks. */
+  deviceLongBreakMin: number;
+  /** Focus blocks in a session before the long break (the box's cycle count). */
+  deviceCycles: number;
   /** Exam/DND manual switch. Exam days in the calendar force DND on regardless. */
   examMode: boolean;
 }
@@ -75,6 +79,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   deviceThemeId: 0,
   deviceFocusMin: 25,
   deviceBreakMin: 5,
+  deviceLongBreakMin: 15,
+  deviceCycles: 4,
   examMode: false,
 };
 
@@ -95,7 +101,7 @@ async function fetchSettings(): Promise<AppSettings> {
     supabase
       .from("user_settings")
       .select(
-        "notifications_enabled, haptics_enabled, share_with_reviewers, reduce_motion, adaptive_coaching_enabled, quiet_hours_start, quiet_hours_end, semester_label, semester_start, semester_end, study_plan_mode, plan_day_start, plan_day_end, plan_daily_cap_min, device_sound_enabled, device_sound_level, device_chime_mask, auto_start_scheduled, device_theme_id, device_focus_min, device_break_min, exam_mode",
+        "notifications_enabled, haptics_enabled, share_with_reviewers, reduce_motion, adaptive_coaching_enabled, quiet_hours_start, quiet_hours_end, semester_label, semester_start, semester_end, study_plan_mode, plan_day_start, plan_day_end, plan_daily_cap_min, device_sound_enabled, device_sound_level, device_chime_mask, auto_start_scheduled, device_theme_id, device_focus_min, device_break_min, device_long_break_min, device_cycles, exam_mode",
       )
       .eq("user_id", user.id)
       .maybeSingle(),
@@ -153,6 +159,12 @@ async function fetchSettings(): Promise<AppSettings> {
       typeof s.device_focus_min === "number" ? s.device_focus_min : DEFAULT_SETTINGS.deviceFocusMin,
     deviceBreakMin:
       typeof s.device_break_min === "number" ? s.device_break_min : DEFAULT_SETTINGS.deviceBreakMin,
+    deviceLongBreakMin:
+      typeof s.device_long_break_min === "number"
+        ? s.device_long_break_min
+        : DEFAULT_SETTINGS.deviceLongBreakMin,
+    deviceCycles:
+      typeof s.device_cycles === "number" ? s.device_cycles : DEFAULT_SETTINGS.deviceCycles,
     examMode: Boolean(s.exam_mode ?? DEFAULT_SETTINGS.examMode),
   };
 }
@@ -183,22 +195,42 @@ async function saveSettings(next: AppSettings): Promise<void> {
     60,
     Math.max(1, Math.round(next.deviceBreakMin) || DEFAULT_SETTINGS.deviceBreakMin),
   );
+  const longBreakMin = Math.min(
+    60,
+    Math.max(1, Math.round(next.deviceLongBreakMin) || DEFAULT_SETTINGS.deviceLongBreakMin),
+  );
+  const cycles = Math.min(
+    8,
+    Math.max(1, Math.round(next.deviceCycles) || DEFAULT_SETTINGS.deviceCycles),
+  );
 
-  // Timing revision: stamp device_timing_updated_at ONLY when focus/break
-  // actually changed. The box adopts the values once per revision, so an
-  // unrelated settings save must not re-stomp an on-box spinner edit.
+  // Timing revision: stamp device_timing_updated_at ONLY when the pomodoro
+  // rhythm (focus/break/long-break/cycles) actually changed. The box adopts
+  // the values once per revision, so an unrelated settings save must not
+  // re-stomp an on-box spinner edit.
   const { data: prevRow, error: prevError } = await supabase
     .from("user_settings")
-    .select("device_focus_min, device_break_min")
+    .select("device_focus_min, device_break_min, device_long_break_min, device_cycles")
     .eq("user_id", user.id)
     .maybeSingle();
   if (prevError) throw new Error(prevError.message);
-  const prev = prevRow as { device_focus_min?: number; device_break_min?: number } | null;
-  // First-ever save with untouched defaults must NOT stamp either — timingRev 0
-  // means "site never set timing" and the box keeps its local durations.
+  const prev = prevRow as {
+    device_focus_min?: number;
+    device_break_min?: number;
+    device_long_break_min?: number;
+    device_cycles?: number;
+  } | null;
+  // First-ever save with untouched defaults must NOT stamp — timingRev 0 means
+  // "site never set timing" and the box keeps its local rhythm.
   const timingChanged = prev
-    ? Number(prev.device_focus_min) !== focusMin || Number(prev.device_break_min) !== breakMin
-    : focusMin !== DEFAULT_SETTINGS.deviceFocusMin || breakMin !== DEFAULT_SETTINGS.deviceBreakMin;
+    ? Number(prev.device_focus_min) !== focusMin ||
+      Number(prev.device_break_min) !== breakMin ||
+      Number(prev.device_long_break_min) !== longBreakMin ||
+      Number(prev.device_cycles) !== cycles
+    : focusMin !== DEFAULT_SETTINGS.deviceFocusMin ||
+      breakMin !== DEFAULT_SETTINGS.deviceBreakMin ||
+      longBreakMin !== DEFAULT_SETTINGS.deviceLongBreakMin ||
+      cycles !== DEFAULT_SETTINGS.deviceCycles;
 
   const { error: settingsError } = await supabase.from("user_settings").upsert(
     {
@@ -224,6 +256,8 @@ async function saveSettings(next: AppSettings): Promise<void> {
       device_theme_id: Math.max(0, Math.min(4, Math.round(next.deviceThemeId) || 0)),
       device_focus_min: focusMin,
       device_break_min: breakMin,
+      device_long_break_min: longBreakMin,
+      device_cycles: cycles,
       exam_mode: next.examMode,
       ...(timingChanged ? { device_timing_updated_at: new Date().toISOString() } : {}),
     },

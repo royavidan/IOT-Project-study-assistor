@@ -82,13 +82,18 @@ describe("encodeAgendaForDevice", () => {
   });
 
   it("caps titles by UTF-8 bytes without splitting a multi-byte character", () => {
-    // Hebrew letters are 2 UTF-8 bytes each: 20 letters = 40 bytes -> 11 fit in 23.
-    const hebrew = "א".repeat(20);
-    const title = encodeAgendaForDevice([item({ title: hebrew })]).split("|")[3];
+    // CJK stays multi-byte (only Hebrew is transliterated): 3 bytes each ->
+    // 7 fit in 23 without splitting a character.
+    const cjk = "字".repeat(20);
+    const title = encodeAgendaForDevice([item({ title: cjk })]).split("|")[3];
     expect(new TextEncoder().encode(title).length).toBeLessThanOrEqual(
       DEVICE_AGENDA_TITLE_MAX_BYTES,
     );
-    expect(title).toBe("א".repeat(11));
+    expect(title).toBe("字".repeat(7));
+  });
+
+  it("transliterates Hebrew titles to Latin (ASCII-only device fonts)", () => {
+    expect(encodeAgendaForDevice([item({ title: "אלגברה" })]).split("|")[3]).toBe("algbrh");
   });
 });
 

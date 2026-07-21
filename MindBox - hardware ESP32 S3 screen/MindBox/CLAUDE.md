@@ -121,7 +121,9 @@ recursive NVS mutex; the loop watchdog reboots on a stall. The box calls the web
 ### Site↔device features (2026-07 downlink growth)
 - **Downlink** (`GET /ingest/config`, parsed in `Cloud::syncDownlink`) gained: `themeId` (accent
   preset 0-4 → `Theme::setAccentPreset`, C_* colours are now macros over the active `AccentSet`),
-  `focusMin/breakMin/timingRev` (adopt-once-per-rev pomodoro timing; `Storage::lastTimingRev`),
+  `focusMin/breakMin/timingRev` (adopt-once-per-rev pomodoro timing; `Storage::lastTimingRev`) plus
+  `longBreakMin/cycles` (adopted in the SAME once-per-rev block → `s_cycleCount`/`Storage::setCycleCount`
+  + `s_cfg.longBreak*` via `saveConfig`, `longBreakEvery = cycleCount` = long break after the last block),
   `examMode` (DND) + `nextExamDays/Title` (root "EXAM Nd" badge via `Menu::setExamInfo`),
   `streakDays/weekFocusMin` (STATS rows via `Menu::setCloudStats`), `hwStr` (top-3 homework →
   `parseHwStr`), `weekStr` (rest-of-week schedule, days 1..6 ahead, ≤36 items → `parseWeekStr`;
@@ -137,6 +139,11 @@ recursive NVS mutex; the loop watchdog reboots on a stall. The box calls the web
   keep in sync with the web `command-encode.ts`): start/end reuse the menu paths, ring =
   `Sound::ring()` (find-my, MAX volume, bypasses every gate), message = alert chime + **`ST_MESSAGE`**
   splash (`Display::renderMessage`; held in a 1-slot buffer if a session is running).
+  **`CMD_START` with `cmdArg == 0`** (preserved as `durationMin 0` in `Cloud`, not clamped up) runs the
+  FULL configured session (`startSession()` — set + breaks + long break); `cmdArg > 0` is a one-off block.
+- **Agenda TZ safety net**: `ownerLocalNow`/`agendaDayLabel` fall back to the box's TZ-correct local
+  offset (`localtime_r`'s `tm_gmtoff`, same as the header clock) when `s_tzOffsetMin == 0`, so a
+  missing/zero server offset no longer renders the Today/agenda clock as UTC.
 - **`ST_HOMEWORK`** (`Display::renderHomework`): offered from ST_COMPLETE's go-idle path after a
   finished WORK interval (paired + `hwCount > 0`); tap = +25%, hold = done, Skip row/20s = exit;
   progress taps queue through `Cloud::postHomework` → `POST /ingest/homework`.

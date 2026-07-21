@@ -20,11 +20,23 @@ function input(over: Partial<LlmPromptInput> = {}): LlmPromptInput {
   return {
     todayKey: "2026-06-01",
     horizonDays: 7,
-    mode: { name: "balanced", workBlockMin: 50, dailyCapMin: 240, maxBlocksPerDay: 6 },
+    mode: {
+      name: "balanced",
+      workBlockMin: 50,
+      breakMin: 10,
+      longBreakMin: 30,
+      blocksBeforeLongBreak: 4,
+      dailyCapMin: 240,
+      maxBlocksPerDay: 6,
+    },
     freeSlotsByDay: new Map([
       ["2026-06-02", [{ start: 9 * 60, end: 12 * 60 }]],
       ["2026-06-01", [{ start: 14 * 60, end: 16 * 60 }]],
     ]),
+    meals: [
+      { start: 12 * 60 + 30, end: 13 * 60 + 30 },
+      { start: 18 * 60 + 30, end: 19 * 60 + 30 },
+    ],
     tasks: [TASK],
     recoveryStatus: "balanced",
     avgTirednessLast3: null,
@@ -73,5 +85,23 @@ describe("buildPlannerPrompt", () => {
     expect(system).toMatch(/dailyCapMin/);
     expect(system).toMatch(/assumption/i);
     expect(system).toMatch(/ONLY JSON/);
+  });
+
+  it("carries the pacing/behavioral rules and the break rhythm in the system prompt", () => {
+    const { system } = buildPlannerPrompt(input());
+    expect(system).toMatch(/breakMin/);
+    expect(system).toMatch(/back-to-back/i);
+    expect(system).toMatch(/Spread the day out/i);
+    expect(system).toMatch(/Interleave subjects/i);
+    expect(system).toMatch(/bestWindow/);
+  });
+
+  it("passes the protected meal windows to the model as HH:MM", () => {
+    const { user } = buildPlannerPrompt(input());
+    const parsed = JSON.parse(user) as { meals: { start: string; end: string }[] };
+    expect(parsed.meals).toEqual([
+      { start: "12:30", end: "13:30" },
+      { start: "18:30", end: "19:30" },
+    ]);
   });
 });

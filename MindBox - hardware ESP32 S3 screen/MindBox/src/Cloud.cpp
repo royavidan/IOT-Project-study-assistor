@@ -600,6 +600,8 @@ static void syncDownlink()
   cs.focusMin = (uint16_t)jInt(resp, "focusMin", 0);
   cs.breakMin = (uint16_t)jInt(resp, "breakMin", 0);
   cs.timingRev = (uint32_t)jInt(resp, "timingRev", 0);
+  cs.longBreakMin = (uint16_t)jInt(resp, "longBreakMin", 15);
+  cs.cycles = (uint8_t)jInt(resp, "cycles", 4);
   // Exam/DND + idle badge + server-computed stats (F4). -1 = none/unknown.
   cs.examMode = jBool(resp, "examMode", false);
   cs.nextExamDays = (int16_t)jInt(resp, "nextExamDays", -1);
@@ -633,9 +635,10 @@ static void syncDownlink()
         rc.type = (uint8_t)type;
         rc.mode = MODE_WORK;
         long arg = jInt(resp, "cmdArg", 0);
-        if (arg <= 0)
-          arg = 25; // CMD_START duration: default 25, clamped to the session band
-        rc.durationMin = (uint16_t)(arg < 5 ? 5 : (arg > 120 ? 120 : arg));
+        // cmdArg == 0 => run the box's FULL configured session (preserved as
+        // durationMin 0). A positive arg is a one-off block, clamped to 5..120.
+        rc.durationMin = (arg <= 0) ? 0
+                       : (uint16_t)(arg < 5 ? 5 : (arg > 120 ? 120 : arg));
         char text[48];
         jStr(resp, "cmdText", text, sizeof(text));
         strlcpy(rc.text, text, sizeof(rc.text));

@@ -207,6 +207,27 @@ describe("sanitizeLlmBlocks", () => {
     expect(result.rejected[0].reason).toMatch(/Too many blocks/);
   });
 
+  it("reserves minGapMin between blocks so they can't be scheduled back-to-back", () => {
+    // Two proposals butted together (09:00–09:50 then 09:50–10:40) in one slot.
+    const result = sanitizeLlmBlocks(
+      {
+        blocks: [
+          block({ startTime: "09:00", endTime: "09:50" }),
+          block({ startTime: "09:50", endTime: "10:40" }),
+        ],
+      },
+      [task()],
+      slots({ [TOMORROW]: [{ start: 9 * 60, end: 13 * 60 }] }),
+      { ...OPTS, minGapMin: 10 },
+    );
+    // Both are placed, but the second is pushed past the 10-min break: it can't
+    // start until 10:00 (09:50 end + 10 gap), so they're never back-to-back.
+    expect(result.blocks).toHaveLength(2);
+    expect(result.blocks[0].endTime).toBe("09:50");
+    expect(result.blocks[1].startTime).toBe("10:00");
+    expect(result.warnings.length).toBeGreaterThan(0);
+  });
+
   it("rejects blocks on or after the task deadline", () => {
     const result = sanitizeLlmBlocks(
       { blocks: [block({ dateKey: "2026-06-08" })] },

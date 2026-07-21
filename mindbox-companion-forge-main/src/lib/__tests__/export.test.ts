@@ -62,8 +62,14 @@ describe("sessionsToCsv", () => {
   it("renders null environment readings as empty cells", () => {
     const csv = sessionsToCsv([session({ noiseAvg: null, tempC: null, lightLux: null })]);
     const row = csv.split("\r\n")[1];
-    // ...presence(2),noise(),temp(),light() -> trailing empties
-    expect(row.endsWith("2,,,")).toBe(true);
+    // ...presence(2),noise(),temp(),light(),tiredness() -> trailing empties
+    expect(row.endsWith("2,,,,")).toBe(true);
+  });
+
+  it("includes the tiredness check-in value when present", () => {
+    const csv = sessionsToCsv([session({ tiredness: 3 })]);
+    expect(csv.split("\r\n")[0]).toContain("Tiredness");
+    expect(csv.split("\r\n")[1].endsWith(",3")).toBe(true);
   });
 });
 

@@ -30,7 +30,9 @@ on dashboard + `/calendar`). Assumptions/thresholds: `docs/ASSUMPTIONS.md`. Test
     weekly cap = daily×5).
   - `busyIntervalsForDay` + `freeSlotsForDay` — invert classes/exams/hand-made study/past sessions
     into free gaps within the working window, minus quiet hours (`quietIntervalsWithin` handles
-    overnight). **Not** built on `buildDayAgenda` (that drops bad-time events silently).
+    overnight) and minus `SlotOpts.meals` (both engines pass `MEAL_BREAKS` — lunch 12:30–13:30,
+    dinner 18:30–19:30 — so study never runs over meals). **Not** built on `buildDayAgenda` (that
+    drops bad-time events silently).
   - `examReviewOffsets(daysUntilExam)` — SM-2-style spacing (14/7/3/1, compressed <7d, extended >21d).
   - `lectureBacklogFor(course, events, now, semStart, semEnd)` — a course's _(class meetings occurred up
     to today)_ − _(watched count)_; drives **lecture-review catch-up** tasks (gated by
@@ -41,8 +43,9 @@ on dashboard + `/calendar`). Assumptions/thresholds: `docs/ASSUMPTIONS.md`. Test
     exam). Scores tasks
     (`importance×0.6 + urgency×0.4`), front-loads effort across eligible days, places mode-sized blocks
     into slots honoring daily/weekly caps + `maxBlocksPerDay`, prefers the circadian best-window for
-    hard tasks, and throttles when `recovery.ready && status==='strained'`. Deterministic. Generated
-    blocks are always `kind:'once'`.
+    hard tasks, and throttles when `recovery.ready && status==='strained'`. For interleave modes it
+    rotates a day's blocks across its free chunks (morning/afternoon/evening around meals) instead of
+    piling them into the earliest one. Deterministic. Generated blocks are always `kind:'once'`.
 - `queries.ts` — `usePlanInputs()` composes existing hooks (schedule/sessions/homework/**courses**/
   settings/external-load + `computeWellbeing`) into a `build(mode, horizonDays, includeLectureReview)`
   factory; `useCommitPlan()`

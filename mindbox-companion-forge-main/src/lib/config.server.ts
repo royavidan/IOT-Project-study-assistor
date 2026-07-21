@@ -36,5 +36,15 @@ export function getServerConfig() {
     // Shared secret an external scheduler sends as `x-jobs-secret` to trigger
     // `/jobs/*` routes (e.g. the daily load review). Server-only.
     jobsSecret: process.env.JOBS_SECRET,
+    // Report pipeline. Self-contained today: the PDF renders via headless Chrome
+    // (Puppeteer) with inline SVG charts, the AI executive summary uses the same
+    // server-side `generate` Edge Function, and email uses SMTP/Resend — NO
+    // dedicated report API key is required. This block is the clean seam for
+    // future toggles/keys: set `REPORT_AI_SUMMARY=off` to skip the LLM summary;
+    // `REPORT_SERVICE_KEY` is reserved for an optional external PDF/chart service.
+    report: {
+      aiSummary: process.env.REPORT_AI_SUMMARY !== "off",
+      serviceKey: process.env.REPORT_SERVICE_KEY,
+    },
   };
 }

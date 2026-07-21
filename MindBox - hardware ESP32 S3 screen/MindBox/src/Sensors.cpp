@@ -43,6 +43,20 @@ static int      s_micDead = 0;
 static uint32_t s_lastBusCheck = 0;
 static int      s_busFailStreak = 0;
 
+#if HAS_PRESENCE
+// --- Presence occupancy estimator state (see config.h PRESENCE_* + Sensors.cpp updateOccupancy) ---
+static int      s_bgDist    = PRESENCE_ABS_MAX;   // learned empty-desk distance (slow EWMA)
+static float    s_movement  = 0.0f;               // micro-motion energy (mm, EWMA) — ~0 for a static object
+static float    s_conf      = 0.0f;               // occupancy confidence 0..1 (EWMA + hysteresis)
+static bool     s_occupied  = false;              // debounced present() output
+static int      s_medRing[3] = { -1, -1, -1 };    // last-3 valid distances for median smoothing
+static uint32_t s_medN      = 0;
+static int      s_prevDist  = -1;
+static bool     s_seenLife  = false;              // have we ever seen movement/activity (else a boot-time object)
+static uint32_t s_lastMoveAt = 0, s_lastActivityAt = 0, s_lastNearAt = 0;
+static float    s_sensGuard = 1.0f, s_sensMove = 1.0f, s_sensStill = 1.0f;  // sensitivity scales (Low/Med/High)
+#endif
+
 static float s_noiseScale = NOISE_FULL_SCALE_DEFAULT;
 static float s_lightLuxScale = LIGHT_LUX_SCALE_DEFAULT;
 static float s_lightVarScale = LIGHT_VAR_SCALE_DEFAULT;
@@ -127,7 +141,7 @@ static bool i2cRecover() {
   Wire.setTimeOut(I2C_TIMEOUT_MS);
 #if HAS_PRESENCE
   if (vl53.begin(0x29, &Wire)) {
-    vl53.VL53L1X_SetDistanceMode(2);
+    vl53.VL53L1X_SetDistanceMode(1);             // short range: lower ranging noise at desk distance
     vl53.setTimingBudget(50);
     vl53.startRanging();
     s_tofPresent = true;
@@ -137,6 +151,84 @@ static bool i2cRecover() {
 #endif
   return freed;
 }
+
+#if HAS_PRESENCE
+static int median3(int a, int b, int c) {
+  if (a > b) { int t = a; a = b; b = t; }
+  if (b > c) { int t = b; b = c; c = t; }
+  if (a > b) { int t = a; a = b; b = t; }
+  return b;
+}
+
+// The occupancy estimator: called once per ToF poll with the raw distance and whether the range was valid
+// (status 0 + plausible). It maintains an adaptive empty-desk baseline, a micro-motion signal, mic/light
+// fusion, and a hysteresis'd confidence. `present()` returns the debounced `s_occupied` output. Called even on
+// INVALID reads (valid=false) so a "no target" range (person left) still decays confidence toward away.
+static void updateOccupancy(int rawDist, bool valid, uint32_t now) {
+  bool nearNow = false;
+
+  if (valid) {
+    // Median-of-3 smoothing kills single-sample spikes while preserving real fidget/posture motion.
+    s_medRing[s_medN % 3] = rawDist; s_medN++;
+    int working = (s_medN >= 3) ? median3(s_medRing[0], s_medRing[1], s_medRing[2]) : rawDist;
+    s_lastDist = working;
+
+    // Micro-motion: EWMA of frame-to-frame deltas above the noise floor.
+    if (s_prevDist > 0) {
+      int delta = working > s_prevDist ? working - s_prevDist : s_prevDist - working;
+      float sig = delta > PRESENCE_MOVE_NOISE_MM ? (float)delta : 0.0f;
+      s_movement += PRESENCE_MOVE_ALPHA * (sig - s_movement);
+      if (delta > PRESENCE_MOVE_NOISE_MM) { s_lastMoveAt = now; s_seenLife = true; }
+    }
+    s_prevDist = working;
+
+    // Adaptive near test: closer than the learned empty-desk baseline (by a sensitivity-scaled guard).
+    int guard = (int)(PRESENCE_BG_GUARD_MM * s_sensGuard);
+    int nearThresh = s_bgDist - guard;
+    if (nearThresh > PRESENCE_ABS_MAX) nearThresh = PRESENCE_ABS_MAX;
+    nearNow = (working >= PRESENCE_MIN_MM && working <= nearThresh);
+    if (nearNow) {
+      s_lastNearAt = now;
+    } else {
+      // Learn the empty-desk distance ONLY from not-near reads (never pollute it with an occupant).
+      s_bgDist += (int)((working - s_bgDist) * PRESENCE_BG_ALPHA);
+      if (s_bgDist > 4000) s_bgDist = 4000;
+      if (s_bgDist < PRESENCE_MIN_MM) s_bgDist = PRESENCE_MIN_MM;
+    }
+  } else {
+    s_prevDist = -1;   // a re-acquired target must not register as one giant jump
+  }
+
+  // Fusion: mic level + light p-p variance corroborate a living occupant. Conservative — it can HOLD/boost
+  // confidence but never fabricate presence with no near target (so a loud empty room != present).
+  bool activity = (s_noise > PRESENCE_FUSE_NOISE);
+#if HAS_LIGHT
+  if (s_lightVar > PRESENCE_FUSE_LIGHTVAR) activity = true;
+#endif
+  if (activity) { s_lastActivityAt = now; s_seenLife = true; }
+  bool activityRecent = (now - s_lastActivityAt) < PRESENCE_FUSE_RECENT_MS;
+  bool moving = ((now - s_lastMoveAt) < PRESENCE_MOVE_RECENT_MS) ||
+                (s_movement > PRESENCE_MOVE_PRESENT * s_sensMove);
+
+  float score;
+  if (nearNow) {
+    uint32_t lastLife = (s_lastActivityAt > s_lastMoveAt) ? s_lastActivityAt : s_lastMoveAt;
+    uint32_t stillFor = now - lastLife;
+    unsigned long stillLimit = (unsigned long)(PRESENCE_STILL_OBJECT_MS * s_sensStill);
+    if (moving || activityRecent) score = 1.0f;               // near + alive -> clearly a person
+    else if (s_seenLife && stillFor < stillLimit) score = 0.70f;  // near, recently alive -> hold (grace)
+    else score = 0.0f;                                        // near but dead-still + silent -> object, not person
+  } else {
+    // Possibly leaned out of the ~27deg cone but still working -> hold present briefly.
+    if (s_occupied && activityRecent && (now - s_lastNearAt) < PRESENCE_FUSE_HOLD_MS) score = 0.50f;
+    else score = 0.0f;
+  }
+
+  s_conf += PRESENCE_CONF_ALPHA * (score - s_conf);
+  if (s_conf >= PRESENCE_CONF_ENTER) s_occupied = true;        // hysteresis: two thresholds = no flicker
+  else if (s_conf <= PRESENCE_CONF_LEAVE) s_occupied = false;
+}
+#endif
 
 namespace Sensors {
 
@@ -163,11 +255,16 @@ void init() {
   Wire.setClock(400000);                  // (USE_TOUCH); re-begin is harmless. The ToF (0x29) and FT6336 touch
   Wire.setTimeOut(I2C_TIMEOUT_MS);        // (0x38) are two addresses on this single bus — no pad-swapping.
   if (vl53.begin(0x29, &Wire)) {
-    vl53.VL53L1X_SetDistanceMode(2);   // long range
+    vl53.VL53L1X_SetDistanceMode(1);   // short range: lower ranging noise at desk distance (~1.3m max is plenty)
     vl53.setTimingBudget(50);
     vl53.startRanging();
     s_tofPresent = true;
-    Serial.println("[tof] VL53L1X init OK @0x29 - ranging");
+    // Seed the occupancy estimator: baseline far, "life" clock unset so a static object at boot isn't "present".
+    s_bgDist = PRESENCE_ABS_MAX;
+    s_seenLife = false;
+    s_lastMoveAt = s_lastActivityAt = s_lastNearAt = millis();
+    setPresenceSensitivity(Storage::presenceSensIdx());
+    Serial.println("[tof] VL53L1X init OK @0x29 - ranging (short mode, occupancy estimator)");
   } else {
     s_tofPresent = false;              // degrade gracefully (no auto-pause)
     // Make the failure visible: probe 0x29 so the log says WHY. No ACK => wiring / XSHUT held low /
@@ -221,16 +318,20 @@ void tick() {
   static uint32_t s_lastTofPoll = 0;
   if (s_tofPresent && millis() - s_lastTofPoll >= TOF_POLL_MS) {
     s_lastTofPoll = millis();
-    bool rdy = vl53.dataReady();
-    int16_t d = rdy ? vl53.distance() : -1;
-    if (rdy) vl53.clearInterrupt();
-    if (rdy && d > 0 && d < 4000) s_lastDist = d;   // ignore implausible readings (Story 18)
+    if (vl53.dataReady()) {
+      int16_t d = vl53.distance();
+      uint8_t status = vl53.vl_status;
+      vl53.clearInterrupt();
+      // Gate on the sensor's own range status (0 = valid) AND a plausibility clamp — a status-invalid read with a
+      // plausible mm value used to be trusted. Feed the estimator either way: an invalid/"no target" read (the
+      // person left) must still decay confidence toward away, not freeze the last "present" bit.
+      bool valid = (status == 0 && d > 0 && d < 4000);
+      updateOccupancy(d, valid, millis());
 #if TOF_DEBUG
-    // Pinpoints a STUCK reading: ready=0 => not re-arming (clearInterrupt/dataReady failing on the shared bus);
-    // ready=1 + status!=0 => sensor returns a value but the range is invalid; ready=1 + raw constant => optics
-    // (pointed at a fixed surface); raw outside (0,4000) => the clamp is rejecting it. status 0 = valid range.
-    Serial.printf("[tof] ready=%d raw=%d status=%u kept=%d\n", rdy, d, (unsigned)vl53.vl_status, s_lastDist);
+      Serial.printf("[tof] raw=%d st=%u valid=%d base=%d move=%.0f conf=%.2f occ=%d\n",
+                    d, (unsigned)status, valid ? 1 : 0, s_bgDist, s_movement, s_conf, s_occupied ? 1 : 0);
 #endif
+    }
   }
   // I2C watchdog: the ToF is our bus canary. If it stops ACKing, recover the bus.
   // SDA still held after recovery = wedged bus (also kills the screen) -> critical
@@ -301,14 +402,54 @@ int   presenceMm() { return s_lastDist; }
 
 bool present() {
 #if HAS_PRESENCE
-  if (!s_tofPresent) return true;             // can't tell -> assume present
-  return s_lastDist > 0 && s_lastDist < PRESENCE_NEAR_MM;
+  if (!s_tofPresent) return true;             // can't tell -> assume present (never a false auto-pause)
+  return s_occupied;                          // debounced occupancy estimate (updateOccupancy)
 #else
   return true;
 #endif
 }
 
 unsigned long absentForMs() { return present() ? 0 : (millis() - s_absentAt); }
+
+float occupancyConfidence() {
+#if HAS_PRESENCE
+  return s_tofPresent ? s_conf : 1.0f;
+#else
+  return 1.0f;
+#endif
+}
+
+float presenceMovement() {
+#if HAS_PRESENCE
+  return s_movement;
+#else
+  return 0.0f;
+#endif
+}
+
+int presenceBaselineMm() {
+#if HAS_PRESENCE
+  return s_tofPresent ? s_bgDist : -1;
+#else
+  return -1;
+#endif
+}
+
+// Menu "Sensitivity": scale the estimator's thresholds. Low = strict (harder to call present); High = eager
+// (easier, and holds a still occupant present longer before treating them as an object).
+void setPresenceSensitivity(uint8_t idx) {
+#if HAS_PRESENCE
+  if (idx > 2) idx = 1;
+  static const float guard[3] = { 1.4f, 1.0f, 0.6f };   // Low..High: smaller guard = easier to be "near"
+  static const float move[3]  = { 1.5f, 1.0f, 0.6f };   // Low..High: smaller = less movement needed for "alive"
+  static const float still[3] = { 0.6f, 1.0f, 1.8f };   // Low..High: larger = holds a still occupant longer
+  s_sensGuard = guard[idx];
+  s_sensMove  = move[idx];
+  s_sensStill = still[idx];
+#else
+  (void)idx;
+#endif
+}
 
 bool readTemp(float& c) {
 #if HAS_TEMP

@@ -147,9 +147,31 @@ static const unsigned long SENSOR_WARMUP_MS   = 5000UL;
 static const unsigned long SAMPLE_PERIOD_MS          = 60000UL;
 static const unsigned long SAMPLE_PERIOD_COACHING_MS = 30000UL;
 static const unsigned long SAMPLE_PERIOD_BREAK_MS    = 120000UL;
-static const int           PRESENCE_NEAR_MM   = 700;
+static const int           PRESENCE_NEAR_MM   = 700;   // legacy seed / medium-sensitivity reference
 static const unsigned long PRESENCE_PAUSE_MS  = 30000UL;
 static const unsigned long PRESENCE_END_MS    = 300000UL;
+// --- Presence occupancy estimator (Sensors.cpp) -----------------------------
+// Replaces the naive "dist < PRESENCE_NEAR_MM" bit with a stateful estimator:
+// status-gated + median-smoothed distance, an adaptive empty-desk baseline (so
+// the setup distance no longer matters), a micro-motion signal (a seated human
+// fidgets/shifts; a static object doesn't), conservative mic/light fusion, and a
+// hysteresis'd confidence. Menu "Sensitivity" (Low/Med/High) scales these.
+static const int           PRESENCE_MIN_MM        = 250;    // closer than this = implausible (sensor face) -> ignore
+static const int           PRESENCE_ABS_MAX       = 1500;   // farther is never "at the desk"; also the baseline seed
+static const int           PRESENCE_BG_GUARD_MM   = 250;    // must be >= this much closer than the learned baseline
+static const float         PRESENCE_BG_ALPHA      = 0.02f;  // empty-desk baseline EWMA (slow; only while not-near)
+static const int           PRESENCE_MOVE_NOISE_MM = 12;     // |Δdist| below this is sensor noise, not motion
+static const unsigned long PRESENCE_MOVE_RECENT_MS = 12000UL;  // movement within this window => "alive"
+static const unsigned long PRESENCE_STILL_OBJECT_MS = 90000UL; // near but dead-still + silent this long => "object"
+static const float         PRESENCE_MOVE_ALPHA    = 0.10f;  // micro-motion EWMA (diagnostics + secondary trigger)
+static const float         PRESENCE_MOVE_PRESENT  = 6.0f;   // movement-EWMA (mm) above this also counts as "alive"
+static const float         PRESENCE_CONF_ALPHA    = 0.15f;  // confidence EWMA (~1s response at 5Hz)
+static const float         PRESENCE_CONF_ENTER    = 0.60f;  // hysteresis: rise above -> present
+static const float         PRESENCE_CONF_LEAVE    = 0.35f;  // hysteresis: fall below -> away
+static const float         PRESENCE_FUSE_NOISE    = 0.15f;  // normalized mic level above this = activity
+static const float         PRESENCE_FUSE_LIGHTVAR = 0.15f;  // light p-p variance above this = movement/shadow
+static const unsigned long PRESENCE_FUSE_RECENT_MS = 8000UL;   // fusion activity counts as recent within this
+static const unsigned long PRESENCE_FUSE_HOLD_MS   = 8000UL;   // hold present briefly when target leaves the cone
 static const float         NOISE_FULL_SCALE_DEFAULT = 2000.0f;
 // Maps mic level to an approximate real-world loudness: dB_SPL = 20*log10(acRms/32768) + offset.
 // 116 pairs with reg 0x16 = +12dB ADC gain (the dynamic-range compromise: +18dB clipped loud sound,
@@ -179,7 +201,8 @@ static const unsigned long TELEMETRY_PERIOD_MS = 30000UL; // heartbeat; doubles 
 // lwip pbuf-double-free race. The heartbeat (TELEMETRY_PERIOD_MS) is unaffected.
 static const unsigned long TELEMETRY_MIN_GAP_MS = 3000UL;
 static const unsigned long SESSION_CLOCK_MS    = 10UL;
-static const unsigned long TOF_POLL_MS         = 500UL;   // ToF ranging period (shares the bus with touch; modest rate)
+static const unsigned long TOF_POLL_MS         = 200UL;   // ToF ranging period 5Hz (feeds the micro-motion window; 50ms
+                                                          // budget leaves headroom; shares the touch bus — raise to 500 if unstable)
 #define TOF_DEBUG 1   // 1 = print per-poll ToF diagnostics (ready/raw/status) to serial to debug a stuck reading; set 0 once confirmed
 static const unsigned long WIFI_STATUS_CACHE_MS = 1000UL;
 

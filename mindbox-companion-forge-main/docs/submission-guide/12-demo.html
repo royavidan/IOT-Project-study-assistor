@@ -2,125 +2,389 @@
 <h1>12. תסריט ההדגמה (30 דקות)</h1>
 
 <div class="lead">
-עיקרון המנחה: <b>"תדאגו שיש דרך להציג ולוודא כל טענה שאתם טוענים."</b> הפרק הזה נותן תסריט מלא של
-30 דקות שבו <b>כל טענה מלווה בהוכחה חיה</b>, עם הפלט המדויק שצריך להצביע עליו, וגיבוי בסימולטור אם
-החומרה מסרבת לשתף פעולה.
+  עיקרון המנחה: <b>"תדאגו שיש דרך להציג ולוודא כל טענה שאתם טוענים."</b> הפרק הזה נותן תסריט מלא של
+  30 דקות שבו <b>כל טענה מלווה בהוכחה חיה</b>, עם הפלט המדויק שצריך להצביע עליו, וגיבוי בסימולטור אם
+  החומרה מסרבת לשתף פעולה.
 </div>
 
 <h2>12.1 צ'ק-ליסט לפני הדמו</h2>
 <table>
-  <tr><th>#</th><th>מה לוודא</th><th>למה</th></tr>
-  <tr><td>1</td><td><b>ספק 5V חזק</b> (מטען קיר/פאוורבנק טוב, לא רק USB של לפטופ)</td><td>המיקרופון+ToF מעלים זרם boot; ספק חלש ⇒ brownout ואתחול-לולאה (פרק 8)</td></tr>
-  <tr><td>2</td><td>רשת <b>Wi-Fi 2.4GHz</b> זמינה (לא 5GHz בלבד)</td><td>ה-ESP32-S3 תומך רק ב-2.4GHz</td></tr>
-  <tr><td>3</td><td>dev server רץ (<code>bun run dev</code> → <code>http://localhost:8080</code>) או האתר המפורסם, עם <code>DEVICE_INGEST_SECRET</code> ומפתחות Supabase <b>תואמים</b> למכשיר</td><td>אחרת המכשיר יקבל 401 מול הענן</td></tr>
-  <tr><td>4</td><td><code>/device</code> פתוח על מסך גדול; המכשיר <b>מצומד</b> לחשבון</td><td>נקודת ההוכחה החזותית המרכזית</td></tr>
-  <tr><td>5</td><td>Serial monitor פתוח @<b>115200</b></td><td>self-test + מוניטור <code>m</code></td></tr>
-  <tr><td>6</td><td>המגע <b>מכויל</b> (אם לא — החזקה ארוכה על BOOT)</td><td>ניווט חלק בזמן הדמו</td></tr>
-  <tr><td>7</td><td>גיבוי: <code>bun run simulate</code> נבדק שרץ</td><td>תוכנית-מגירה אם החומרה נופלת</td></tr>
+  <tr>
+    <th>#</th>
+    <th>מה לוודא</th>
+    <th>למה</th>
+  </tr>
+  <tr>
+    <td>1</td>
+    <td><b>ספק 5V חזק</b> (מטען קיר/פאוורבנק טוב, לא רק USB של לפטופ)</td>
+    <td>המיקרופון+ToF מעלים זרם boot; ספק חלש ⇒ brownout ואתחול-לולאה (פרק 8)</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>רשת <b>Wi-Fi 2.4GHz</b> זמינה (לא 5GHz בלבד)</td>
+    <td>ה-ESP32-S3 תומך רק ב-2.4GHz</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>
+      dev server רץ (<code>bun run dev</code> → <code>http://localhost:8080</code>) או האתר המפורסם,
+      עם <code>DEVICE_INGEST_SECRET</code> ומפתחות Supabase <b>תואמים</b> למכשיר
+    </td>
+    <td>אחרת המכשיר יקבל 401 מול הענן</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td><code>/device</code> פתוח על מסך גדול; המכשיר <b>מצומד</b> לחשבון</td>
+    <td>נקודת ההוכחה החזותית המרכזית</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td>Serial monitor פתוח @<b>115200</b></td>
+    <td>self-test + מוניטור <code>m</code></td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td>המגע <b>מכויל</b> (אם לא — החזקה ארוכה על BOOT)</td>
+    <td>ניווט חלק בזמן הדמו</td>
+  </tr>
+  <tr>
+    <td>7</td>
+    <td>גיבוי: <code>bun run simulate</code> נבדק שרץ</td>
+    <td>תוכנית-מגירה אם החומרה נופלת</td>
+  </tr>
 </table>
 
 <h2>12.2 טבלת טענה → הוכחה (עם הפלט המדויק)</h2>
 <table>
-  <tr><th class="ltr">#</th><th>הטענה</th><th>הפעולה החיה</th><th>הפלט המדויק להצביע עליו</th></tr>
-  <tr><td>1</td><td>המכשיר מדווח לענן כל 30s</td><td>לפתוח <code>/device</code> ולחכות</td><td>נקודת Online ירוקה; "Room right now" מתעדכן. כיבוי ⇒ "Last seen" תוך 90s</td></tr>
-  <tr><td>2</td><td>מיקרופון I2S אמיתי מודד רעש</td><td>מחיאת כף ליד הקופסה</td><td>Serial <code>a</code>: RMS קופץ; מסך Diag: <code>pp</code> קופץ; הערך באתר בפעימה הבאה</td></tr>
-  <tr><td>3</td><td>ToF מזהה נוכחות</td><td>להזיז יד קדימה/אחורה</td><td>Serial <code>m</code>: <code>dist=Nmm</code> משתנה חי; התרחקות בסשן ⇒ Away</td></tr>
-  <tr><td>4</td><td>טמפ'/לחות נמדדות</td><td>נשיפה חמה על ה-DHT11</td><td>הטמפ' עולה ב-Serial/Diag תוך שניות, ואז ב-"Room right now"</td></tr>
-  <tr><td>5</td><td>חיישן אור + בהירות אוטומטית</td><td>לכסות את החיישן ביד</td><td>ה-lux צונח ב-Diag; <b>המסך מתעמעם פיזית</b></td></tr>
-  <tr><td>6</td><td>הפרעות מגיעות לענן דגימה-בדגימה</td><td>סשן קצר עם רעש מכוון + התרחקות</td><td><code>/session/$id</code>: גרף FLE+רעש לאורך הדקות + ספירת הפרעות</td></tr>
-  <tr><td>7</td><td>האתר שולט במכשיר מרחוק</td><td>"Ring my device" מ-<code>/device</code></td><td>המכשיר מצלצל ≤60s; באתר Queued→Sent→Done</td></tr>
-  <tr><td>8</td><td>שינוי הגדרה מגיע למכשיר</td><td>להחליף ערכת צבעים ב-Settings</td><td>צבעי המסך מתחלפים ≤60s</td></tr>
-  <tr><td>9</td><td>שיתוף IO21 (אנקודר+טמפ') עובד</td><td>לסובב אנקודר, ללחוץ ציר, לנשוף על DHT</td><td>הסמן זז (IO2/14) · בחירה (IO21) · טמפ' עולה (IO21) — מאותו רכיב, בלי התנגשות</td></tr>
-  <tr><td>10</td><td>offline מלא + סנכרון</td><td>לכבות ראוטר, סשן שלם, להדליק</td><td>Serial <code>q</code>: סשן בתור ⇒ מופיע באתר עם זמנים נכונים (NTP)</td></tr>
-  <tr><td>11</td><td>תקלת חיישן מדווחת, לא נבלעת</td><td>לנתק DHT (או <code>--sensor-fault</code>)</td><td>שורת Fault אדומה ב-<code>/device</code>; StateBadge → danger</td></tr>
-  <tr><td>12</td><td>שרידות ניתוק חשמל</td><td>לנתק USB באמצע סשן ולחבר</td><td>עולה עם "Resume session?"; boot מציג את סיבת האיפוס</td></tr>
-  <tr><td>13</td><td>העברת דאטה מאומתת בזהות</td><td><code>curl</code> ל-<code>/ingest/config</code> בלי header</td><td><b>401</b>; עם ה-header ⇒ JSON מלא</td></tr>
-  <tr><td>14</td><td>שתי ליבות — המסך שורד עומס רשת</td><td>לנתק Wi-Fi באמצע סשן</td><td>המסך/מגע ממשיכים חלק; ספירת הסשן מדויקת</td></tr>
-  <tr><td>15</td><td>שני התקנים על באס I2C אחד</td><td>self-test ב-boot</td><td>סריקת I2C מציגה <code>0x38</code> + <code>0x29</code></td></tr>
+  <tr>
+    <th class="ltr">#</th>
+    <th>הטענה</th>
+    <th>הפעולה החיה</th>
+    <th>הפלט המדויק להצביע עליו</th>
+  </tr>
+  <tr>
+    <td>1</td>
+    <td>המכשיר מדווח לענן כל 30s</td>
+    <td>לפתוח <code>/device</code> ולחכות</td>
+    <td>נקודת Online ירוקה; "Room right now" מתעדכן. כיבוי ⇒ "Last seen" תוך 90s</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>מיקרופון I2S אמיתי מודד רעש</td>
+    <td>מחיאת כף ליד הקופסה</td>
+    <td>Serial <code>a</code>: RMS קופץ; מסך Diag: <code>pp</code> קופץ; הערך באתר בפעימה הבאה</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>ToF מזהה נוכחות</td>
+    <td>להזיז יד קדימה/אחורה</td>
+    <td>Serial <code>m</code>: <code>dist=Nmm</code> משתנה חי; התרחקות בסשן ⇒ Away</td>
+  </tr>
+  <tr>
+    <td>4</td>
+    <td>טמפ'/לחות נמדדות</td>
+    <td>נשיפה חמה על ה-DHT11</td>
+    <td>הטמפ' עולה ב-Serial/Diag תוך שניות, ואז ב-"Room right now"</td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td>חיישן אור + בהירות אוטומטית</td>
+    <td>לכסות את החיישן ביד</td>
+    <td>ה-lux צונח ב-Diag; <b>המסך מתעמעם פיזית</b></td>
+  </tr>
+  <tr>
+    <td>6</td>
+    <td>הפרעות מגיעות לענן דגימה-בדגימה</td>
+    <td>סשן קצר עם רעש מכוון + התרחקות</td>
+    <td><code>/session/$id</code>: גרף FLE+רעש לאורך הדקות + ספירת הפרעות</td>
+  </tr>
+  <tr>
+    <td>7</td>
+    <td>האתר שולט במכשיר מרחוק</td>
+    <td>"Ring my device" מ-<code>/device</code></td>
+    <td>המכשיר מצלצל ≤60s; באתר Queued→Sent→Done</td>
+  </tr>
+  <tr>
+    <td>8</td>
+    <td>שינוי הגדרה מגיע למכשיר</td>
+    <td>להחליף ערכת צבעים ב-Settings</td>
+    <td>צבעי המסך מתחלפים ≤60s</td>
+  </tr>
+  <tr>
+    <td>9</td>
+    <td>שיתוף IO21 (אנקודר+טמפ') עובד</td>
+    <td>לסובב אנקודר, ללחוץ ציר, לנשוף על DHT</td>
+    <td>הסמן זז (IO2/14) · בחירה (IO21) · טמפ' עולה (IO21) — מאותו רכיב, בלי התנגשות</td>
+  </tr>
+  <tr>
+    <td>10</td>
+    <td>offline מלא + סנכרון</td>
+    <td>לכבות ראוטר, סשן שלם, להדליק</td>
+    <td>Serial <code>q</code>: סשן בתור ⇒ מופיע באתר עם זמנים נכונים (NTP)</td>
+  </tr>
+  <tr>
+    <td>11</td>
+    <td>תקלת חיישן מדווחת, לא נבלעת</td>
+    <td>לנתק DHT (או <code>--sensor-fault</code>)</td>
+    <td>שורת Fault אדומה ב-<code>/device</code>; StateBadge → danger</td>
+  </tr>
+  <tr>
+    <td>12</td>
+    <td>שרידות ניתוק חשמל</td>
+    <td>לנתק USB באמצע סשן ולחבר</td>
+    <td>עולה עם "Resume session?"; boot מציג את סיבת האיפוס</td>
+  </tr>
+  <tr>
+    <td>13</td>
+    <td>העברת דאטה מאומתת בזהות</td>
+    <td><code>curl</code> ל-<code>/ingest/config</code> בלי header</td>
+    <td><b>401</b>; עם ה-header ⇒ JSON מלא</td>
+  </tr>
+  <tr>
+    <td>14</td>
+    <td>שתי ליבות — המסך שורד עומס רשת</td>
+    <td>לנתק Wi-Fi באמצע סשן</td>
+    <td>המסך/מגע ממשיכים חלק; ספירת הסשן מדויקת</td>
+  </tr>
+  <tr>
+    <td>15</td>
+    <td>שני התקנים על באס I2C אחד</td>
+    <td>self-test ב-boot</td>
+    <td>סריקת I2C מציגה <code>0x38</code> + <code>0x29</code></td>
+  </tr>
 </table>
 
 <p>הפקודה להדגמת טענה 13 (אימות):</p>
-<pre># ללא header ⇒ 401
+<pre>
+# ללא header ⇒ 401
 curl -s -o /dev/null -w "%{http_code}\n" \
   "$APP_BASE_URL/ingest/config?deviceId=mindbox-sim-01"
 
 # עם header ⇒ JSON מלא (downlink)
 curl -H "x-device-secret: $DEVICE_INGEST_SECRET" \
-  "$APP_BASE_URL/ingest/config?deviceId=mindbox-sim-01"</pre>
+  "$APP_BASE_URL/ingest/config?deviceId=mindbox-sim-01"</pre
+>
 
 <h2>12.3 Run-of-show — דקה אחר דקה</h2>
 <table>
-  <tr><th class="ltr">דקות</th><th>שלב</th><th>מה עושים ומה אומרים</th></tr>
-  <tr><td class="time">0–5</td><td>הסיפור והארכיטקטורה</td><td>הבעיה (פוקוס, לא זמן) → מה MindBox → תמונת-העל (פרק 1): מכשיר ↔ ענן ↔ אתר. להחזיק את הלוח ביד ולהצביע על המסך, המיקרופון, ה-ToF, האנקודר.</td></tr>
-  <tr><td class="time">5–9</td><td>הדלקה + self-test חי</td><td>הדלקה מול הקהל: boot breadcrumbs + <b>סיבת איפוס</b> על המסך; ב-Serial — סריקת I2C (<code>0x38</code>+<code>0x29</code>), PSRAM, render=sprite-internal, heap. <b>מוכיח טענות 15 + מפת החומרה.</b></td></tr>
-  <tr><td class="time">9–14</td><td>"החיישנים חיים" — Serial <code>m</code></td><td>יד (מרחק) · מחיאת כף (רעש/<code>pp</code>) · כיסוי (lux + עמעום מסך) · נשיפה (טמפ') — הכול בשורה חיה אחת. <b>מוכיח טענות 2–5.</b></td></tr>
-  <tr><td class="time">14–19</td><td>סשן חי עם הפרעות</td><td>התחלת סשן; רעש מכוון ⇒ אייקון + התראה קולית; התרחקות ⇒ Away; בסיום — סיכום על המכשיר. <b>מוכיח 3, 6.</b></td></tr>
-  <tr><td class="time">19–23</td><td>הדאטה בענן</td><td><code>/session/$id</code> — גרפי הדקה-בדקה של הסשן שהרגע נגמר; <code>/device</code> — "Room right now" חי. <b>מוכיח 1, 6.</b></td></tr>
-  <tr><td class="time">23–26</td><td>שליטה דו-כיוונית</td><td>"Ring my device" (Queued→Sent→Done); החלפת theme; הוספת אירוע ליומן ⇒ מופיע על המכשיר. <b>מוכיח 7, 8.</b></td></tr>
-  <tr><td class="time">26–30</td><td>עומק הנדסי + חוסן</td><td>2 ליבות (פרק 4), למה המסך לא קורס (פרק 5), <b>שיתוף IO21</b> (פרק 7), ותיקון ה-<code>pbuf_free</code> (פרק 6). לסיים ב<b>ניתוק חשמל חי</b> באמצע סשן ⇒ "Resume". <b>מוכיח 9, 12, 14.</b> להשאיר דקה ל-Q&amp;A.</td></tr>
+  <tr>
+    <th class="ltr">דקות</th>
+    <th>שלב</th>
+    <th>מה עושים ומה אומרים</th>
+  </tr>
+  <tr>
+    <td class="time">0–5</td>
+    <td>הסיפור והארכיטקטורה</td>
+    <td>
+      הבעיה (פוקוס, לא זמן) → מה MindBox → תמונת-העל (פרק 1): מכשיר ↔ ענן ↔ אתר. להחזיק את הלוח ביד
+      ולהצביע על המסך, המיקרופון, ה-ToF, האנקודר.
+    </td>
+  </tr>
+  <tr>
+    <td class="time">5–9</td>
+    <td>הדלקה + self-test חי</td>
+    <td>
+      הדלקה מול הקהל: boot breadcrumbs + <b>סיבת איפוס</b> על המסך; ב-Serial — סריקת I2C
+      (<code>0x38</code>+<code>0x29</code>), PSRAM, render=sprite-internal, heap.
+      <b>מוכיח טענות 15 + מפת החומרה.</b>
+    </td>
+  </tr>
+  <tr>
+    <td class="time">9–14</td>
+    <td>"החיישנים חיים" — Serial <code>m</code></td>
+    <td>
+      יד (מרחק) · מחיאת כף (רעש/<code>pp</code>) · כיסוי (lux + עמעום מסך) · נשיפה (טמפ') — הכול
+      בשורה חיה אחת. <b>מוכיח טענות 2–5.</b>
+    </td>
+  </tr>
+  <tr>
+    <td class="time">14–19</td>
+    <td>סשן חי עם הפרעות</td>
+    <td>
+      התחלת סשן; רעש מכוון ⇒ אייקון + התראה קולית; התרחקות ⇒ Away; בסיום — סיכום על המכשיר.
+      <b>מוכיח 3, 6.</b>
+    </td>
+  </tr>
+  <tr>
+    <td class="time">19–23</td>
+    <td>הדאטה בענן</td>
+    <td>
+      <code>/session/$id</code> — גרפי הדקה-בדקה של הסשן שהרגע נגמר; <code>/device</code> — "Room
+      right now" חי. <b>מוכיח 1, 6.</b>
+    </td>
+  </tr>
+  <tr>
+    <td class="time">23–26</td>
+    <td>שליטה דו-כיוונית</td>
+    <td>
+      "Ring my device" (Queued→Sent→Done); החלפת theme; הוספת אירוע ליומן ⇒ מופיע על המכשיר.
+      <b>מוכיח 7, 8.</b>
+    </td>
+  </tr>
+  <tr>
+    <td class="time">26–30</td>
+    <td>עומק הנדסי + חוסן</td>
+    <td>
+      2 ליבות (פרק 4), למה המסך לא קורס (פרק 5), <b>שיתוף IO21</b> (פרק 7), ותיקון ה-<code
+        >pbuf_free</code
+      >
+      (פרק 6). לסיים ב<b>ניתוק חשמל חי</b> באמצע סשן ⇒ "Resume". <b>מוכיח 9, 12, 14.</b> להשאיר דקה
+      ל-Q&amp;A.
+    </td>
+  </tr>
 </table>
 
 <h2>12.4 גיבוי בלי חומרה</h2>
 <div class="note">
-אם החומרה נופלת (brownout, רשת) — כל נתיב שרת ניתן להדגמה עם הסימולטור: <code>bun run simulate</code>
-לזרם טלמטריה חי אל <code>/device</code>; <code>-- --sensor-fault</code> / <code>--low-battery</code> /
-<code>--offline-then-sync</code> לתרחישי קצה; <code>-- --config</code> להדפסת ה-downlink; ומחזור פקודות
-מלא (<code>--send-command</code> ⇒ Queued ⇒ <code>--config</code> ⇒ Sent ⇒ <code>--ack</code> ⇒ Done).
-לחלופין, עמוד <code>/simulator</code> באתר לדמו בלי טרמינל.
+  אם החומרה נופלת (brownout, רשת) — כל נתיב שרת ניתן להדגמה עם הסימולטור:
+  <code>bun run simulate</code> לזרם טלמטריה חי אל <code>/device</code>;
+  <code>-- --sensor-fault</code> / <code>--low-battery</code> /
+  <code>--offline-then-sync</code> לתרחישי קצה; <code>-- --config</code> להדפסת ה-downlink; ומחזור
+  פקודות מלא (<code>--send-command</code> ⇒ Queued ⇒ <code>--config</code> ⇒ Sent ⇒
+  <code>--ack</code> ⇒ Done). לחלופין, עמוד <code>/simulator</code> באתר לדמו בלי טרמינל.
 </div>
 
 <h1>נספחים</h1>
 
 <h2>נספח A — מפת פינים מלאה (מרוכזת)</h2>
 <table>
-  <tr><th>רכיב</th><th class="ltr">פינים</th><th>פרוטוקול</th></tr>
-  <tr><td>ILI9341 TFT</td><td class="ltr">SCK12 MOSI11 MISO13 DC46 CS10 RST-1 BL45</td><td>SPI2 @40MHz + DMA</td></tr>
-  <tr><td>FT6336 touch</td><td class="ltr">SDA16 SCL15 INT17 RST18</td><td>I2C 0x38 @400kHz</td></tr>
-  <tr><td>VL53L1X ToF</td><td class="ltr">SDA16 SCL15 (shared)</td><td>I2C 0x29</td></tr>
-  <tr><td>ES8311 mic</td><td class="ltr">DIN6 BCLK5 LRCK7 MCLK4</td><td>I2S 16kHz</td></tr>
-  <tr><td>Speaker/amp</td><td class="ltr">DOUT8 AMP_EN1 (active-low)</td><td>I2S + FM8002E</td></tr>
-  <tr><td>ES8311 control</td><td class="ltr">SDA16 SCL15 (boot-only)</td><td>soft-I2C 0x18</td></tr>
-  <tr><td>KY-040 encoder</td><td class="ltr">CLK2 DT14 SW=-1</td><td>quadrature ISR</td></tr>
-  <tr><td>כפתור צד</td><td class="ltr">IO21 (shared w/ DHT11)</td><td>digital active-low</td></tr>
-  <tr><td>DHT11</td><td class="ltr">DATA IO21 (+pull-up)</td><td>1-wire</td></tr>
-  <tr><td>KY-018 light</td><td class="ltr">AO IO3</td><td>analog ADC1</td></tr>
-  <tr><td>BOOT btn</td><td class="ltr">IO0</td><td>digital (theme/recal)</td></tr>
+  <tr>
+    <th>רכיב</th>
+    <th class="ltr">פינים</th>
+    <th>פרוטוקול</th>
+  </tr>
+  <tr>
+    <td>ILI9341 TFT</td>
+    <td class="ltr">SCK12 MOSI11 MISO13 DC46 CS10 RST-1 BL45</td>
+    <td>SPI2 @40MHz + DMA</td>
+  </tr>
+  <tr>
+    <td>FT6336 touch</td>
+    <td class="ltr">SDA16 SCL15 INT17 RST18</td>
+    <td>I2C 0x38 @400kHz</td>
+  </tr>
+  <tr>
+    <td>VL53L1X ToF</td>
+    <td class="ltr">SDA16 SCL15 (shared)</td>
+    <td>I2C 0x29</td>
+  </tr>
+  <tr>
+    <td>ES8311 mic</td>
+    <td class="ltr">DIN6 BCLK5 LRCK7 MCLK4</td>
+    <td>I2S 16kHz</td>
+  </tr>
+  <tr>
+    <td>Speaker/amp</td>
+    <td class="ltr">DOUT8 AMP_EN1 (active-low)</td>
+    <td>I2S + FM8002E</td>
+  </tr>
+  <tr>
+    <td>ES8311 control</td>
+    <td class="ltr">SDA16 SCL15 (boot-only)</td>
+    <td>soft-I2C 0x18</td>
+  </tr>
+  <tr>
+    <td>KY-040 encoder</td>
+    <td class="ltr">CLK2 DT14 SW=-1</td>
+    <td>quadrature ISR</td>
+  </tr>
+  <tr>
+    <td>כפתור צד</td>
+    <td class="ltr">IO21 (shared w/ DHT11)</td>
+    <td>digital active-low</td>
+  </tr>
+  <tr>
+    <td>DHT11</td>
+    <td class="ltr">DATA IO21 (+pull-up)</td>
+    <td>1-wire</td>
+  </tr>
+  <tr>
+    <td>KY-018 light</td>
+    <td class="ltr">AO IO3</td>
+    <td>analog ADC1</td>
+  </tr>
+  <tr>
+    <td>BOOT btn</td>
+    <td class="ltr">IO0</td>
+    <td>digital (theme/recal)</td>
+  </tr>
 </table>
-<p class="small">פינים חשופים ב-header: <b>IO2, IO3, IO14, IO21</b> בלבד. מקור: <span class="src">config.h</span>.</p>
+<p class="small">
+  פינים חשופים ב-header: <b>IO2, IO3, IO14, IO21</b> בלבד. מקור: <span class="src">config.h</span>.
+</p>
 
 <h2>נספח B — פקודות Serial</h2>
-<p><code>m</code> מוניטור 1Hz · <code>a</code> מיקרופון · <code>c</code> כיול חיישנים · <code>b</code> בדיקת כפתור ·
-<code>t</code>/<code>k</code> מגע/כיול מגע · <code>q</code> תור העלאה · <code>w</code> Wi-Fi/URL/secret ·
-<code>d</code> dump · <code>h</code> עזרה. (@115200)</p>
+<p>
+  <code>m</code> מוניטור 1Hz · <code>a</code> מיקרופון · <code>c</code> כיול חיישנים ·
+  <code>b</code> בדיקת כפתור · <code>t</code>/<code>k</code> מגע/כיול מגע · <code>q</code> תור העלאה
+  · <code>w</code> Wi-Fi/URL/secret · <code>d</code> dump · <code>h</code> עזרה. (@115200)
+</p>
 
 <h2>נספח C — קבועים מרכזיים (<code>config.h</code>)</h2>
 <table>
-  <tr><th class="ltr">קבוע</th><th class="ltr">ערך</th><th>משמעות</th></tr>
-  <tr><td class="ltr">TELEMETRY_PERIOD_MS</td><td class="ltr">30000</td><td>פעימת-לב טלמטריה (30s)</td></tr>
-  <tr><td class="ltr">CONFIG_FETCH_MS</td><td class="ltr">60000</td><td>משיכת downlink (60s; 3s בצימוד)</td></tr>
-  <tr><td class="ltr">SESSION_CLOCK_MS</td><td class="ltr">10</td><td>טיימר סשן (esp_timer)</td></tr>
-  <tr><td class="ltr">TOF_POLL_MS</td><td class="ltr">500</td><td>קצב ToF</td></tr>
-  <tr><td class="ltr">PRESENCE_NEAR_MM</td><td class="ltr">700</td><td>סף נוכחות</td></tr>
-  <tr><td class="ltr">WDT_TIMEOUT_MS</td><td class="ltr">30000</td><td>task watchdog</td></tr>
-  <tr><td class="ltr">WIFI_RETRY_MS</td><td class="ltr">15000</td><td>reconnect ידני מסונכרן</td></tr>
-  <tr><td class="ltr">UPLOAD_QUEUE_MAX</td><td class="ltr">12</td><td>תור offline (LittleFS)</td></tr>
-  <tr><td class="ltr">I2C_HEALTH_MS</td><td class="ltr">2000</td><td>ping ToF (canary)</td></tr>
+  <tr>
+    <th class="ltr">קבוע</th>
+    <th class="ltr">ערך</th>
+    <th>משמעות</th>
+  </tr>
+  <tr>
+    <td class="ltr">TELEMETRY_PERIOD_MS</td>
+    <td class="ltr">30000</td>
+    <td>פעימת-לב טלמטריה (30s)</td>
+  </tr>
+  <tr>
+    <td class="ltr">CONFIG_FETCH_MS</td>
+    <td class="ltr">60000</td>
+    <td>משיכת downlink (60s; 3s בצימוד)</td>
+  </tr>
+  <tr>
+    <td class="ltr">SESSION_CLOCK_MS</td>
+    <td class="ltr">10</td>
+    <td>טיימר סשן (esp_timer)</td>
+  </tr>
+  <tr>
+    <td class="ltr">TOF_POLL_MS</td>
+    <td class="ltr">500</td>
+    <td>קצב ToF</td>
+  </tr>
+  <tr>
+    <td class="ltr">PRESENCE_NEAR_MM</td>
+    <td class="ltr">700</td>
+    <td>סף נוכחות</td>
+  </tr>
+  <tr>
+    <td class="ltr">WDT_TIMEOUT_MS</td>
+    <td class="ltr">30000</td>
+    <td>task watchdog</td>
+  </tr>
+  <tr>
+    <td class="ltr">WIFI_RETRY_MS</td>
+    <td class="ltr">15000</td>
+    <td>reconnect ידני מסונכרן</td>
+  </tr>
+  <tr>
+    <td class="ltr">UPLOAD_QUEUE_MAX</td>
+    <td class="ltr">12</td>
+    <td>תור offline (LittleFS)</td>
+  </tr>
+  <tr>
+    <td class="ltr">I2C_HEALTH_MS</td>
+    <td class="ltr">2000</td>
+    <td>ping ToF (canary)</td>
+  </tr>
 </table>
 
 <h2>נספח D — מילון מונחים</h2>
 <p>
-<b>FLE</b> — Focus Load Estimate, אומדן עומס פוקוס (0–100). ·
-<b>ToF</b> — Time-of-Flight, חיישן מרחק לייזר. ·
-<b>ingest</b> — נתיבי ה-API שהמכשיר כותב אליהם. ·
-<b>downlink</b> — הקונפיג שהשרת מחזיר למכשיר. ·
-<b>pbuf</b> — packet buffer של מחסנית ה-רשת lwIP. ·
-<b>sprite</b> — באפר תמונה מחוץ-למסך שמורכב ואז מוטבע בבת-אחת. ·
-<b>NVS</b> — Non-Volatile Storage (הגדרות/checkpoint). ·
-<b>LittleFS</b> — מערכת קבצים על ה-flash הפנימי (תור ה-offline).
+  <b>FLE</b> — Focus Load Estimate, אומדן עומס פוקוס (0–100). · <b>ToF</b> — Time-of-Flight, חיישן
+  מרחק לייזר. · <b>ingest</b> — נתיבי ה-API שהמכשיר כותב אליהם. · <b>downlink</b> — הקונפיג שהשרת
+  מחזיר למכשיר. · <b>pbuf</b> — packet buffer של מחסנית ה-רשת lwIP. · <b>sprite</b> — באפר תמונה
+  מחוץ-למסך שמורכב ואז מוטבע בבת-אחת. · <b>NVS</b> — Non-Volatile Storage (הגדרות/checkpoint). ·
+  <b>LittleFS</b> — מערכת קבצים על ה-flash הפנימי (תור ה-offline).
 </p>
 
 <div class="proof">
-<b>שורה תחתונה למנחה:</b> כל טענה במסמך — מפת הפינים, שיתוף IO21, שתי הליבות, אי-קריסת המסך, מסע
-הנתונים לענן — ניתנת להוכחה חיה תוך שניות, דרך Serial, מסך ה-Diag, או האתר. זה בדיוק מה שהתבקש:
-מערכת שבה <b>לכל טענה יש דרך להראות ולוודא אותה</b>.
+  <b>שורה תחתונה למנחה:</b> כל טענה במסמך — מפת הפינים, שיתוף IO21, שתי הליבות, אי-קריסת המסך, מסע
+  הנתונים לענן — ניתנת להוכחה חיה תוך שניות, דרך Serial, מסך ה-Diag, או האתר. זה בדיוק מה שהתבקש:
+  מערכת שבה <b>לכל טענה יש דרך להראות ולוודא אותה</b>.
 </div>

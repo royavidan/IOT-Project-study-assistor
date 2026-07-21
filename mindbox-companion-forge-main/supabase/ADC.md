@@ -48,6 +48,7 @@ bunx supabase secrets set GCP_LOCATION=us-central1        # optional; defaults t
 ```
 
 Alternatives (skip step 1 if you use one of these):
+
 - **Service account:** `bunx supabase secrets set GCP_SA_KEY="$(cat sa-key.json)"`
 - **Plain Gemini key:** `bunx supabase secrets set GEMINI_API_KEY=<aistudio key>` (no Vertex, no gcloud)
 

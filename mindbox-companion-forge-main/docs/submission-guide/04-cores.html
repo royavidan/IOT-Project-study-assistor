@@ -2,81 +2,149 @@
 <h1>4. ליבות ומשימות (Cores &amp; Tasks)</h1>
 
 <div class="lead">
-ה-ESP32-S3 הוא dual-core, ואנחנו מנצלים את זה במכוון: <b>ליבה 1</b> מריצה את הממשק, מכונת המצבים
-והחיישנים; <b>ליבה 0</b> מריצה את הרשת ואת השמע. בנוסף רץ <b>טיימר חומרה (<code>esp_timer</code>)</b>
-של 10ms לספירת הסשן. הפרדה זו היא הסיבה שהמסך נשאר חלק גם כשה-Wi-Fi תקוע על בקשת HTTP איטית.
+  ה-ESP32-S3 הוא dual-core, ואנחנו מנצלים את זה במכוון: <b>ליבה 1</b> מריצה את הממשק, מכונת המצבים
+  והחיישנים; <b>ליבה 0</b> מריצה את הרשת ואת השמע. בנוסף רץ
+  <b>טיימר חומרה (<code>esp_timer</code>)</b>
+  של 10ms לספירת הסשן. הפרדה זו היא הסיבה שהמסך נשאר חלק גם כשה-Wi-Fi תקוע על בקשת HTTP איטית.
 </div>
 
 <h2>4.1 שלושת ההקשרים + טיימר החומרה</h2>
 <table>
-  <tr><th>הקשר ריצה</th><th class="ltr">Core</th><th class="ltr">Priority / Stack</th><th>מה עושה</th><th class="ltr">מקור</th></tr>
-  <tr><td>Arduino <code>loop()</code></td><td class="ltr">1</td><td class="ltr">Arduino default</td><td>קלט → FSM → רנדור + חיישנים; מזין את ה-watchdog כל ~1ms</td><td class="ltr">MindBox.ino L159-167</td></tr>
-  <tr><td>משימת רשת <code>"net"</code></td><td class="ltr">0</td><td class="ltr">prio 1 · 16384B</td><td>Wi-Fi/HTTP: telemetry POST, config GET, ניקוז תור העלאה, צימוד</td><td class="ltr">Cloud.cpp L1153, L971-1137</td></tr>
-  <tr><td>משימת שמע <code>"audio"</code></td><td class="ltr">0</td><td class="ltr">prio 5 · 4096B</td><td>קריאת I2S מהמיקרופון → RMS; ניגון צלילים לרמקול</td><td class="ltr">Audio.cpp L325, L205-257</td></tr>
-  <tr><td>טיימר סשן <code>esp_timer</code></td><td class="ltr">—</td><td class="ltr">10ms periodic</td><td>מוריד את הזמן הנותר בסשן; צובר זמן-היעדרות</td><td class="ltr">Session.cpp L28-53</td></tr>
+  <tr>
+    <th>הקשר ריצה</th>
+    <th class="ltr">Core</th>
+    <th class="ltr">Priority / Stack</th>
+    <th>מה עושה</th>
+    <th class="ltr">מקור</th>
+  </tr>
+  <tr>
+    <td>Arduino <code>loop()</code></td>
+    <td class="ltr">1</td>
+    <td class="ltr">Arduino default</td>
+    <td>קלט → FSM → רנדור + חיישנים; מזין את ה-watchdog כל ~1ms</td>
+    <td class="ltr">MindBox.ino L159-167</td>
+  </tr>
+  <tr>
+    <td>משימת רשת <code>"net"</code></td>
+    <td class="ltr">0</td>
+    <td class="ltr">prio 1 · 16384B</td>
+    <td>Wi-Fi/HTTP: telemetry POST, config GET, ניקוז תור העלאה, צימוד</td>
+    <td class="ltr">Cloud.cpp L1153, L971-1137</td>
+  </tr>
+  <tr>
+    <td>משימת שמע <code>"audio"</code></td>
+    <td class="ltr">0</td>
+    <td class="ltr">prio 5 · 4096B</td>
+    <td>קריאת I2S מהמיקרופון → RMS; ניגון צלילים לרמקול</td>
+    <td class="ltr">Audio.cpp L325, L205-257</td>
+  </tr>
+  <tr>
+    <td>טיימר סשן <code>esp_timer</code></td>
+    <td class="ltr">—</td>
+    <td class="ltr">10ms periodic</td>
+    <td>מוריד את הזמן הנותר בסשן; צובר זמן-היעדרות</td>
+    <td class="ltr">Session.cpp L28-53</td>
+  </tr>
 </table>
 <p class="small">
-אלו <b>כל</b> ה-tasks — חיפוש <code>xTaskCreatePinnedToCore</code> על כל ה-sketch מחזיר בדיוק שתי
-תוצאות (Cloud.cpp, Audio.cpp). אין tasks נסתרים.
+  אלו <b>כל</b> ה-tasks — חיפוש <code>xTaskCreatePinnedToCore</code> על כל ה-sketch מחזיר בדיוק שתי
+  תוצאות (Cloud.cpp, Audio.cpp). אין tasks נסתרים.
 </p>
 
 <h2>4.2 חלוקת העבודה בין הליבות</h2>
 <div class="diagram">
-<svg width="660" height="250" viewBox="0 0 660 250" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
-  <rect x="15" y="20" width="300" height="210" rx="10" fill="#16213e" opacity="0.06" stroke="#16213e" stroke-width="2"/>
-  <text x="165" y="44" text-anchor="middle" font-weight="bold" fill="#16213e">Core 1 — זמן-אמת של המשתמש</text>
-  <rect x="35" y="58" width="260" height="30" rx="5" fill="#fff" stroke="#16213e"/>
-  <text x="165" y="78" text-anchor="middle">loop(): Inputs → StateMachine → Display</text>
-  <rect x="35" y="94" width="260" height="30" rx="5" fill="#fff" stroke="#16213e"/>
-  <text x="165" y="114" text-anchor="middle">Sensors::tick() — I2C/ADC/DHT</text>
-  <rect x="35" y="130" width="260" height="30" rx="5" fill="#fff" stroke="#16213e"/>
-  <text x="165" y="150" text-anchor="middle">רנדור sprite יחיד (הכותב היחיד למסך)</text>
-  <rect x="35" y="166" width="260" height="30" rx="5" fill="#fff" stroke="#16213e"/>
-  <text x="165" y="186" text-anchor="middle">feed watchdog כל ~1ms</text>
-  <text x="165" y="218" text-anchor="middle" font-size="10" fill="#555">חייב להישאר responsive — אסור לחסום</text>
+  <svg
+    width="660"
+    height="250"
+    viewBox="0 0 660 250"
+    xmlns="http://www.w3.org/2000/svg"
+    font-family="Segoe UI, Arial"
+    font-size="12"
+  >
+    <rect
+      x="15"
+      y="20"
+      width="300"
+      height="210"
+      rx="10"
+      fill="#16213e"
+      opacity="0.06"
+      stroke="#16213e"
+      stroke-width="2"
+    />
+    <text x="165" y="44" text-anchor="middle" font-weight="bold" fill="#16213e">
+      Core 1 — זמן-אמת של המשתמש
+    </text>
+    <rect x="35" y="58" width="260" height="30" rx="5" fill="#fff" stroke="#16213e" />
+    <text x="165" y="78" text-anchor="middle">loop(): Inputs → StateMachine → Display</text>
+    <rect x="35" y="94" width="260" height="30" rx="5" fill="#fff" stroke="#16213e" />
+    <text x="165" y="114" text-anchor="middle">Sensors::tick() — I2C/ADC/DHT</text>
+    <rect x="35" y="130" width="260" height="30" rx="5" fill="#fff" stroke="#16213e" />
+    <text x="165" y="150" text-anchor="middle">רנדור sprite יחיד (הכותב היחיד למסך)</text>
+    <rect x="35" y="166" width="260" height="30" rx="5" fill="#fff" stroke="#16213e" />
+    <text x="165" y="186" text-anchor="middle">feed watchdog כל ~1ms</text>
+    <text x="165" y="218" text-anchor="middle" font-size="10" fill="#555">
+      חייב להישאר responsive — אסור לחסום
+    </text>
 
-  <rect x="345" y="20" width="300" height="210" rx="10" fill="#0f3460" opacity="0.08" stroke="#0f3460" stroke-width="2"/>
-  <text x="495" y="44" text-anchor="middle" font-weight="bold" fill="#0f3460">Core 0 — עבודה חוסמת</text>
-  <rect x="365" y="58" width="260" height="46" rx="5" fill="#fff" stroke="#0f3460"/>
-  <text x="495" y="77" text-anchor="middle">net task (prio 1)</text>
-  <text x="495" y="94" text-anchor="middle" font-size="10">HTTP חוסם ~18-20s worst case</text>
-  <rect x="365" y="112" width="260" height="46" rx="5" fill="#fff" stroke="#0f3460"/>
-  <text x="495" y="131" text-anchor="middle">audio task (prio 5)</text>
-  <text x="495" y="148" text-anchor="middle" font-size="10">קריאות I2S חוסמות — מותר כאן</text>
-  <rect x="365" y="166" width="260" height="30" rx="5" fill="#eaf7ef" stroke="#2e9b4f"/>
-  <text x="495" y="186" text-anchor="middle" fill="#2e6b3f">כל Wi-Fi.* מרוכז כאן בלבד</text>
-  <text x="495" y="218" text-anchor="middle" font-size="10" fill="#555">חסימה כאן לא פוגעת במסך</text>
-</svg>
+    <rect
+      x="345"
+      y="20"
+      width="300"
+      height="210"
+      rx="10"
+      fill="#0f3460"
+      opacity="0.08"
+      stroke="#0f3460"
+      stroke-width="2"
+    />
+    <text x="495" y="44" text-anchor="middle" font-weight="bold" fill="#0f3460">
+      Core 0 — עבודה חוסמת
+    </text>
+    <rect x="365" y="58" width="260" height="46" rx="5" fill="#fff" stroke="#0f3460" />
+    <text x="495" y="77" text-anchor="middle">net task (prio 1)</text>
+    <text x="495" y="94" text-anchor="middle" font-size="10">HTTP חוסם ~18-20s worst case</text>
+    <rect x="365" y="112" width="260" height="46" rx="5" fill="#fff" stroke="#0f3460" />
+    <text x="495" y="131" text-anchor="middle">audio task (prio 5)</text>
+    <text x="495" y="148" text-anchor="middle" font-size="10">קריאות I2S חוסמות — מותר כאן</text>
+    <rect x="365" y="166" width="260" height="30" rx="5" fill="#eaf7ef" stroke="#2e9b4f" />
+    <text x="495" y="186" text-anchor="middle" fill="#2e6b3f">כל Wi-Fi.* מרוכז כאן בלבד</text>
+    <text x="495" y="218" text-anchor="middle" font-size="10" fill="#555">
+      חסימה כאן לא פוגעת במסך
+    </text>
+  </svg>
 </div>
 
 <h2>4.3 למה ההפרדה קריטית</h2>
 <p>
-בקשת HTTP על arduino-esp32 יכולה לחסום <b>~18-20 שניות</b> ב-worst case (socket חצי-פתוח), וקריאת
-I2S מהמיקרופון חוסמת מטבעה. אם היו רצים על ליבת הממשק — המסך היה קופא והמגע לא היה מגיב. בכך שהם
-על <b>ליבה 0</b>, ליבה 1 ממשיכה לצייר ולקרוא מגע בלי הפרעה. יתרה מזו, <b>כל קריאות ה-<code>WiFi.*</code>
-מרוכזות במשימת הרשת</b> — מוטציה של הרדיו מליבה אחרת גורמת ל-panic (LoadProhibited), אז ה-UI קורא
-רק snapshot מוקּאש של SSID/IP. <span class="src">config.h L230-233 · Cloud.cpp L34-36, L974-987</span>
+  בקשת HTTP על arduino-esp32 יכולה לחסום <b>~18-20 שניות</b> ב-worst case (socket חצי-פתוח), וקריאת
+  I2S מהמיקרופון חוסמת מטבעה. אם היו רצים על ליבת הממשק — המסך היה קופא והמגע לא היה מגיב. בכך שהם
+  על <b>ליבה 0</b>, ליבה 1 ממשיכה לצייר ולקרוא מגע בלי הפרעה. יתרה מזו,
+  <b>כל קריאות ה-<code>WiFi.*</code> מרוכזות במשימת הרשת</b> — מוטציה של הרדיו מליבה אחרת גורמת
+  ל-panic (LoadProhibited), אז ה-UI קורא רק snapshot מוקּאש של SSID/IP.
+  <span class="src">config.h L230-233 · Cloud.cpp L34-36, L974-987</span>
 </p>
 
 <h2>4.4 טיימר החומרה: למה הסשן לא מפספס זמן</h2>
 <p>
-ספירת הזמן של הסשן <b>לא</b> תלויה בלולאה הראשית. היא רצה על <code>esp_timer</code> תקופתי של
-<b>10ms</b> (<code>onClockTimer</code>) שמוריד את הזמן הנותר וצובר זמן-היעדרות. כך, גם אם הלולאה
-הראשית נתקעת רגע (רנדור כבד, קריאת חיישן), <b>שעון הסשן מדויק</b> ולא מדלג. זה גם מה שמאפשר ספירה
-נכונה גם כשאין רשת בכלל. <span class="src">Session.cpp L28-53 · config.h L181</span>
+  ספירת הזמן של הסשן <b>לא</b> תלויה בלולאה הראשית. היא רצה על <code>esp_timer</code> תקופתי של
+  <b>10ms</b> (<code>onClockTimer</code>) שמוריד את הזמן הנותר וצובר זמן-היעדרות. כך, גם אם הלולאה
+  הראשית נתקעת רגע (רנדור כבד, קריאת חיישן), <b>שעון הסשן מדויק</b> ולא מדלג. זה גם מה שמאפשר ספירה
+  נכונה גם כשאין רשת בכלל. <span class="src">Session.cpp L28-53 · config.h L181</span>
 </p>
 
 <h2>4.5 סדר האתחול (boot order) ושיתוף מצב</h2>
 <p>
-ב-<code>setup()</code> הסדר מכוון: Storage → <b>Audio (לפני Display!)</b> → Display/Panel → Theme →
-Sound → Inputs → Sensors → UploadQueue → Cloud → StateMachine → זריעת watchdog. ה-Audio חייב לרוץ
-ראשון כי הוא מאתחל את הקודק ES8311 ב-soft-I2C על פיני המגע (IO16/15) — <b>לפני</b> ש-LovyanGFX/המגע
-תופסים את הבאס. שיתוף המצב בין הליבות נעשה דרך shims בטוחי-thread + <b>mutex רקורסיבי של NVS</b>
-ב-<code>Storage</code>. <span class="src">MindBox.ino L66-134 · MindBox/CLAUDE.md → Threading</span>
+  ב-<code>setup()</code> הסדר מכוון: Storage → <b>Audio (לפני Display!)</b> → Display/Panel → Theme
+  → Sound → Inputs → Sensors → UploadQueue → Cloud → StateMachine → זריעת watchdog. ה-Audio חייב
+  לרוץ ראשון כי הוא מאתחל את הקודק ES8311 ב-soft-I2C על פיני המגע (IO16/15) —
+  <b>לפני</b> ש-LovyanGFX/המגע תופסים את הבאס. שיתוף המצב בין הליבות נעשה דרך shims בטוחי-thread +
+  <b>mutex רקורסיבי של NVS</b> ב-<code>Storage</code>.
+  <span class="src">MindBox.ino L66-134 · MindBox/CLAUDE.md → Threading</span>
 </p>
 
 <div class="proof">
-<b>איך מוכיחים את המבנה הדו-ליבתי חי:</b> מריצים סשן ובמקביל מנתקים את ה-Wi-Fi (הרשת על ליבה 0
-תיכנס ל-retry) — <b>המסך והמגע ממשיכים לעבוד חלק</b> וספירת הסשן ממשיכה מדויק. ב-Serial המוניטור
-(<code>m</code>) מראה את הזמן יורד גם כשה-Wi-Fi מציג off.
+  <b>איך מוכיחים את המבנה הדו-ליבתי חי:</b> מריצים סשן ובמקביל מנתקים את ה-Wi-Fi (הרשת על ליבה 0
+  תיכנס ל-retry) — <b>המסך והמגע ממשיכים לעבוד חלק</b> וספירת הסשן ממשיכה מדויק. ב-Serial המוניטור
+  (<code>m</code>) מראה את הזמן יורד גם כשה-Wi-Fi מציג off.
 </div>

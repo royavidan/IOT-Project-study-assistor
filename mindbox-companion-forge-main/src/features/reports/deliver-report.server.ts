@@ -3,7 +3,10 @@ import "@tanstack/react-start/server-only";
 import { localDayRangeIso, toDateKey } from "@/lib/dates";
 import { summarize, type ReportMeta } from "@/features/reports/export";
 import { buildReportPdf } from "@/features/reports/build-report-pdf.server";
+import { buildWeeklyReportModel } from "@/features/reports/report-model.server";
+import { generateReportNarrative } from "@/features/reports/report-narrative.server";
 import { getAppBaseUrl, sendEmail, type EmailAttachment } from "@/lib/email/send-html.server";
+import { getServerConfig } from "@/lib/config.server";
 import { getSupabaseAdminClient } from "@/lib/supabase/server";
 import type { Session } from "@/lib/types";
 
@@ -175,8 +178,15 @@ export async function deliverReportByEmail(
     generatedAt: new Date().toISOString(),
   };
 
+  // Assemble the rich report model (Focus Model + insights + check-in feedback +
+  // academic + charts) with an AI executive summary, then render it to PDF.
+  const admin = getSupabaseAdminClient();
+  const { fromIso, toIso } = localDayRangeIso(from, to);
+  const model = await buildWeeklyReportModel(admin, ownerUserId, meta, fromIso, toIso);
+  if (getServerConfig().report.aiSummary) model.narrative = await generateReportNarrative(model);
+
   const [pdf, htmlBody] = await Promise.all([
-    buildReportPdf(sessions, meta),
+    buildReportPdf(model),
     Promise.resolve(buildEmailHtml(meta, sessions, ownerUserId)),
   ]);
 

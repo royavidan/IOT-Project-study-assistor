@@ -14,8 +14,9 @@ describe("sanitizeDeviceString", () => {
     expect(sanitizeDeviceString(String.fromCharCode(0, 7, 27) + "x")).toBe("x");
   });
 
-  it("keeps ordinary unicode intact", () => {
-    expect(sanitizeDeviceString("אלגברה ב' — הרצאה")).toBe("אלגברה ב' — הרצאה");
+  it("romanizes Hebrew (device fonts are ASCII-only) and keeps Latin punctuation", () => {
+    expect(sanitizeDeviceString("מבחן")).toBe("mbchn");
+    expect(sanitizeDeviceString("Calc — מבחן")).toBe("Calc — mbchn");
   });
 });
 

@@ -37,6 +37,7 @@ const CSV_HEADERS = [
   "Avg noise (0-1)",
   "Avg temp (C)",
   "Avg light (lux)",
+  "Tiredness (1-5)",
 ] as const;
 
 /** Escapes a value for RFC-4180 CSV (quote fields containing , " or newlines). */
@@ -66,6 +67,7 @@ export function sessionsToCsv(sessions: Session[]): string {
       cell(s.noiseAvg),
       cell(s.tempC),
       cell(s.lightLux),
+      s.tiredness ?? "",
     ]
       .map(escapeCsv)
       .join(","),

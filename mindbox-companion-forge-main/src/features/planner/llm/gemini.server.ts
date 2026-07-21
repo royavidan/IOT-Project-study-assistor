@@ -98,7 +98,10 @@ async function callModel(
   } catch (err) {
     if (
       err instanceof AiRequestError &&
-      (err.status === 404 || err.status === 501 || err.code === "unavailable" || err.code === "unconfigured")
+      (err.status === 404 ||
+        err.status === 501 ||
+        err.code === "unavailable" ||
+        err.code === "unconfigured")
     ) {
       throw new LlmUnavailableError();
     }

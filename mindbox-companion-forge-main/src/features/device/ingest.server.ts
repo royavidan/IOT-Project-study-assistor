@@ -725,6 +725,8 @@ async function handleConfig(url: URL): Promise<Response> {
       themeId: clampThemeId(s.device_theme_id),
       focusMin: typeof s.device_focus_min === "number" ? s.device_focus_min : 25,
       breakMin: typeof s.device_break_min === "number" ? s.device_break_min : 5,
+      longBreakMin: typeof s.device_long_break_min === "number" ? s.device_long_break_min : 15,
+      cycles: typeof s.device_cycles === "number" ? s.device_cycles : 4,
       timingRev,
       // Exam/DND + on-device stats + homework quick-update (0025).
       examMode: exam.examMode,

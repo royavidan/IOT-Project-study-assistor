@@ -48,6 +48,7 @@ import {
   LineChart,
   ChevronRight,
   Sparkles,
+  HeartPulse,
 } from "lucide-react";
 import { GenerateScheduleSheet } from "@/features/planner/components/GenerateScheduleSheet";
 import { PlanStaleBanner } from "@/features/planner/components/PlanStaleBanner";
@@ -97,10 +98,12 @@ function Dashboard() {
     if (tzSyncRan.current || !user?.id) return;
     tzSyncRan.current = true;
     const offsetMin = -new Date().getTimezoneOffset(); // minutes ahead of UTC
+    // Upsert (not update): a user whose profiles row predates the tz column —
+    // or has no row — must still get their offset written, else the box's
+    // server-side "today"/agenda stays in UTC (3h off in IDT).
     void getSupabaseBrowserClient()
       .from("profiles")
-      .update({ tz_offset_min: offsetMin })
-      .eq("id", user.id);
+      .upsert({ id: user.id, tz_offset_min: offsetMin }, { onConflict: "id" });
   }, [user?.id]);
 
   useEffect(() => {
@@ -275,10 +278,10 @@ function Dashboard() {
                 <Sparkles className="h-5 w-5" aria-hidden />
               </span>
               <div>
-                <p className="text-sm font-semibold">Plan your week</p>
+                <p className="text-sm font-semibold">Plan your week with AI</p>
                 <p className="text-sm text-muted-foreground">
-                  Auto-fill your free time with study blocks that ramp up before deadlines — you
-                  review before anything's added.
+                  Smart AI reads your calendar and deadlines and fills your free time with study
+                  blocks that ramp up before exams — you review before anything's added.
                 </p>
               </div>
             </div>
@@ -289,6 +292,28 @@ function Dashboard() {
           </CardContent>
         </Card>
       )}
+
+      <Card className="mb-6">
+        <CardContent className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-work-muted text-work">
+              <HeartPulse className="h-5 w-5" aria-hidden />
+            </span>
+            <div>
+              <p className="text-sm font-semibold">AI wellbeing check</p>
+              <p className="text-sm text-muted-foreground">
+                An AI check-up on your study load — it flags overload from your schedule, sessions
+                and self-reported tiredness, and can email you a supportive note.
+              </p>
+            </div>
+          </div>
+          <Button asChild size="sm" variant="secondary">
+            <Link to="/progress" search={{ tab: "insights" }}>
+              Open Insights
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
 
       {hasCourses && <CourseSnapshotCard snapshot={today.snapshot} />}
 

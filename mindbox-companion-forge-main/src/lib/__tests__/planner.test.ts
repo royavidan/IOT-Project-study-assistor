@@ -7,6 +7,7 @@ import {
   freeSlotsForDay,
   heuristicHomeworkMinutes,
   lectureBacklogFor,
+  MEAL_BREAKS,
   mergeOverlaps,
   minutesToTime,
   planStudyBlocks,
@@ -205,6 +206,16 @@ describe("freeSlotsForDay", () => {
 
   it("empty day → one big slot", () => {
     expect(freeSlotsForDay([], opts)).toEqual([{ start: 540, end: 1260 }]);
+  });
+
+  it("reserves the default meal windows (lunch + dinner)", () => {
+    // Empty day, but MEAL_BREAKS carves out 12:30–13:30 and 18:30–19:30.
+    const withMeals = freeSlotsForDay([], { ...opts, meals: MEAL_BREAKS });
+    expect(withMeals).toEqual([
+      { start: 540, end: 750 }, // 09:00–12:30 (before lunch)
+      { start: 810, end: 1110 }, // 13:30–18:30 (after lunch, before dinner)
+      { start: 1170, end: 1260 }, // 19:30–21:00 (after dinner)
+    ]);
   });
 
   it("inverts a busy interval into gaps", () => {

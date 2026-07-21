@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useSessionScope } from "@/hooks/use-session-scope";
 import {
-  buildReportHtml,
   sessionsToCsv,
   sessionsToJson,
   summarize,
@@ -18,6 +17,7 @@ import {
 import { dateKeyDaysAgo } from "@/lib/dates";
 import { printReportHtml } from "@/features/reports/print-report";
 import { emailReport } from "@/features/reports/report-email.functions";
+import { getReportHtml } from "@/features/reports/report.functions";
 
 function download(filename: string, content: string, mime: string) {
   const blob = new Blob([content], { type: mime });
@@ -58,6 +58,27 @@ export function ExportsView({ student }: Props) {
     },
   });
 
+  // The rich report is assembled server-side (Focus Model + insights + academic
+  // + AI summary), so the print path fetches the finished HTML then prints it.
+  const pdfMutation = useMutation({
+    mutationFn: () => getReportHtml({ data: { from, to } }),
+    onSuccess: ({ html }) => {
+      const result = printReportHtml(html, `mindbox-report_${from}_to_${to}.html`);
+      setNoteKind(result.ok ? "success" : "error");
+      setNote(
+        !result.ok
+          ? result.reason
+          : result.method === "print"
+            ? "Print dialog opened — choose “Save as PDF” or your preferred printer."
+            : "Downloaded an HTML report — open it in your browser, then Print → Save as PDF.",
+      );
+    },
+    onError: (err) => {
+      setNoteKind("error");
+      setNote(err instanceof Error ? err.message : "Failed to build the report.");
+    },
+  });
+
   const filtered = useMemo(
     () => scopedSessions.filter((s) => s.date >= from && s.date <= to),
     [scopedSessions, from, to],
@@ -94,20 +115,8 @@ export function ExportsView({ student }: Props) {
 
   const exportPdf = () => {
     setNoteKind("success");
-    const html = buildReportHtml(filtered, meta);
-    const result = printReportHtml(html, `mindbox-sessions_${stamp}.html`);
-    if (!result.ok) {
-      setNoteKind("error");
-      setNote(result.reason);
-      return;
-    }
-    if (result.method === "print") {
-      setNote("Print dialog opened — choose “Save as PDF” or your preferred printer.");
-    } else {
-      setNote(
-        "Downloaded an HTML report — open the file in your browser, then use Print → Save as PDF.",
-      );
-    }
+    setNote("Building your full report (Focus Model, insights, academic + AI summary)…");
+    pdfMutation.mutate();
   };
 
   const formats = [

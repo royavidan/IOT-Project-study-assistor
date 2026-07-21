@@ -2,187 +2,23 @@ import "@tanstack/react-start/server-only";
 
 import PDFDocument from "pdfkit";
 
-import { buildReportHtml, summarize, type ReportMeta } from "@/features/reports/export";
-import { computeWellbeing } from "@/lib/wellbeing";
-import type { Session } from "@/lib/types";
+import { buildReportHtml, type ReportModel } from "./report-model";
 
-function fmtNum(value: number | null, suffix = ""): string {
-  return value == null ? "—" : `${value}${suffix}`;
-}
-
-const TABLE_HEADERS = [
-  "Date",
-  "Start",
-  "Min",
-  "Mode",
-  "Status",
-  "FLE",
-  "Breaks",
-  "Noise",
-  "Temp",
-  "Light",
-] as const;
-
-const COL_WIDTHS = [52, 34, 26, 58, 46, 26, 30, 30, 30, 34];
-
-function sessionRow(s: Session): string[] {
-  return [
-    s.date,
-    s.start,
-    String(s.durationMin),
-    s.mode,
-    s.status,
-    String(s.focusScore),
-    String(s.breaks),
-    fmtNum(s.noiseAvg),
-    fmtNum(s.tempC),
-    fmtNum(s.lightLux),
-  ];
-}
-
-function buildReportPdfWithPdfkit(sessions: Session[], meta: ReportMeta): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 48, size: "A4" });
-    const chunks: Buffer[] = [];
-
-    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
-
-    const sum = summarize(sessions);
-    const contentWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-
-    doc.fontSize(20).fillColor("#1a1a1a").text("MindBox — Focus History Report");
-    doc.moveDown(0.35);
-    doc
-      .fontSize(10)
-      .fillColor("#666666")
-      .text(`For ${meta.user} · ${meta.from} → ${meta.to} · generated ${meta.generatedAt}`, {
-        width: contentWidth,
-      });
-    doc.moveDown(1);
-
-    const cards: Array<{ label: string; value: string }> = [
-      { label: "Sessions", value: String(sum.sessionCount) },
-      { label: "Total focus", value: `${(sum.totalFocusMin / 60).toFixed(1)} h` },
-      { label: "Avg Focus Load Est.", value: String(sum.avgFocusScore) },
-      { label: "Avg noise", value: fmtNum(sum.avgNoise) },
-      { label: "Avg temp", value: fmtNum(sum.avgTempC, "°C") },
-      { label: "Avg light", value: fmtNum(sum.avgLightLux, " lux") },
-    ];
-
-    const cardGap = 10;
-    const cardWidth = (contentWidth - cardGap * (cards.length - 1)) / cards.length;
-    const cardHeight = 46;
-    const cardsY = doc.y;
-
-    cards.forEach((card, index) => {
-      const x = doc.page.margins.left + index * (cardWidth + cardGap);
-      doc
-        .roundedRect(x, cardsY, cardWidth, cardHeight, 6)
-        .lineWidth(1)
-        .strokeColor("#e2e2e2")
-        .stroke();
-      doc
-        .fontSize(9)
-        .fillColor("#666666")
-        .text(card.label, x + 10, cardsY + 8, { width: cardWidth - 16, lineBreak: false });
-      doc
-        .fontSize(14)
-        .fillColor("#1a1a1a")
-        .text(card.value, x + 10, cardsY + 22, { width: cardWidth - 16, lineBreak: false });
-    });
-
-    doc.y = cardsY + cardHeight + 18;
-
-    const startX = doc.page.margins.left;
-    let y = doc.y;
-
-    doc.fontSize(9).fillColor("#333333");
-    let x = startX;
-    TABLE_HEADERS.forEach((header, i) => {
-      doc.text(header, x, y, { width: COL_WIDTHS[i], lineBreak: false });
-      x += COL_WIDTHS[i];
-    });
-    y += 14;
-    doc
-      .moveTo(startX, y)
-      .lineTo(startX + COL_WIDTHS.reduce((a, b) => a + b, 0), y)
-      .strokeColor("#eeeeee")
-      .stroke();
-    y += 6;
-
-    doc.fontSize(8).fillColor("#1a1a1a");
-
-    const writeRow = (cells: string[]) => {
-      if (y > doc.page.height - doc.page.margins.bottom - 24) {
-        doc.addPage();
-        y = doc.page.margins.top;
-      }
-      x = startX;
-      cells.forEach((cell, i) => {
-        doc.text(cell, x, y, { width: COL_WIDTHS[i], lineBreak: false });
-        x += COL_WIDTHS[i];
-      });
-      y += 12;
-    };
-
-    if (sessions.length === 0) {
-      writeRow(["No sessions in this range.", "", "", "", "", "", "", "", "", ""]);
-    } else {
-      for (const s of sessions) {
-        writeRow(sessionRow(s));
-      }
-    }
-
-    doc.y = y + 16;
-    doc
-      .fontSize(8)
-      .fillColor("#777777")
-      .text(
-        "Focus Load Estimate is a transparent heuristic on a 0–100 scale, derived from session length and observed attention/environment patterns. It is not a validated scientific or clinical measurement.",
-        { width: contentWidth },
-      );
-
-    const wb = computeWellbeing(sessions);
-    if (wb.ready) {
-      doc.moveDown(0.8);
-      doc.fontSize(11).fillColor("#1a1a1a").text("Wellbeing patterns");
-      doc.fontSize(8).fillColor("#444444");
-      const signals = [
-        { title: "Recovery balance", s: wb.recovery },
-        { title: "Circadian alignment", s: wb.circadian },
-        { title: "Routine consistency", s: wb.consistency },
-      ];
-      for (const { title, s } of signals) {
-        if (!s.ready) continue;
-        doc.text(`${title}: ${s.score}/100 (${s.status}) — ${s.headline}`, { width: contentWidth });
-      }
-      doc
-        .moveDown(0.5)
-        .fillColor("#777777")
-        .text(
-          "Report data: sessions, Focus Load Estimate, environment readings and derived wellbeing patterns. No health, clinical, or battery data is included.",
-          { width: contentWidth },
-        );
-    }
-
-    doc.end();
-  });
-}
-
+/** Primary path: headless Chrome renders the self-contained HTML (incl. SVG charts) → PDF bytes. */
 async function buildReportPdfFromHtml(html: string): Promise<Buffer> {
   const puppeteer = await import("puppeteer");
+  // On hosts where Puppeteer can't bundle a working Chrome (e.g. arm64, where
+  // Google ships no Chrome-for-Testing build), point it at a system Chromium via
+  // PUPPETEER_EXECUTABLE_PATH. Unset → Puppeteer's own download.
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || undefined;
   const browser = await puppeteer.default.launch({
     headless: true,
+    executablePath,
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
-
   try {
     const page = await browser.newPage();
-    // The report HTML is fully self-contained (inline styles, no network
-    // fetches), so "load" is sufficient. Puppeteer's setContent type also
-    // excludes networkidle0/2.
+    // Fully self-contained HTML (inline styles + inline SVG, no network fetches).
     await page.setContent(html, { waitUntil: "load" });
     const bytes = await page.pdf({
       format: "A4",
@@ -195,13 +31,155 @@ async function buildReportPdfFromHtml(html: string): Promise<Buffer> {
   }
 }
 
-/** Same report as the on-site print dialog, rendered to PDF for email attachment. */
-export async function buildReportPdf(sessions: Session[], meta: ReportMeta): Promise<Buffer> {
-  const html = buildReportHtml(sessions, meta);
+/**
+ * Fallback when headless Chrome is unavailable on the host: a text-only pdfkit
+ * document from the SAME model (no charts — those need the HTML/Chrome path).
+ * Still renders the narrative, stats, focus/load summary, and the session log /
+ * session dynamics, so the emailed PDF degrades to "text-rich", never blank.
+ */
+function buildReportPdfFallback(model: ReportModel): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 48, size: "A4" });
+    const chunks: Buffer[] = [];
+    doc.on("data", (c: Buffer) => chunks.push(c));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
 
+    const cw = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const title =
+      model.scope === "session" ? "MindBox — Session Report" : "MindBox — Weekly Focus Report";
+    doc.fontSize(20).fillColor("#1a1a1a").text(title);
+    doc
+      .moveDown(0.3)
+      .fontSize(10)
+      .fillColor("#666666")
+      .text(
+        `For ${model.meta.user} · ${model.meta.from} → ${model.meta.to} · generated ${model.meta.generatedAt}`,
+        {
+          width: cw,
+        },
+      );
+    doc.moveDown(0.8);
+
+    if (model.narrative) {
+      doc.fontSize(12).fillColor("#1a1a1a").text(model.narrative.headline, { width: cw });
+      doc.fontSize(9).fillColor("#333333");
+      for (const p of model.narrative.paragraphs) doc.moveDown(0.2).text(p, { width: cw });
+      doc.moveDown(0.6);
+    }
+    if (model.stats?.length) {
+      doc
+        .fontSize(9)
+        .fillColor("#333333")
+        .text(model.stats.map((s) => `${s.label}: ${s.value}`).join("     "), { width: cw });
+      doc.moveDown(0.5);
+    }
+    if (model.focus) {
+      doc
+        .fontSize(9)
+        .fillColor("#333333")
+        .text(
+          `Focus energy: ${model.focus.energyScore}/100 (${model.focus.headline}) — ${model.focus.reliability}`,
+          {
+            width: cw,
+          },
+        );
+      doc.moveDown(0.4);
+    }
+    if (model.overload) {
+      doc
+        .fontSize(9)
+        .fillColor("#333333")
+        .text(
+          `Load: ${model.overload.level}${model.overload.rules.length ? " — " + model.overload.rules.join("; ") : ""}`,
+          {
+            width: cw,
+          },
+        );
+      doc.moveDown(0.6);
+    }
+
+    if (model.scope === "weekly" && model.sessions?.length) {
+      doc.fontSize(11).fillColor("#1a1a1a").text("Session log");
+      doc.moveDown(0.2).fontSize(8).fillColor("#1a1a1a");
+      const startX = doc.page.margins.left;
+      const widths = [62, 38, 28, 66, 56, 30, 34];
+      let y = doc.y;
+      const writeRow = (cells: string[]) => {
+        if (y > doc.page.height - doc.page.margins.bottom - 24) {
+          doc.addPage();
+          y = doc.page.margins.top;
+        }
+        let x = startX;
+        cells.forEach((c, i) => {
+          doc.text(c, x, y, { width: widths[i], lineBreak: false });
+          x += widths[i];
+        });
+        y += 12;
+      };
+      writeRow(["Date", "Start", "Min", "Mode", "Status", "Load", "Tired"]);
+      for (const s of model.sessions)
+        writeRow([
+          s.date,
+          s.start,
+          String(s.durationMin),
+          s.mode,
+          s.status,
+          String(s.focusScore),
+          s.tiredness != null ? String(s.tiredness) : "—",
+        ]);
+      doc.y = y + 10;
+    }
+
+    if (model.scope === "session" && model.sessionDetail) {
+      const d = model.sessionDetail;
+      doc.fontSize(11).fillColor("#1a1a1a").text("Session");
+      doc
+        .moveDown(0.2)
+        .fontSize(9)
+        .fillColor("#333333")
+        .text(
+          `${d.mode} · ${d.durationMin} min · ${d.status} · ${d.breaks} breaks · ${d.presenceInterruptions} interruptions`,
+          {
+            width: cw,
+          },
+        );
+      doc
+        .moveDown(0.2)
+        .text(
+          `Avg load ${d.dynamics.loadMean.toFixed(0)}, peak ${d.dynamics.loadPeak.toFixed(0)}, trend ${d.dynamics.loadSlope > 0 ? "+" : ""}${d.dynamics.loadSlope.toFixed(0)}/10min`,
+          { width: cw },
+        );
+      if (d.checkin)
+        doc
+          .moveDown(0.2)
+          .text(
+            `Check-in: tiredness ${d.checkin.tiredness}/5${d.checkin.note ? ` — “${d.checkin.note}”` : ""}`,
+            {
+              width: cw,
+            },
+          );
+      doc.moveDown(0.4);
+    }
+
+    doc
+      .moveDown(0.6)
+      .fontSize(8)
+      .fillColor("#777777")
+      .text(
+        "Focus Load and the Focus Model are transparent estimates (0–100) with uncertainty — not validated scientific or clinical measurements.",
+        { width: cw },
+      );
+    doc.end();
+  });
+}
+
+/** Render a report model to PDF bytes: Chrome (with charts) first, text-only pdfkit on failure. */
+export async function buildReportPdf(model: ReportModel): Promise<Buffer> {
+  const html = buildReportHtml(model);
   try {
     return await buildReportPdfFromHtml(html);
   } catch {
-    return buildReportPdfWithPdfkit(sessions, meta);
+    return buildReportPdfFallback(model);
   }
 }

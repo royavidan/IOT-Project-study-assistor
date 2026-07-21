@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { FocusBatteryCard } from "@/features/insights/components/FocusBatteryCard";
+import { FocusStateCard } from "@/features/insights/components/FocusStateCard";
 import { LoadReviewCard } from "@/features/insights/components/LoadReviewCard";
 import { StudyConditionsCard } from "@/features/insights/components/StudyConditionsCard";
 import { StudyTimeEffectCard } from "@/features/insights/components/StudyTimeEffectCard";
@@ -127,6 +128,8 @@ export function InsightsView({ student, initialFrom, initialTo }: Props) {
       </Card>
 
       <FocusBatteryCard report={wellbeing} note={strainNote} />
+
+      <FocusStateCard />
 
       <LoadReviewCard />
 

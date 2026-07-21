@@ -3,65 +3,214 @@
 
 <h2>5.1 שלוש משימות, שתי ליבות</h2>
 <table>
-  <tr><th>משימה</th><th>ליבה</th><th>תפקיד</th><th>פרטים</th></tr>
-  <tr><td class="ltr">Arduino loop</td><td>1</td><td>UI + מכונת מצבים + חיישנים</td><td>קלט → FSM → רינדור → פרסום טלמטריה; ‏watchdog ‏30s</td></tr>
-  <tr><td class="ltr">"net"</td><td>0</td><td>כל ה-WiFi/HTTP</td><td>‏16KB stack; בקשה אחת לכל מעבר (שרשרת else-if); כל קריאות ‎WiFi.*‎ אך ורק כאן</td></tr>
-  <tr><td class="ltr">"audio"</td><td>0</td><td>מיקרופון + רמקול</td><td>‏4KB stack, עדיפות 5; ‏RMS רץ ברציפות, צלילים מתור</td></tr>
+  <tr>
+    <th>משימה</th>
+    <th>ליבה</th>
+    <th>תפקיד</th>
+    <th>פרטים</th>
+  </tr>
+  <tr>
+    <td class="ltr">Arduino loop</td>
+    <td>1</td>
+    <td>UI + מכונת מצבים + חיישנים</td>
+    <td>קלט → FSM → רינדור → פרסום טלמטריה; ‏watchdog ‏30s</td>
+  </tr>
+  <tr>
+    <td class="ltr">"net"</td>
+    <td>0</td>
+    <td>כל ה-WiFi/HTTP</td>
+    <td>‏16KB stack; בקשה אחת לכל מעבר (שרשרת else-if); כל קריאות ‎WiFi.*‎ אך ורק כאן</td>
+  </tr>
+  <tr>
+    <td class="ltr">"audio"</td>
+    <td>0</td>
+    <td>מיקרופון + רמקול</td>
+    <td>‏4KB stack, עדיפות 5; ‏RMS רץ ברציפות, צלילים מתור</td>
+  </tr>
 </table>
-<p>שעון הסשן רץ על <code>esp_timer</code> תקופתי (10ms) — כך שגם אם ה-loop נתקע רגעית, הזמן לא מדלג.</p>
+<p>
+  שעון הסשן רץ על <code>esp_timer</code> תקופתי (10ms) — כך שגם אם ה-loop נתקע רגעית, הזמן לא מדלג.
+</p>
 
 <h2>5.2 חציית גבולות בין משימות — בלי race conditions</h2>
 <table>
-  <tr><th>מנגנון</th><th>מה עובר</th><th>כיוון</th></tr>
-  <tr><td class="ltr">mutex s_mux (Cloud)</td><td>‏TelemetrySnap (מדדים חיים) + CloudSettings (ה-downlink המפוענח) + תור שיעורי הבית</td><td>דו-כיווני loop⇄net</td></tr>
-  <tr><td class="ltr">xQueue s_cmdQueue (8)</td><td>פקודות מרחוק (RemoteCmd: start/end/ring/message)</td><td>net → loop</td></tr>
-  <tr><td class="ltr">xQueue s_chimeQ (4)</td><td>בקשות צליל</td><td>loop → audio</td></tr>
-  <tr><td class="ltr">recursive mutex (Storage)</td><td>כל גישה ל-NVS (שתי הליבות כותבות)</td><td>—</td></tr>
-  <tr><td class="ltr">recursive mutex (UploadQueue)</td><td>קבצי LittleFS של תור ההעלאה</td><td>—</td></tr>
+  <tr>
+    <th>מנגנון</th>
+    <th>מה עובר</th>
+    <th>כיוון</th>
+  </tr>
+  <tr>
+    <td class="ltr">mutex s_mux (Cloud)</td>
+    <td>‏TelemetrySnap (מדדים חיים) + CloudSettings (ה-downlink המפוענח) + תור שיעורי הבית</td>
+    <td>דו-כיווני loop⇄net</td>
+  </tr>
+  <tr>
+    <td class="ltr">xQueue s_cmdQueue (8)</td>
+    <td>פקודות מרחוק (RemoteCmd: start/end/ring/message)</td>
+    <td>net → loop</td>
+  </tr>
+  <tr>
+    <td class="ltr">xQueue s_chimeQ (4)</td>
+    <td>בקשות צליל</td>
+    <td>loop → audio</td>
+  </tr>
+  <tr>
+    <td class="ltr">recursive mutex (Storage)</td>
+    <td>כל גישה ל-NVS (שתי הליבות כותבות)</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td class="ltr">recursive mutex (UploadQueue)</td>
+    <td>קבצי LittleFS של תור ההעלאה</td>
+    <td>—</td>
+  </tr>
 </table>
 
 <h2>5.3 מכונת המצבים — 16 מצבים</h2>
 <table>
-  <tr><th class="ltr">State</th><th>תפקיד</th></tr>
-  <tr><td class="ltr">ST_BOOTING</td><td>אתחול</td></tr>
-  <tr><td class="ltr">ST_IDLE</td><td>תפריט הבית; בודק לו"ז להתחלה אוטומטית, הודעות ממתינות, poll קונפיגורציה</td></tr>
-  <tr><td class="ltr">ST_RUNNING</td><td>סשן פעיל: דגימות, התראות, נוכחות, אימון אדפטיבי</td></tr>
-  <tr><td class="ltr">ST_PAUSED</td><td>מושהה; חזרה/סיום אוטומטיים לפי נוכחות</td></tr>
-  <tr><td class="ltr">ST_COMPLETE</td><td>סיכום 2 שניות → הצעת סבב / שיעורי בית / בית</td></tr>
-  <tr><td class="ltr">ST_CYCLE_OFFER</td><td>הצעת האינטרוול הבא (פומודורו רב-סבבים + הפסקה ארוכה)</td></tr>
-  <tr><td class="ltr">ST_RESUME</td><td>שחזור סשן שנקטע (checkpoint ב-NVS — שורד ניתוק חשמל)</td></tr>
-  <tr><td class="ltr">ST_PAIRING</td><td>קוד צימוד 6 ספרות; poll כל 3 שניות</td></tr>
-  <tr><td class="ltr">ST_WIFI_SETUP</td><td>סריקת רשתות + מקלדת מגע על המכשיר (או פורטל SoftAP מהטלפון)</td></tr>
-  <tr><td class="ltr">ST_AGENDA</td><td>מסך הלו"ז: היום + דפדוף 6 ימים קדימה (מהאתר)</td></tr>
-  <tr><td class="ltr">ST_AUTOSTART</td><td>ספלאש 10 שניות לפני התחלה אוטומטית של בלוק לימוד — נגיעה מבטלת</td></tr>
-  <tr><td class="ltr">ST_MESSAGE</td><td>הודעה/צלצול מרחוק מהאתר (30 שניות או נגיעה)</td></tr>
-  <tr><td class="ltr">ST_HOMEWORK</td><td>עדכון שיעורי בית מהיר אחרי סשן עבודה (נגיעה=+25%, ארוכה=סיום)</td></tr>
-  <tr><td class="ltr">ST_DIAG</td><td>מסך דיאגנוסטיקה חי (חיישנים + קודק)</td></tr>
-  <tr><td class="ltr">ST_ERROR</td><td>תקלת חיישן קריטית (באס I2C תקוע) — לא נכשל בשקט</td></tr>
-  <tr><td class="ltr">ST_LOGGING</td><td>(שמור; הכתיבה כיום סינכרונית)</td></tr>
+  <tr>
+    <th class="ltr">State</th>
+    <th>תפקיד</th>
+  </tr>
+  <tr>
+    <td class="ltr">ST_BOOTING</td>
+    <td>אתחול</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_IDLE</td>
+    <td>תפריט הבית; בודק לו"ז להתחלה אוטומטית, הודעות ממתינות, poll קונפיגורציה</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_RUNNING</td>
+    <td>סשן פעיל: דגימות, התראות, נוכחות, אימון אדפטיבי</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_PAUSED</td>
+    <td>מושהה; חזרה/סיום אוטומטיים לפי נוכחות</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_COMPLETE</td>
+    <td>סיכום 2 שניות → הצעת סבב / שיעורי בית / בית</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_CYCLE_OFFER</td>
+    <td>הצעת האינטרוול הבא (פומודורו רב-סבבים + הפסקה ארוכה)</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_RESUME</td>
+    <td>שחזור סשן שנקטע (checkpoint ב-NVS — שורד ניתוק חשמל)</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_PAIRING</td>
+    <td>קוד צימוד 6 ספרות; poll כל 3 שניות</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_WIFI_SETUP</td>
+    <td>סריקת רשתות + מקלדת מגע על המכשיר (או פורטל SoftAP מהטלפון)</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_AGENDA</td>
+    <td>מסך הלו"ז: היום + דפדוף 6 ימים קדימה (מהאתר)</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_AUTOSTART</td>
+    <td>ספלאש 10 שניות לפני התחלה אוטומטית של בלוק לימוד — נגיעה מבטלת</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_MESSAGE</td>
+    <td>הודעה/צלצול מרחוק מהאתר (30 שניות או נגיעה)</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_HOMEWORK</td>
+    <td>עדכון שיעורי בית מהיר אחרי סשן עבודה (נגיעה=+25%, ארוכה=סיום)</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_DIAG</td>
+    <td>מסך דיאגנוסטיקה חי (חיישנים + קודק)</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_ERROR</td>
+    <td>תקלת חיישן קריטית (באס I2C תקוע) — לא נכשל בשקט</td>
+  </tr>
+  <tr>
+    <td class="ltr">ST_LOGGING</td>
+    <td>(שמור; הכתיבה כיום סינכרונית)</td>
+  </tr>
 </table>
 
 <h2>5.4 עמידות לניתוקי חשמל ורשת</h2>
 <table>
-  <tr><th>מנגנון</th><th>איך</th></tr>
-  <tr><td>Checkpoint של סשן</td><td>מצב הסשן נכתב ל-NVS; אחרי ניתוק חשמל המכשיר מציע "המשך או בטל" (ST_RESUME)</td></tr>
-  <tr><td>תור העלאות עמיד</td><td>סשנים שהסתיימו בלי רשת נשמרים כקבצי JSON ב-LittleFS (עד 12); מועלים עם backoff מעריכי ‎5s→5m; חותמות זמן של סשני-offline מתוקנות ברגע ש-NTP חוזר</td></tr>
-  <tr><td>הגדרות שרדו-poll</td><td>ה-CloudSettings האחרון נשאר ב-RAM; כשל poll לא מאפס כלום (השרת אף מחזיר 500 במקום ברירות-מחדל אם קריאת DB נכשלה)</td></tr>
-  <tr><td>Watchdog</td><td>‏Task WDT ‏30s עם panic — ריסטארט נקי במקום תקיעה; סיבת האיפוס האחרונה מוצגת על מסך ה-boot</td></tr>
+  <tr>
+    <th>מנגנון</th>
+    <th>איך</th>
+  </tr>
+  <tr>
+    <td>Checkpoint של סשן</td>
+    <td>מצב הסשן נכתב ל-NVS; אחרי ניתוק חשמל המכשיר מציע "המשך או בטל" (ST_RESUME)</td>
+  </tr>
+  <tr>
+    <td>תור העלאות עמיד</td>
+    <td>
+      סשנים שהסתיימו בלי רשת נשמרים כקבצי JSON ב-LittleFS (עד 12); מועלים עם backoff מעריכי ‎5s→5m;
+      חותמות זמן של סשני-offline מתוקנות ברגע ש-NTP חוזר
+    </td>
+  </tr>
+  <tr>
+    <td>הגדרות שרדו-poll</td>
+    <td>
+      ה-CloudSettings האחרון נשאר ב-RAM; כשל poll לא מאפס כלום (השרת אף מחזיר 500 במקום ברירות-מחדל
+      אם קריאת DB נכשלה)
+    </td>
+  </tr>
+  <tr>
+    <td>Watchdog</td>
+    <td>
+      ‏Task WDT ‏30s עם panic — ריסטארט נקי במקום תקיעה; סיבת האיפוס האחרונה מוצגת על מסך ה-boot
+    </td>
+  </tr>
 </table>
 
 <h2>5.5 מפת מודולים (<code>src/</code>, מבנה שטוח)</h2>
 <table class="kv">
-  <tr><td class="ltr">MindBox.ino</td><td>סדר boot + לולאה ראשית + breadcrumbs</td><td class="ltr">Cloud.* / Payload.*</td><td>משימת רשת, HTTP, ‏NTP; סריאליזציית סשנים</td></tr>
-  <tr><td class="ltr">config.h / types.h</td><td>SSOT פינים/דגלים/קבועים; מבנים ו-enums</td><td class="ltr">Sensors.* / Audio.*</td><td>חיישני סביבה + ToF; קודק I2S מיקרופון/רמקול</td></tr>
-  <tr><td class="ltr">StateMachine.* / Session.*</td><td>ה-FSM; שעון סשן + דגימות + FLE</td><td class="ltr">Sound.* / Haptics.*</td><td>צלילי אירועים (chimeMask); רטט (כבוי ב-S3)</td></tr>
-  <tr><td class="ltr">Display.* / TimerScreen.* / Panel.*</td><td>API רינדור; מסך הטיימר; התקן LovyanGFX</td><td class="ltr">Storage.* / UploadQueue.*</td><td>NVS; תור LittleFS</td></tr>
-  <tr><td class="ltr">Inputs.* / Touch.* / Keyboard.*</td><td>מיזוג אנקודר+כפתור+מגע; דרייבר FT6336; מקלדת מגע</td><td class="ltr">Menu.* / Theme.* / Diagnostics.*</td><td>עץ תפריטים; ערכות צבע; קונסולת serial</td></tr>
+  <tr>
+    <td class="ltr">MindBox.ino</td>
+    <td>סדר boot + לולאה ראשית + breadcrumbs</td>
+    <td class="ltr">Cloud.* / Payload.*</td>
+    <td>משימת רשת, HTTP, ‏NTP; סריאליזציית סשנים</td>
+  </tr>
+  <tr>
+    <td class="ltr">config.h / types.h</td>
+    <td>SSOT פינים/דגלים/קבועים; מבנים ו-enums</td>
+    <td class="ltr">Sensors.* / Audio.*</td>
+    <td>חיישני סביבה + ToF; קודק I2S מיקרופון/רמקול</td>
+  </tr>
+  <tr>
+    <td class="ltr">StateMachine.* / Session.*</td>
+    <td>ה-FSM; שעון סשן + דגימות + FLE</td>
+    <td class="ltr">Sound.* / Haptics.*</td>
+    <td>צלילי אירועים (chimeMask); רטט (כבוי ב-S3)</td>
+  </tr>
+  <tr>
+    <td class="ltr">Display.* / TimerScreen.* / Panel.*</td>
+    <td>API רינדור; מסך הטיימר; התקן LovyanGFX</td>
+    <td class="ltr">Storage.* / UploadQueue.*</td>
+    <td>NVS; תור LittleFS</td>
+  </tr>
+  <tr>
+    <td class="ltr">Inputs.* / Touch.* / Keyboard.*</td>
+    <td>מיזוג אנקודר+כפתור+מגע; דרייבר FT6336; מקלדת מגע</td>
+    <td class="ltr">Menu.* / Theme.* / Diagnostics.*</td>
+    <td>עץ תפריטים; ערכות צבע; קונסולת serial</td>
+  </tr>
 </table>
 
 <h2>5.6 סדר ה-Boot (כל שלב מודפס למסך ול-Serial)</h2>
-<pre>Storage(NVS) → Audio (soft-I2C codec BEFORE display claims the bus) → Display
+<pre>
+Storage(NVS) → Audio (soft-I2C codec BEFORE display claims the bus) → Display
 → reset-reason on screen (1.2s) → Inputs/Touch (calibration if needed) → Sensors (Wire+ToF)
-→ UploadQueue (LittleFS) → Cloud (net task on core 0) → StateMachine → selfTest → WDT armed</pre>
-<p class="small">הסדר אינו שרירותי: הקודק חייב להיות מתוכנת לפני שה-LovyanGFX תופס את פיני ה-I2C;
-המסך חייב לפני החיישנים כדי שתקלת חיישן תוצג; ה-selfTest רץ אחרון כשהכול למעלה.</p>
+→ UploadQueue (LittleFS) → Cloud (net task on core 0) → StateMachine → selfTest → WDT armed</pre
+>
+<p class="small">
+  הסדר אינו שרירותי: הקודק חייב להיות מתוכנת לפני שה-LovyanGFX תופס את פיני ה-I2C; המסך חייב לפני
+  החיישנים כדי שתקלת חיישן תוצג; ה-selfTest רץ אחרון כשהכול למעלה.
+</p>

@@ -27,7 +27,10 @@ This is that list. It covers the **Smart (AI) study planner**, the
 
 4. **Calendar truth** = `schedule_events` + logged `sessions`. Commitments not
    in the app are invisible to the planner — free slots derive only from these
-   plus quiet hours and the working window in Settings.
+   plus quiet hours, **default meal windows** (lunch 12:30–13:30, dinner
+   18:30–19:30, `MEAL_BREAKS` in `planner.ts`), and the working window in
+   Settings. Both engines subtract the same meals, so study never runs over
+   lunch or dinner.
 5. **Free slots are computed by our deterministic code and _given_ to the
    model** — the model never does interval math. Its proposed blocks are then
    clipped/rejected against slots **recomputed from DB truth**: unknown task
@@ -44,6 +47,13 @@ This is that list. It covers the **Smart (AI) study planner**, the
    offers "Regenerate". Auto-replan happens **only** from a check-in.
 9. Model failures (bad output twice, network, missing key) degrade to the
    deterministic heuristic engine — a plan is always produced, labeled as such.
+10. **Humane pacing is guaranteed, not just requested.** The AI prompt asks for
+    breaks, meals, spread-across-the-day, energy-matching and interleaving, but
+    the guarantees are enforced deterministically regardless of model output:
+    meals are removed from the slots (item 4); the sanitizer reserves a
+    `breakMin` gap around every accepted block so blocks are never back-to-back;
+    and the heuristic engine rotates a day's blocks across its free chunks
+    (morning/afternoon/evening) instead of piling them into the earliest one.
 
 ## Check-in (Feature 3)
 
@@ -81,6 +91,36 @@ This is that list. It covers the **Smart (AI) study planner**, the
 16. This is a **behavioral pattern estimate, never a clinical/diagnostic
     claim** — same framing invariant as the rest of the wellbeing code, and the
     email says so.
+
+## Focus Model — calibrated focus/energy estimate (`lib/focus/*`, `insights/focus-model.*`)
+
+16a. **Personalized, not global.** Every session feature is centered/scaled
+     against the USER'S OWN robust baseline (median/MAD), with empirical-Bayes
+     shrinkage toward a population prior when data is thin (`baselines.ts`,
+     `PRIOR_STRENGTH = 5`). A night owl is no longer judged by a global 22:00
+     rule. The richest signal — the per-minute `focus_load_samples` /
+     `env_samples` — is mined for within-session dynamics (load slope, volatility,
+     sustained-high share, noise→load coupling; `session-dynamics.ts`).
+16b. **Calibrated against ground truth.** The model (`model.ts`) predicts the
+     student's own `tiredness` check-in (1–5) from those features via **ridge
+     regression whose prior mean is the existing heuristic's coefficients**
+     (partial pooling: sparse labels → heuristic, many labels → the user's own
+     data; no per-user weight to tune). **Leave-one-out CV** produces an HONEST
+     validated accuracy (MAE + R²) that is surfaced — never a made-up confidence.
+     Below `MIN_PERSONAL_LABELS = 6` it returns the pure heuristic prior; below
+     `MIN_CV_LABELS = 8` it withholds a validated number and says "still learning".
+16c. **Lead with honesty.** The `FocusStateCard` shows the estimate with a
+     confidence band, a "how reliable" line (validated ± / R² / basis / check-in
+     count), the drivers, and a trend. The AI (`focus-review.server.ts`) writes
+     ONLY a behavioral narrative from the derived estimate — same
+     deterministic-numbers / AI-narrates-only / templated-fallback contract as the
+     load review (items 12–16); it never invents a number or a diagnosis.
+16d. **Additive & non-circular.** It does NOT modify `computeWellbeing` /
+     `recovery.status`, so the planner throttle, load-review Rule 1, and reports
+     are untouched. The model's TARGET is the independent tiredness label, never
+     the FLE-derived `focusScore` (avoids the circularity the old correlations had).
+16e. **Same framing invariant** — a behavioral focus/energy pattern estimate with
+     honest uncertainty, **never** a clinical/cognitive-health measure.
 
 ## Device slice (ESP32-S3)
 

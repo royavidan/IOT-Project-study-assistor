@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { useSettings } from "@/lib/queries/settings";
 import { sendDeviceCommand } from "../commands.functions";
 import { DEVICE_COMMAND_TEXT_MAX_BYTES, sanitizeCommandText } from "../command-encode";
 import { sanitizeDeviceString } from "../device-string";
@@ -27,7 +28,7 @@ const PHASE_META: Record<DeviceCommandPhase, { label: string; className: string 
 };
 
 function commandLabel(type: string, arg: number | null, text: string | null): string {
-  if (type === "start") return `Start ${arg ?? "?"} min focus`;
+  if (type === "start") return arg && arg > 0 ? `Start ${arg}m block` : "Start session";
   if (type === "end") return "End session";
   if (type === "ring") return "Ring device";
   if (type === "message") return `Message: “${text ?? ""}”`;
@@ -37,6 +38,7 @@ function commandLabel(type: string, arg: number | null, text: string | null): st
 export function RemoteControlCard({ deviceId }: { deviceId: string }) {
   const queryClient = useQueryClient();
   const { data: recent } = useRecentDeviceCommands(deviceId);
+  const { data: settings } = useSettings();
   const [duration, setDuration] = useState<number>(25);
   const [messageText, setMessageText] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -76,6 +78,22 @@ export function RemoteControlCard({ deviceId }: { deviceId: string }) {
         <div className="space-y-2">
           <Label>Start a focus session</Label>
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              disabled={send.isPending}
+              onClick={() => send.mutate({ type: "start" })}
+            >
+              <Play className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+              Start session
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {settings
+                ? `${settings.deviceCycles} × ${settings.deviceFocusMin}m focus · ${settings.deviceBreakMin}m break · ${settings.deviceLongBreakMin}m long break`
+                : "your configured rhythm"}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <span className="text-xs text-muted-foreground">Or a quick block:</span>
             <ToggleGroup
               type="single"
               value={String(duration)}
@@ -91,15 +109,15 @@ export function RemoteControlCard({ deviceId }: { deviceId: string }) {
             </ToggleGroup>
             <Button
               size="sm"
+              variant="secondary"
               disabled={send.isPending}
               onClick={() => send.mutate({ type: "start", durationMin: duration })}
             >
-              <Play className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-              Start
+              Start block
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Ignored if a session is already running on the box.
+            Set the rhythm in Settings → MindBox device. Ignored if a session is already running.
           </p>
         </div>
 

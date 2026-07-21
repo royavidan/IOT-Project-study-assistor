@@ -446,7 +446,7 @@ async function printConfigDownlink(ackId?: number): Promise<void> {
   // way the firmware will read them.
   const num = (k: string) => Number(body[k] ?? 0);
   console.log(
-    `\nTheme: ${num("themeId")}   Timing: focus ${num("focusMin")}m / break ${num("breakMin")}m (rev ${num("timingRev")})`,
+    `\nTheme: ${num("themeId")}   Rhythm: ${num("cycles")}× focus ${num("focusMin")}m / break ${num("breakMin")}m / long ${num("longBreakMin")}m (rev ${num("timingRev")})`,
   );
   console.log(
     `Exam mode: ${body.examMode ? "ON" : "off"}` +

@@ -54,6 +54,7 @@ struct DeviceConfig {
   bool     autoPause;          // ToF: pause when away from desk
   uint8_t  presencePauseIdx; // 0=30s 1=1m 2=2m
   uint8_t  presenceEndIdx;   // 0=5m 1=10m 2=never
+  uint8_t  presenceSensIdx;  // occupancy estimator sensitivity: 0=Low(strict) 1=Med 2=High(eager)
   uint16_t quietStartMin;      // minutes from midnight, 0xFFFF = quiet hours off
   uint16_t quietEndMin;
   uint16_t dailyGoalMin;
@@ -249,6 +250,8 @@ struct CloudSettings {
   uint8_t  themeId;           // accent preset 0-4 (Theme::setAccentPreset)
   uint16_t focusMin, breakMin;
   uint32_t timingRev;         // epoch-sec of the site's last timing save; 0 = never
+  uint16_t longBreakMin;      // site-owned long-break length (adopted with timingRev)
+  uint8_t  cycles;            // focus blocks per set before the long break (1-8)
   // Exam mode (DND) + idle badge + server-computed stats.
   bool     examMode;          // mute all chimes except ring, suppress nudges
   int16_t  nextExamDays;      // -1 = none, 0 = today (idle "EXAM Nd" badge)
@@ -348,6 +351,7 @@ inline DeviceConfig defaultConfig() {
   return { /*showTimer*/ true, /*haptics*/ true, /*adaptive*/ false,
            /*nudgeScr*/ true, /*nudgeHap*/ true, /*coachPause*/ false,
            /*nudges*/ true, /*autoPause*/ false, /*pauseIdx*/ 0, /*endIdx*/ 0,
+           /*presSensIdx*/ 1,
            /*quietStart*/ 0xFFFF, /*quietEnd*/ 0xFFFF,
            /*dailyGoal*/ 180,
            /*longBreakEnabled*/ true, /*longBreakEvery*/ 4, /*longBreakMin*/ 15,

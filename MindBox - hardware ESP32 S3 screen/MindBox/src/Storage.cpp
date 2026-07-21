@@ -198,6 +198,7 @@ DeviceConfig loadConfig(const DeviceConfig& d) {
   c.autoPause        = prefs.getBool("autoPause", d.autoPause);
   c.presencePauseIdx = prefs.getUChar("pauseIdx", d.presencePauseIdx);
   c.presenceEndIdx   = prefs.getUChar("endIdx",   d.presenceEndIdx);
+  c.presenceSensIdx  = prefs.getUChar("presSens", d.presenceSensIdx);
   c.quietStartMin    = prefs.getUShort("quietStart", d.quietStartMin);
   c.quietEndMin      = prefs.getUShort("quietEnd",   d.quietEndMin);
   c.dailyGoalMin     = prefs.getUShort("goal",    d.dailyGoalMin);
@@ -236,6 +237,7 @@ void saveConfig(const DeviceConfig& c) {
   prefs.putBool("autoPause", c.autoPause);
   prefs.putUChar("pauseIdx", c.presencePauseIdx);
   prefs.putUChar("endIdx",   c.presenceEndIdx);
+  prefs.putUChar("presSens", c.presenceSensIdx);
   prefs.putUShort("quietStart", c.quietStartMin);
   prefs.putUShort("quietEnd",   c.quietEndMin);
   prefs.putUShort("goal",    c.dailyGoalMin);
@@ -596,6 +598,13 @@ static bool validNoiseDbOffset(float v) { return v >= 40.0f && v <= 160.0f; }
 static bool validLightLuxScale(float v) { return v >= 50.0f && v <= 10000.0f; }
 static bool validLightVarScale(float v) { return v >= 50.0f && v <= 20000.0f; }
 static bool validTempOffset(float v)    { return v >= -15.0f && v <= 15.0f; }
+
+// Standalone read of the presence sensitivity index (same NVS key saveConfig writes) so Sensors::init can
+// apply the saved sensitivity at boot without threading the whole DeviceConfig through.
+uint8_t presenceSensIdx() {
+  NvsLock lock;
+  return prefs.getUChar("presSens", 1);
+}
 
 float noiseFullScale() {
   NvsLock lock;

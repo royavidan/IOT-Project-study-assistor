@@ -3,69 +3,228 @@
 
 <h2>10.1 פקודות קונסולת ה-Serial ‏(115200)</h2>
 <table>
-  <tr><th class="ltr">פקודה</th><th>מה היא עושה</th></tr>
-  <tr><td class="ltr">m</td><td>מוניטור 1Hz: מצב, טיימר, נוכחות+מרחק, רעש, אור, טמפ', ‏ToF, ‏WiFi, כפתור, תקלות, תורים</td></tr>
-  <tr><td class="ltr">d</td><td>אותו dump — חד-פעמי</td></tr>
-  <tr><td class="ltr">a</td><td>‏Audio probe: ‏ACK של הקודק + ‏min/max/DC/AC-RMS גולמיים מהמיקרופון</td></tr>
-  <tr><td class="ltr">t / k</td><td>בדיקת מגע חיה (crosshair) / כיול מגע מחדש</td></tr>
-  <tr><td class="ltr">b</td><td>בדיקת כפתור חיה ‎8 שניות (IO21)</td></tr>
-  <tr><td class="ltr">c</td><td>כיול חיישנים: ‏<code>c</code> מציג; ‏<code>c noise|db|light|lightvar|temp &lt;v&gt;</code> מכוון; ‏<code>c reset</code> מאפס</td></tr>
-  <tr><td class="ltr">q</td><td>מצב תור ההעלאות (ממתינים / הוותיק ביותר / הושלכו)</td></tr>
-  <tr><td class="ltr">w</td><td>הגדרת WiFi / כתובת שרת / secret מה-Serial</td></tr>
-  <tr><td class="ltr">h</td><td>עזרה</td></tr>
+  <tr>
+    <th class="ltr">פקודה</th>
+    <th>מה היא עושה</th>
+  </tr>
+  <tr>
+    <td class="ltr">m</td>
+    <td>מוניטור 1Hz: מצב, טיימר, נוכחות+מרחק, רעש, אור, טמפ', ‏ToF, ‏WiFi, כפתור, תקלות, תורים</td>
+  </tr>
+  <tr>
+    <td class="ltr">d</td>
+    <td>אותו dump — חד-פעמי</td>
+  </tr>
+  <tr>
+    <td class="ltr">a</td>
+    <td>‏Audio probe: ‏ACK של הקודק + ‏min/max/DC/AC-RMS גולמיים מהמיקרופון</td>
+  </tr>
+  <tr>
+    <td class="ltr">t / k</td>
+    <td>בדיקת מגע חיה (crosshair) / כיול מגע מחדש</td>
+  </tr>
+  <tr>
+    <td class="ltr">b</td>
+    <td>בדיקת כפתור חיה ‎8 שניות (IO21)</td>
+  </tr>
+  <tr>
+    <td class="ltr">c</td>
+    <td>
+      כיול חיישנים: ‏<code>c</code> מציג; ‏<code>c noise|db|light|lightvar|temp &lt;v&gt;</code>
+      מכוון; ‏<code>c reset</code> מאפס
+    </td>
+  </tr>
+  <tr>
+    <td class="ltr">q</td>
+    <td>מצב תור ההעלאות (ממתינים / הוותיק ביותר / הושלכו)</td>
+  </tr>
+  <tr>
+    <td class="ltr">w</td>
+    <td>הגדרת WiFi / כתובת שרת / secret מה-Serial</td>
+  </tr>
+  <tr>
+    <td class="ltr">h</td>
+    <td>עזרה</td>
+  </tr>
 </table>
-<p class="small">בנוסף: ‏selfTest מלא רץ בכל boot ומדפיס — גרסה, סיבת איפוס, זיכרון/PSRAM, סריקת I2C,
-מרחק ToF, בדיקת מיקרופון, אור, טמפ', ‏WiFi ורשימת הפקודות.</p>
+<p class="small">
+  בנוסף: ‏selfTest מלא רץ בכל boot ומדפיס — גרסה, סיבת איפוס, זיכרון/PSRAM, סריקת I2C, מרחק ToF,
+  בדיקת מיקרופון, אור, טמפ', ‏WiFi ורשימת הפקודות.
+</p>
 
 <h2>10.2 דגלי הסימולטור (<code>bun run simulate -- ...</code>)</h2>
 <table>
-  <tr><th class="ltr">דגל</th><th>מה מדגים</th></tr>
-  <tr><td class="ltr">(ללא דגל)</td><td>זריעת מכשיר + ‏~30 יום של סשנים + טלמטריה רציפה</td></tr>
-  <tr><td class="ltr">--config</td><td>מדפיס את ה-downlink המלא מפוענח — בדיוק מה שהמכשיר רואה (לו"ז, שבוע, theme, פקודה ממתינה...)</td></tr>
-  <tr><td class="ltr">--send-command=&lt;type&gt;[:&lt;arg&gt;][:&lt;text&gt;] / --ack=&lt;id&gt;</td><td>מחזור פקודה מלא מול הסטטוסים באתר</td></tr>
-  <tr><td class="ltr">--homework=&lt;uuid&gt;:&lt;pct&gt;</td><td>עדכון מטלה "מהמכשיר"</td></tr>
-  <tr><td class="ltr">--offline-then-sync</td><td>צבירת סשנים ואז סנכרון בבת אחת (תרחיש חזרת-רשת)</td></tr>
-  <tr><td class="ltr">--low-battery / --sensor-fault</td><td>‏StateBadge אזהרה/תקלה + באנר סוללה באתר</td></tr>
-  <tr><td class="ltr">--no-env</td><td>טלמטריה בלי שדות סביבה — הוכחת תאימות-לאחור</td></tr>
-  <tr><td class="ltr">--user= / --device= / --ticks= / --interval= / --seed-only / --no-sessions</td><td>שליטה בזהות ובקצב; ‏<code>bun run cleanup</code> מנקה</td></tr>
+  <tr>
+    <th class="ltr">דגל</th>
+    <th>מה מדגים</th>
+  </tr>
+  <tr>
+    <td class="ltr">(ללא דגל)</td>
+    <td>זריעת מכשיר + ‏~30 יום של סשנים + טלמטריה רציפה</td>
+  </tr>
+  <tr>
+    <td class="ltr">--config</td>
+    <td>
+      מדפיס את ה-downlink המלא מפוענח — בדיוק מה שהמכשיר רואה (לו"ז, שבוע, theme, פקודה ממתינה...)
+    </td>
+  </tr>
+  <tr>
+    <td class="ltr">--send-command=&lt;type&gt;[:&lt;arg&gt;][:&lt;text&gt;] / --ack=&lt;id&gt;</td>
+    <td>מחזור פקודה מלא מול הסטטוסים באתר</td>
+  </tr>
+  <tr>
+    <td class="ltr">--homework=&lt;uuid&gt;:&lt;pct&gt;</td>
+    <td>עדכון מטלה "מהמכשיר"</td>
+  </tr>
+  <tr>
+    <td class="ltr">--offline-then-sync</td>
+    <td>צבירת סשנים ואז סנכרון בבת אחת (תרחיש חזרת-רשת)</td>
+  </tr>
+  <tr>
+    <td class="ltr">--low-battery / --sensor-fault</td>
+    <td>‏StateBadge אזהרה/תקלה + באנר סוללה באתר</td>
+  </tr>
+  <tr>
+    <td class="ltr">--no-env</td>
+    <td>טלמטריה בלי שדות סביבה — הוכחת תאימות-לאחור</td>
+  </tr>
+  <tr>
+    <td class="ltr">--user= / --device= / --ticks= / --interval= / --seed-only / --no-sessions</td>
+    <td>שליטה בזהות ובקצב; ‏<code>bun run cleanup</code> מנקה</td>
+  </tr>
 </table>
 
 <h2>10.3 שדות ה-Downlink — רפרנס מלא (‏GET /ingest/config)</h2>
 <table>
-  <tr><th class="ltr">שדה</th><th>טיפוס/טווח</th><th>תפקיד</th></tr>
-  <tr><td class="ltr">paired</td><td class="ltr">bool</td><td>האם המכשיר משויך לחשבון</td></tr>
-  <tr><td class="ltr">showTimer, hapticsEnabled, adaptiveCoaching, nudgesEnabled</td><td class="ltr">bool</td><td>הגדרות ליבה</td></tr>
-  <tr><td class="ltr">quietStartMin / quietEndMin</td><td class="ltr">0–1439 / 65535</td><td>שעות שקט (דקות מחצות; ‏65535=כבוי)</td></tr>
-  <tr><td class="ltr">dailyGoalMin, todayFocusSec</td><td class="ltr">int</td><td>יעד יומי + הפוקוס שנצבר היום (לפי היום המקומי)</td></tr>
-  <tr><td class="ltr">ownerDisplayName, ownerEmail</td><td class="ltr">str ≤19/31B</td><td>ברכת בעלים על המסך (מחוטא)</td></tr>
-  <tr><td class="ltr">tzOffsetMin</td><td class="ltr">int</td><td>אזור זמן המשתמש — כל חישובי "היום" מקומיים</td></tr>
-  <tr><td class="ltr">agendaStr</td><td class="ltr">"start|end|kind|title;…" ≤12</td><td>לו"ז היום (מסך Today + התחלה אוטומטית)</td></tr>
-  <tr><td class="ltr">weekStr</td><td class="ltr">"day|start|end|kind|title;…" ≤36, ≤10/יום</td><td>ימים ‎+1..+6‎ לדפדוף</td></tr>
-  <tr><td class="ltr">soundEnabled, soundLevel, chimeMask, autoStartEnabled</td><td class="ltr">bool / 0–2 / bits / bool</td><td>סאונד בבעלות האתר; ‏mask: ‏0=לייפסייקל ‏1=סיום ‏2=מתוזמן ‏3=התראות</td></tr>
-  <tr><td class="ltr">themeId</td><td class="ltr">0–4</td><td>ערכת צבעים (טבלת presets זהה בקושחה ובאתר)</td></tr>
-  <tr><td class="ltr">focusMin, breakMin, timingRev</td><td class="ltr">5–120 / 1–60 / epoch</td><td>זמני פומודורו; מאומצים פעם אחת לכל revision</td></tr>
-  <tr><td class="ltr">examMode, nextExamDays, nextExamTitle</td><td class="ltr">bool / −1..365 / str ≤23B</td><td>‏DND במבחן (ידני או אוטומטי ביום מבחן) + באדג' ספירה</td></tr>
-  <tr><td class="ltr">streakDays, weekFocusMin</td><td class="ltr">int</td><td>סטריק ודקות השבוע למסך הסטטיסטיקה</td></tr>
-  <tr><td class="ltr">hwStr</td><td class="ltr">"uuid|title|pct;…" ≤3</td><td>מטלות למסך העדכון המהיר</td></tr>
-  <tr><td class="ltr">cmdId, cmdType, cmdArg, cmdText</td><td class="ltr">int / 1..6 / int / str ≤40B</td><td>פקודה מרחוק אחת (‏1=start ‏4=end ‏5=ring ‏6=message)</td></tr>
+  <tr>
+    <th class="ltr">שדה</th>
+    <th>טיפוס/טווח</th>
+    <th>תפקיד</th>
+  </tr>
+  <tr>
+    <td class="ltr">paired</td>
+    <td class="ltr">bool</td>
+    <td>האם המכשיר משויך לחשבון</td>
+  </tr>
+  <tr>
+    <td class="ltr">showTimer, hapticsEnabled, adaptiveCoaching, nudgesEnabled</td>
+    <td class="ltr">bool</td>
+    <td>הגדרות ליבה</td>
+  </tr>
+  <tr>
+    <td class="ltr">quietStartMin / quietEndMin</td>
+    <td class="ltr">0–1439 / 65535</td>
+    <td>שעות שקט (דקות מחצות; ‏65535=כבוי)</td>
+  </tr>
+  <tr>
+    <td class="ltr">dailyGoalMin, todayFocusSec</td>
+    <td class="ltr">int</td>
+    <td>יעד יומי + הפוקוס שנצבר היום (לפי היום המקומי)</td>
+  </tr>
+  <tr>
+    <td class="ltr">ownerDisplayName, ownerEmail</td>
+    <td class="ltr">str ≤19/31B</td>
+    <td>ברכת בעלים על המסך (מחוטא)</td>
+  </tr>
+  <tr>
+    <td class="ltr">tzOffsetMin</td>
+    <td class="ltr">int</td>
+    <td>אזור זמן המשתמש — כל חישובי "היום" מקומיים</td>
+  </tr>
+  <tr>
+    <td class="ltr">agendaStr</td>
+    <td class="ltr">"start|end|kind|title;…" ≤12</td>
+    <td>לו"ז היום (מסך Today + התחלה אוטומטית)</td>
+  </tr>
+  <tr>
+    <td class="ltr">weekStr</td>
+    <td class="ltr">"day|start|end|kind|title;…" ≤36, ≤10/יום</td>
+    <td>ימים ‎+1..+6‎ לדפדוף</td>
+  </tr>
+  <tr>
+    <td class="ltr">soundEnabled, soundLevel, chimeMask, autoStartEnabled</td>
+    <td class="ltr">bool / 0–2 / bits / bool</td>
+    <td>סאונד בבעלות האתר; ‏mask: ‏0=לייפסייקל ‏1=סיום ‏2=מתוזמן ‏3=התראות</td>
+  </tr>
+  <tr>
+    <td class="ltr">themeId</td>
+    <td class="ltr">0–4</td>
+    <td>ערכת צבעים (טבלת presets זהה בקושחה ובאתר)</td>
+  </tr>
+  <tr>
+    <td class="ltr">focusMin, breakMin, timingRev</td>
+    <td class="ltr">5–120 / 1–60 / epoch</td>
+    <td>זמני פומודורו; מאומצים פעם אחת לכל revision</td>
+  </tr>
+  <tr>
+    <td class="ltr">examMode, nextExamDays, nextExamTitle</td>
+    <td class="ltr">bool / −1..365 / str ≤23B</td>
+    <td>‏DND במבחן (ידני או אוטומטי ביום מבחן) + באדג' ספירה</td>
+  </tr>
+  <tr>
+    <td class="ltr">streakDays, weekFocusMin</td>
+    <td class="ltr">int</td>
+    <td>סטריק ודקות השבוע למסך הסטטיסטיקה</td>
+  </tr>
+  <tr>
+    <td class="ltr">hwStr</td>
+    <td class="ltr">"uuid|title|pct;…" ≤3</td>
+    <td>מטלות למסך העדכון המהיר</td>
+  </tr>
+  <tr>
+    <td class="ltr">cmdId, cmdType, cmdArg, cmdText</td>
+    <td class="ltr">int / 1..6 / int / str ≤40B</td>
+    <td>פקודה מרחוק אחת (‏1=start ‏4=end ‏5=ring ‏6=message)</td>
+  </tr>
 </table>
-<p class="small">כללי חיטוי לכל מחרוזת: הסרת ‏<code>" \ | ;</code> ותווי בקרה + קיטום לפי בתים של UTF-8
-(מודול משותף <code>device-string.ts</code> + בדיקות יחידה) — כי הפרסר בקושחה מינימלי בכוונה.</p>
+<p class="small">
+  כללי חיטוי לכל מחרוזת: הסרת ‏<code>" \ | ;</code> ותווי בקרה + קיטום לפי בתים של UTF-8 (מודול
+  משותף <code>device-string.ts</code> + בדיקות יחידה) — כי הפרסר בקושחה מינימלי בכוונה.
+</p>
 
 <h2>10.4 בדיקות אוטומטיות</h2>
 <table>
-  <tr><th>שכבה</th><th>מה</th></tr>
-  <tr><td>יחידה (אתר)</td><td>‏278 בדיקות vitest — כל ה-encoders של פרוטוקול המכשיר, לוגיקת לו"ז/סטריק/מתכנן, ‏focus-load (זהה לקושחה)</td></tr>
-  <tr><td>אינטגרציה בלי חומרה</td><td>הסימולטור מדבר את ה-HTTP האמיתי מול השרת האמיתי</td></tr>
-  <tr><td>קושחה</td><td>קומפילציה נקייה (0 אזהרות) ב-arduino-cli; ‏selfTest חומרתי בכל boot; קונסולת אבחון</td></tr>
+  <tr>
+    <th>שכבה</th>
+    <th>מה</th>
+  </tr>
+  <tr>
+    <td>יחידה (אתר)</td>
+    <td>
+      ‏278 בדיקות vitest — כל ה-encoders של פרוטוקול המכשיר, לוגיקת לו"ז/סטריק/מתכנן, ‏focus-load
+      (זהה לקושחה)
+    </td>
+  </tr>
+  <tr>
+    <td>אינטגרציה בלי חומרה</td>
+    <td>הסימולטור מדבר את ה-HTTP האמיתי מול השרת האמיתי</td>
+  </tr>
+  <tr>
+    <td>קושחה</td>
+    <td>קומפילציה נקייה (0 אזהרות) ב-arduino-cli; ‏selfTest חומרתי בכל boot; קונסולת אבחון</td>
+  </tr>
 </table>
 
 <h2>10.5 מסמכים משלימים בריפו</h2>
 <table class="kv">
-  <tr><td class="ltr">docs/ASSUMPTIONS.md</td><td>כל ההנחות והספים של פיצ'רי ה-AI וממשק המכשיר</td></tr>
-  <tr><td class="ltr">docs/MindBox-Product-Overview.tex · MindBox-System-Architecture.tex</td><td>מסמכי מוצר וארכיטקטורת-אתר (LaTeX)</td></tr>
-  <tr><td class="ltr">MindBox - hardware ESP32 S3 screen/MindBox/CLAUDE.md</td><td>מפת הקושחה העדכנית (המקור המוסמך בעץ)</td></tr>
-  <tr><td class="ltr">README.md</td><td>התקנה, מיגרציות, סימולטור, פיצ'רי אתר↔מכשיר</td></tr>
+  <tr>
+    <td class="ltr">docs/ASSUMPTIONS.md</td>
+    <td>כל ההנחות והספים של פיצ'רי ה-AI וממשק המכשיר</td>
+  </tr>
+  <tr>
+    <td class="ltr">docs/MindBox-Product-Overview.tex · MindBox-System-Architecture.tex</td>
+    <td>מסמכי מוצר וארכיטקטורת-אתר (LaTeX)</td>
+  </tr>
+  <tr>
+    <td class="ltr">MindBox - hardware ESP32 S3 screen/MindBox/CLAUDE.md</td>
+    <td>מפת הקושחה העדכנית (המקור המוסמך בעץ)</td>
+  </tr>
+  <tr>
+    <td class="ltr">README.md</td>
+    <td>התקנה, מיגרציות, סימולטור, פיצ'רי אתר↔מכשיר</td>
+  </tr>
 </table>
-<p class="small">מסמך זה נבנה מ-<code>docs/system-guide/*.html</code>; עדכון: ערכו את הפרק הרלוונטי והריצו
-<code>npx tsx scripts/build-system-doc.ts</code>.</p>
+<p class="small">
+  מסמך זה נבנה מ-<code>docs/system-guide/*.html</code>; עדכון: ערכו את הפרק הרלוונטי והריצו
+  <code>npx tsx scripts/build-system-doc.ts</code>.
+</p>

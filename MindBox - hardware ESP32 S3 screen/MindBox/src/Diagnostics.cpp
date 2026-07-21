@@ -59,10 +59,12 @@ static void dump() {
     Sensors::readTemp(tempC);
     formatTemp(tempC, tempBuf, sizeof(tempBuf));
     Serial.printf(
-      "[mon] state=%-7s timer=%02d:%02d mode=%-5s present=%d dist=%dmm "
+      "[mon] state=%-7s timer=%02d:%02d mode=%-5s present=%d dist=%dmm conf=%.2f move=%.0f base=%dmm "
       "noise=%.2f lux=%.0f temp=%s tof=%s wifi=%s btn=%d/%d fault=%d buf=%d pending=--\n",
       stName(st), s / 60, s % 60, modeName(StateMachine::mode()),
-      Sensors::present() ? 1 : 0, Sensors::presenceMm(), Sensors::noise(), lux,
+      Sensors::present() ? 1 : 0, Sensors::presenceMm(),
+      Sensors::occupancyConfidence(), Sensors::presenceMovement(), Sensors::presenceBaselineMm(),
+      Sensors::noise(), lux,
       tempBuf,
       Sensors::health().tofPresent ? "ok" : "absent",
       Cloud::online() ? "on" : "off",
@@ -75,10 +77,12 @@ static void dump() {
     Sensors::readTemp(tempC);
     formatTemp(tempC, tempBuf, sizeof(tempBuf));
     Serial.printf(
-      "[mon] state=%-7s timer=%02d:%02d mode=%-5s present=%d dist=%dmm "
+      "[mon] state=%-7s timer=%02d:%02d mode=%-5s present=%d dist=%dmm conf=%.2f move=%.0f base=%dmm "
       "noise=%.2f lux=%.0f temp=%s tof=%s wifi=%s btn=%d/%d fault=%d buf=%d pending=%d\n",
       stName(st), s / 60, s % 60, modeName(StateMachine::mode()),
-      Sensors::present() ? 1 : 0, Sensors::presenceMm(), Sensors::noise(), lux,
+      Sensors::present() ? 1 : 0, Sensors::presenceMm(),
+      Sensors::occupancyConfidence(), Sensors::presenceMovement(), Sensors::presenceBaselineMm(),
+      Sensors::noise(), lux,
       tempBuf,
       Sensors::health().tofPresent ? "ok" : "absent",
       Cloud::online() ? "on" : "off",
@@ -253,7 +257,9 @@ void selfTest() {
   Serial.println();
   Serial.printf("oled     : %s\n", Display::present() ? Display::driverName() : "NOT FOUND");
   SensorHealth h = Sensors::health();
-  Serial.printf("tof(pres): %s  dist=%dmm\n", h.tofPresent ? "ok" : "absent", Sensors::presenceMm());
+  Serial.printf("tof(pres): %s  dist=%dmm  base=%dmm  conf=%.2f  (occupancy estimator; watch conf/move via 'm')\n",
+                h.tofPresent ? "ok" : "absent", Sensors::presenceMm(),
+                Sensors::presenceBaselineMm(), Sensors::occupancyConfidence());
   Serial.printf("mic      : %.2f normalized (live probe)\n", Sensors::noiseProbe());
   Audio::probe();   // ES8311 boot-ACK + raw I2S min/max/RMS (mic bring-up)
   float lux = 0, lvar = 0, tempC = NAN;

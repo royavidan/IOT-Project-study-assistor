@@ -36,5 +36,16 @@ thresholds, not from load. Higher load is shown neutral/amber ("Load N"), never 
   quiet-hours + notifications gates). `load-review.functions.ts` + `components/LoadReviewCard` = the
   "Run review now" demo button on InsightsView. Purpose + thresholds table: `docs/ASSUMPTIONS.md`.
 
+- **Focus Model** (calibrated, personalized — `@/lib/focus/*` + `focus-model.server.ts` +
+  `focus-model.functions.ts` + `components/FocusStateCard`): unlike the fixed-weight Focus Battery, this
+  normalizes each session's features against the USER'S OWN robust baseline (shrinkage to a population
+  prior when sparse — `baselines.ts`), mines the per-minute samples for within-session dynamics
+  (`session-dynamics.ts`), and **calibrates against the `tiredness` check-ins** via ridge-with-heuristic-
+  prior + leave-one-out validation (`model.ts`) — so it reports its OWN accuracy. `focus-state.ts` fuses
+  it into a confidence-banded estimate; `focus-review.server.ts` adds an AI narrative (same
+  deterministic-numbers/AI-narrates-only/fallback contract as the load review). Additive: does NOT touch
+  `computeWellbeing`/`recovery.status`. Framing + thresholds: `docs/ASSUMPTIONS.md` items 16a–16e. Pure
+  math is unit-tested in `lib/__tests__/{robust,session-dynamics,baselines,focus-trends,focus-model,focus-state}.test.ts`.
+
 Consumed by `/progress?tab=insights` (via `InsightsView`) and the dashboard teaser (`routes/index.tsx`).
 Shared used: `@/lib/queries/sessions`, `@/lib/{wellbeing,env-quality,study-time,session-scope,dates}`.

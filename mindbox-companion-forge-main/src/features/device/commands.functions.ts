@@ -17,19 +17,13 @@ const sendCommandInput = z
   .object({
     deviceId: z.string().min(1),
     type: z.enum(["start", "end", "ring", "message"]),
-    /** Session length for `start`. */
+    /** For `start`: a single-block length in minutes. OMIT to run the box's
+     *  full configured session (focus/break/long-break/cycles from settings). */
     durationMin: z.number().int().min(5).max(120).optional(),
     /** Message body for `message` (sanitized + byte-capped before storage). */
     text: z.string().trim().min(1).max(80).optional(),
   })
   .superRefine((v, ctx) => {
-    if (v.type === "start" && v.durationMin == null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["durationMin"],
-        message: "Pick a session length.",
-      });
-    }
     if (v.type === "message" && !v.text) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -94,7 +88,9 @@ export const sendDeviceCommand = createServerFn({ method: "POST" })
         device_id: data.deviceId,
         user_id: user.id,
         type: data.type,
-        arg: data.type === "start" ? (data.durationMin ?? null) : null,
+        // start with a duration = single block; start with 0 = full configured
+        // session (the box uses its downlinked focus/break/long-break/cycles).
+        arg: data.type === "start" ? (data.durationMin ?? 0) : null,
         text,
       })
       .select("id")

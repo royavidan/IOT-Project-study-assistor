@@ -30,6 +30,12 @@ export interface SanitizeOpts {
   minBlockMin?: number;
   /** Hard ceiling on blocks per day (the mode's lever). Default unlimited. */
   maxBlocksPerDay?: number;
+  /**
+   * Minimum empty minutes to keep between consecutive blocks on a day. Reserved
+   * around every accepted block so the model cannot pack blocks back-to-back
+   * even if it ignores the prompt. Default 0 (no gap enforced).
+   */
+  minGapMin?: number;
 }
 
 /**
@@ -45,6 +51,7 @@ export function sanitizeLlmBlocks(
 ): SanitizeResult {
   const minBlock = opts.minBlockMin ?? 20;
   const maxPerDay = opts.maxBlocksPerDay ?? Number.POSITIVE_INFINITY;
+  const gap = Math.max(0, opts.minGapMin ?? 0);
   const tasksByRef = new Map(tasks.map((t) => [t.ref, t]));
   // Mutable copy — accepted blocks are carved out of their slot, which makes
   // mutual overlap between proposed blocks impossible by construction.
@@ -149,10 +156,14 @@ export function sanitizeLlmBlocks(
 
     usedPerDay.set(block.dateKey, used + (clippedEnd - clippedStart));
     countPerDay.set(block.dateKey, (countPerDay.get(block.dateKey) ?? 0) + 1);
-    // Carve the accepted block out of its slot.
+    // Carve the accepted block out of its slot, plus a `gap` cushion on each
+    // side, so the next accepted block on this day can't start within the break
+    // — deterministic anti-cram regardless of what the model returned. The cap
+    // still counts only real block minutes, not the reserved gaps.
     const pieces: Interval[] = [];
-    if (slot.start < clippedStart) pieces.push({ start: slot.start, end: clippedStart });
-    if (clippedEnd < slot.end) pieces.push({ start: clippedEnd, end: slot.end });
+    if (slot.start < clippedStart - gap)
+      pieces.push({ start: slot.start, end: clippedStart - gap });
+    if (clippedEnd + gap < slot.end) pieces.push({ start: clippedEnd + gap, end: slot.end });
     slots.splice(bestIdx, 1, ...pieces);
   }
 

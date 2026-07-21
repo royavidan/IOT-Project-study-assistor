@@ -21,10 +21,11 @@ describe("sanitizeCommandText", () => {
     expect(out).toHaveLength(DEVICE_COMMAND_TEXT_MAX_BYTES);
   });
 
-  it("caps Hebrew by bytes without splitting a character", () => {
-    const out = sanitizeCommandText("ש".repeat(40)); // 80 bytes
+  it("romanizes Hebrew then caps at the byte budget", () => {
+    // "ש" -> "sh": 40 letters -> 80 chars/bytes -> capped to 40 -> "sh" x20.
+    const out = sanitizeCommandText("ש".repeat(40));
     expect(new TextEncoder().encode(out).length).toBeLessThanOrEqual(DEVICE_COMMAND_TEXT_MAX_BYTES);
-    expect(out).toBe("ש".repeat(20));
+    expect(out).toBe("sh".repeat(20));
   });
 });
 

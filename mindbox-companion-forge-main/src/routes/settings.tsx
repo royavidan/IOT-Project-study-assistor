@@ -386,10 +386,12 @@ function Settings() {
 
           <div className="space-y-2.5 border-t border-border pt-4">
             <div>
-              <Label className="text-sm font-medium">Session timing</Label>
+              <Label className="text-sm font-medium">Session rhythm (pomodoro)</Label>
               <p className="text-xs text-muted-foreground">
-                Focus/break lengths for the box timer. A save here lands on the device once — you
-                can still adjust on the device afterwards (until the next site save).
+                The box runs <b>{form.deviceCycles}</b> focus blocks of {form.deviceFocusMin}m with{" "}
+                {form.deviceBreakMin}m breaks and a {form.deviceLongBreakMin}m long break after the
+                last one. A save lands on the device once — you can still adjust on the box
+                afterwards (until the next site save).
               </p>
             </div>
             <div className="flex flex-wrap items-end gap-4">
@@ -423,6 +425,36 @@ function Settings() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, deviceBreakMin: Number(e.target.value) }))
                   }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="device-longbreak" className="text-xs">
+                  Long break (min)
+                </Label>
+                <Input
+                  id="device-longbreak"
+                  type="number"
+                  min={1}
+                  max={60}
+                  className="w-24"
+                  value={form.deviceLongBreakMin}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, deviceLongBreakMin: Number(e.target.value) }))
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="device-cycles" className="text-xs">
+                  Focus blocks
+                </Label>
+                <Input
+                  id="device-cycles"
+                  type="number"
+                  min={1}
+                  max={8}
+                  className="w-24"
+                  value={form.deviceCycles}
+                  onChange={(e) => setForm((f) => ({ ...f, deviceCycles: Number(e.target.value) }))}
                 />
               </div>
             </div>

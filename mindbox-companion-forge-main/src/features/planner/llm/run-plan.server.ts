@@ -11,6 +11,7 @@ import {
   buildTasks,
   busyIntervalsForDay,
   freeSlotsForDay,
+  MEAL_BREAKS,
   MODE_CONFIGS,
   planStudyBlocks,
   weekKeyFor,
@@ -72,6 +73,7 @@ export function computeFreeSlotsByDay(input: PlanInput): Map<string, Interval[]>
       quietStart: input.quietStart,
       quietEnd: input.quietEnd,
       minSlotMin: MIN_BLOCK_MIN,
+      meals: MEAL_BREAKS,
     });
     if (slots.length > 0) byDay.set(key, slots);
   }
@@ -135,10 +137,14 @@ export async function runLlmPlan(
     mode: {
       name: input.mode,
       workBlockMin: config.workBlockMin,
+      breakMin: config.breakMin,
+      longBreakMin: config.longBreakMin,
+      blocksBeforeLongBreak: config.blocksBeforeLongBreak,
       dailyCapMin: dailyCapFor(input),
       maxBlocksPerDay: config.maxBlocksPerDay,
     },
     freeSlotsByDay,
+    meals: MEAL_BREAKS,
     tasks,
     recoveryStatus: input.recovery?.ready ? input.recovery.status : "unknown",
     avgTirednessLast3,
@@ -157,6 +163,7 @@ export async function runLlmPlan(
       dailyCapMin: dailyCapFor(input),
       minBlockMin: MIN_BLOCK_MIN,
       maxBlocksPerDay: config.maxBlocksPerDay,
+      minGapMin: config.breakMin,
     });
     // "A plan is ALWAYS produced": a schema-valid response whose blocks all
     // failed validation (or came back empty) must not yield an empty draft —

@@ -16,8 +16,12 @@ namespace Sensors {
   float noiseDb();             // approx loudness in dB SPL (calibrated; see Storage::noiseDbOffset)
   float noiseProbe(uint16_t windowMs = 50);  // immediate blocking measure (diagnostics)
   int   presenceMm();          // last ToF distance, -1 if unknown
-  bool  present();             // within PRESENCE_NEAR_MM (true if no ToF)
+  bool  present();             // occupancy estimate: a person is likely at the desk (true if no ToF)
   unsigned long absentForMs(); // how long continuously absent (0 if present)
+  float occupancyConfidence(); // estimator confidence 0..1 (1 if no ToF) — for diagnostics
+  float presenceMovement();    // micro-motion energy (mm, EWMA); ~0 = static object
+  int   presenceBaselineMm();  // learned empty-desk distance (-1 if none)
+  void  setPresenceSensitivity(uint8_t idx);  // 0=Low 1=Med 2=High (menu-driven)
 
   bool  readTemp(float& c);            // false if no sensor
   bool  readHumidity(float& pct);      // DHT11 relative humidity %; false if no sensor

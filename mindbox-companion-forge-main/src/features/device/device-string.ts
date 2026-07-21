@@ -10,6 +10,8 @@
 // Pure + unit-tested (device-string.test.ts); the caps that use these helpers
 // mirror fixed char[] buffers on the firmware side.
 
+import { transliterateHebrew } from "./transliterate";
+
 const utf8 = new TextEncoder();
 
 /** Truncate to a UTF-8 byte budget without splitting a multi-byte char. */
@@ -29,8 +31,11 @@ export function truncateUtf8Bytes(text: string, maxBytes: number): string {
  * whitespace. Byte-capping is the caller's job (buffers differ per field).
  */
 export function sanitizeDeviceString(text: string): string {
+  // Romanize Hebrew FIRST — the device fonts are ASCII-only, so raw Hebrew
+  // would render blank. Everything downstream (strip, byte-cap) sees Latin.
+  const romanized = transliterateHebrew(text);
   let replaced = "";
-  for (const ch of text) {
+  for (const ch of romanized) {
     const bad = ch === "|" || ch === ";" || ch === '"' || ch === "\\" || ch.charCodeAt(0) < 32;
     replaced += bad ? " " : ch;
   }

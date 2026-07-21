@@ -79,6 +79,8 @@ namespace Storage {
   void setUploadQueueDropped(bool v);
   void clearUploadQueueDropped();
 
+  uint8_t presenceSensIdx();   // presence estimator sensitivity (same key saveConfig writes); for boot-time apply
+
   // Per-desk sensor calibration (NVS; adjust over serial — Diagnostics 'c' command).
   float noiseFullScale();
   void  setNoiseFullScale(float v);

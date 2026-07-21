@@ -207,6 +207,19 @@ export function busyIntervalsForDay(
   return out;
 }
 
+/**
+ * Default protected meal windows, subtracted from every day's free time so the
+ * planner never schedules study straight through lunch or dinner (minutes from
+ * local midnight). These only bite when they land inside real free time — a meal
+ * that falls inside a class, outside the working window, or in the past (on
+ * "today", after the day-start clamp) is harmlessly clamped/merged away.
+ * One place to tune; both engines subtract the same list.
+ */
+export const MEAL_BREAKS: Interval[] = [
+  { start: 12 * 60 + 30, end: 13 * 60 + 30 }, // lunch 12:30–13:30
+  { start: 18 * 60 + 30, end: 19 * 60 + 30 }, // dinner 18:30–19:30
+];
+
 export interface SlotOpts {
   dayStartMin: number;
   dayEndMin: number;
@@ -214,18 +227,25 @@ export interface SlotOpts {
   quietEnd: number | null;
   /** Drop gaps shorter than this (usually the mode's work-block length). */
   minSlotMin: number;
+  /** Protected windows (e.g. meals) kept free of study. Defaults to none. */
+  meals?: Interval[];
 }
 
 /**
  * Invert busy intervals into free gaps inside the working window, after
- * subtracting quiet hours and clamping anything crossing the window boundary.
+ * subtracting quiet hours + meal windows and clamping anything crossing the
+ * window boundary.
  */
 export function freeSlotsForDay(busy: Interval[], opts: SlotOpts): Interval[] {
   const windowStart = opts.dayStartMin;
   const windowEnd = opts.dayEndMin;
   if (windowEnd <= windowStart) return [];
 
-  const blockers = [...busy, ...quietIntervalsWithin(opts.quietStart, opts.quietEnd)]
+  const blockers = [
+    ...busy,
+    ...quietIntervalsWithin(opts.quietStart, opts.quietEnd),
+    ...(opts.meals ?? []),
+  ]
     .map((iv) => clampInterval(iv, windowStart, windowEnd))
     .filter((iv): iv is Interval => iv != null);
 
@@ -465,6 +485,7 @@ export function planStudyBlocks(input: PlanInput): PlanDraft {
       quietStart: input.quietStart,
       quietEnd: input.quietEnd,
       minSlotMin: workBlock,
+      meals: MEAL_BREAKS,
     });
     days.push({ key, weekKey: weekKeyFor(key), intervals, usedMin: 0, blockCount: 0 });
   }
@@ -503,7 +524,17 @@ export function planStudyBlocks(input: PlanInput): PlanDraft {
         (task.dayTargets.get(day.key) ?? 0) - placedOnDay(task, day.key, blocks);
       if (remainingTarget <= 0) return false;
 
-      const target = task.hard && bestWinMin != null ? bestWinMin : (day.intervals[0]?.start ?? 0);
+      // Placement target: hard tasks aim at the circadian window; otherwise, for
+      // interleave modes with the day split into several free chunks (e.g. by
+      // meals), rotate across chunks so a day's blocks spread over morning /
+      // afternoon / evening instead of all piling into the earliest one. A
+      // single-chunk day (or Deep Focus) keeps the earliest-start behaviour.
+      const target =
+        task.hard && bestWinMin != null
+          ? bestWinMin
+          : config.interleave && day.intervals.length > 1
+            ? (day.intervals[day.blockCount % day.intervals.length]?.start ?? 0)
+            : (day.intervals[0]?.start ?? 0);
       const slot = pickSlot(day.intervals, workBlock, target);
       if (slot == null) return false;
 
