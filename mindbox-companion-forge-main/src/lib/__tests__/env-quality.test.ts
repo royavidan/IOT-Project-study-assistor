@@ -5,6 +5,7 @@ import {
   conditionsFromSessions,
   factorTip,
   rateFactor,
+  roomTempOrNull,
 } from "@/lib/env-quality";
 import type { Session } from "@/lib/types";
 
@@ -124,5 +125,23 @@ describe("conditionsFromSessions", () => {
 
   it("returns null when no session has env data", () => {
     expect(conditionsFromSessions([session(), session()])).toBeNull();
+  });
+});
+
+describe("roomTempOrNull", () => {
+  it("passes real temperatures through", () => {
+    expect(roomTempOrNull(22.5)).toBe(22.5);
+    expect(roomTempOrNull("19")).toBe(19);
+  });
+
+  it("maps null/undefined/garbage to null", () => {
+    expect(roomTempOrNull(null)).toBeNull();
+    expect(roomTempOrNull(undefined)).toBeNull();
+    expect(roomTempOrNull("nope")).toBeNull();
+  });
+
+  it("treats the legacy 0 sentinel as missing (DHT11 cannot read 0°C)", () => {
+    expect(roomTempOrNull(0)).toBeNull();
+    expect(roomTempOrNull("0")).toBeNull();
   });
 });

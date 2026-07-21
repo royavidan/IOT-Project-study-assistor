@@ -1,9 +1,11 @@
 #include "Payload.h"
 #include <math.h>
 
-// NaN/Inf are not valid JSON — coerce to 0 (e.g. tempC when no temp sensor).
+// NaN/Inf mean "no reading" (e.g. tempC with a dead/absent DHT) — emit JSON
+// null so the server stores a missing value. The old 0-coercion made every
+// sensorless session read as a 0°C room and dragged the site's averages down.
 static String num(float v, unsigned int prec = 3) {
-  if (isnan(v) || isinf(v)) v = 0;
+  if (isnan(v) || isinf(v)) return String("null");
   return String(v, prec);
 }
 

@@ -15,6 +15,20 @@
 
 import type { Session } from "@/lib/types";
 
+/**
+ * Room temperature from a DB row with the legacy sentinel mapped to "missing":
+ * firmware before 2026-07 stored 0 (not null) when the DHT had no valid
+ * reading, and a DHT11 cannot measure 0 °C — so a stored 0 is always "no
+ * data", never a real room temperature. Every reader of `temp_c` must come
+ * through here, or fake zeros drag temp averages down (the "7°" bug).
+ */
+export function roomTempOrNull(value: unknown): number | null {
+  if (value == null) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n === 0) return null;
+  return n;
+}
+
 export type Band = "ideal" | "okay" | "poor";
 export type FactorKey = "temp" | "noise" | "light";
 

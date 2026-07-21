@@ -50,20 +50,23 @@ function isAuthorized(request: Request): boolean {
 
 // --- Validation schemas (mirror the contracts in src/lib/focus-load.ts) ---
 
+// Env values are NULLABLE: the firmware sends JSON null for "no reading" (dead/
+// absent sensor) instead of a fake 0 — a 0°C room poisoned every temp average.
+// noisePeak is optional: accepted for older firmware but never stored.
 const envSchema = z.object({
-  noiseAvg: z.number(),
-  noisePeak: z.number(),
-  tempC: z.number(),
-  lightLux: z.number(),
+  noiseAvg: z.number().nullable(),
+  noisePeak: z.number().nullable().optional(),
+  tempC: z.number().nullable(),
+  lightLux: z.number().nullable(),
 });
 
 const focusSampleSchema = z.object({ t: z.number(), value: z.number() });
 
 const envSampleSchema = z.object({
   t: z.number(),
-  noise: z.number(),
-  tempC: z.number(),
-  lightLux: z.number(),
+  noise: z.number().nullable(),
+  tempC: z.number().nullable(),
+  lightLux: z.number().nullable(),
 });
 
 const sessionSchema = z.object({
@@ -163,6 +166,11 @@ async function handleSessions(request: Request): Promise<Response> {
   const resolveUser = (s: SessionInput): string | null =>
     userBySlot.get(`${s.deviceId}::${s.profileId}`) ?? ownerByDevice.get(s.deviceId) ?? null;
 
+  // A DHT11 cannot measure 0°C — firmware before the null-env change sent 0 as
+  // its "no reading" sentinel. Normalize at the edge (works for old firmware
+  // still in the field) so fake zeros can never pollute stored temp averages.
+  const tempIngest = (v: number | null): number | null => (v === 0 ? null : v);
+
   const sessionRows = batch.map((s) => ({
     id: s.sessionId,
     device_id: s.deviceId,
@@ -178,7 +186,7 @@ async function handleSessions(request: Request): Promise<Response> {
     presence_interruptions: s.presenceInterruptions,
     companions: s.companions ?? null,
     noise_avg: s.env.noiseAvg,
-    temp_c: s.env.tempC,
+    temp_c: tempIngest(s.env.tempC),
     light_lux: s.env.lightLux,
     focus_load_avg: s.focusLoadAvg,
     client_seq: s.clientSeq,
@@ -217,7 +225,7 @@ async function handleSessions(request: Request): Promise<Response> {
       session_id: s.sessionId,
       t_sec: sample.t,
       noise: sample.noise,
-      temp_c: sample.tempC,
+      temp_c: tempIngest(sample.tempC),
       light_lux: sample.lightLux,
     })),
   );
@@ -288,7 +296,8 @@ async function handleTelemetry(request: Request): Promise<Response> {
   let { error } = await admin.from("device_status").upsert(
     {
       ...legacyRow,
-      temp_c: t.tempC ?? null,
+      // 0°C is below a DHT11's range — it is the legacy "no reading" sentinel.
+      temp_c: t.tempC === 0 ? null : (t.tempC ?? null),
       humidity_pct: t.humidityPct ?? null,
       light_lux: t.lightLux ?? null,
       noise_db: t.noiseDb ?? null,

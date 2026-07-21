@@ -12,6 +12,7 @@ import "@tanstack/react-start/server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { parseDateKey, toDateKey } from "@/lib/dates";
+import { roomTempOrNull } from "@/lib/env-quality";
 import { ewma } from "@/lib/stats/robust";
 import { computeBaselines } from "@/lib/focus/baselines";
 import { computeSessionDynamics, type SessionSeriesPoint } from "@/lib/focus/session-dynamics";
@@ -84,7 +85,7 @@ function mergeSeries(
   for (const r of envRows) {
     const p = at(Number(r.t_sec ?? 0));
     p.noise = num(r.noise);
-    p.tempC = num(r.temp_c);
+    p.tempC = roomTempOrNull(r.temp_c);
     p.lightLux = num(r.light_lux);
   }
   return [...byMin.values()].sort((a, b) => a.tMin - b.tMin);
@@ -173,7 +174,7 @@ export async function computeFocusEstimate(
       (envBySession.get(s.id) ?? []).map((r) => ({
         t_sec: Number(r.t_sec ?? 0),
         noise: num(r.noise),
-        temp_c: num(r.temp_c),
+        temp_c: roomTempOrNull(r.temp_c),
         light_lux: num(r.light_lux),
       })),
     );

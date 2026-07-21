@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 
 import { localDayRangeIso, toDateKey } from "@/lib/dates";
+import { roomTempOrNull } from "@/lib/env-quality";
 import { summarize, type ReportMeta } from "@/features/reports/export";
 import { buildReportPdf } from "@/features/reports/build-report-pdf.server";
 import { buildWeeklyReportModel } from "@/features/reports/report-model.server";
@@ -26,7 +27,7 @@ export function mapSessionRow(row: Record<string, unknown>): Session {
     breaks: Number(row.breaks ?? 0),
     subject: String(row.mode ?? "Study"),
     noiseAvg: row.noise_avg == null ? null : Number(row.noise_avg),
-    tempC: row.temp_c == null ? null : Number(row.temp_c),
+    tempC: roomTempOrNull(row.temp_c),
     lightLux: row.light_lux == null ? null : Number(row.light_lux),
     presenceInterruptions: Number(row.presence_interruptions ?? 0),
     companions: row.companions === "with_others" ? "with_others" : "solo",

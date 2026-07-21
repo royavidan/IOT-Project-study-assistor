@@ -162,6 +162,9 @@ static const int           PRESENCE_BG_GUARD_MM   = 250;    // must be >= this m
 static const float         PRESENCE_BG_ALPHA      = 0.02f;  // empty-desk baseline EWMA (slow; only while not-near)
 static const int           PRESENCE_MOVE_NOISE_MM = 12;     // |Δdist| below this is sensor noise, not motion
 static const unsigned long PRESENCE_MOVE_RECENT_MS = 12000UL;  // movement within this window => "alive"
+static const uint16_t      PRESENCE_ARRIVE_FRAMES = 10;     // not-near/invalid frames (~2s @5Hz) that must precede a
+                                                            // near frame for it to count as an ARRIVAL (person walking
+                                                            // in). A boot-time static object never satisfies this.
 static const unsigned long PRESENCE_STILL_OBJECT_MS = 90000UL; // near but dead-still + silent this long => "object"
 static const float         PRESENCE_MOVE_ALPHA    = 0.10f;  // micro-motion EWMA (diagnostics + secondary trigger)
 static const float         PRESENCE_MOVE_PRESENT  = 6.0f;   // movement-EWMA (mm) above this also counts as "alive"

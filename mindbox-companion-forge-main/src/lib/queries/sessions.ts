@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useAuth } from "@/lib/auth/auth-context";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { parseDateKey, todayDateKey, toDateKey } from "@/lib/dates";
+import { roomTempOrNull } from "@/lib/env-quality";
 import { computeStreakFromDateKeys } from "@/lib/streak";
 import { filterSessionsByUser } from "@/lib/session-scope";
 import type {
@@ -76,7 +77,7 @@ function mapSession(row: Record<string, unknown>): Session {
     breaks: Number(row.breaks ?? 0),
     subject: mode,
     noiseAvg: numOrNull(row.noise_avg),
-    tempC: numOrNull(row.temp_c),
+    tempC: roomTempOrNull(row.temp_c),
     lightLux: numOrNull(row.light_lux),
     presenceInterruptions: Number(row.presence_interruptions ?? 0),
     companions: asCompanions(row.companions),

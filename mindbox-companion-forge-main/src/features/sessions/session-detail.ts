@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useAuth } from "@/lib/auth/auth-context";
+import { roomTempOrNull } from "@/lib/env-quality";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Companions } from "@/lib/types";
 
@@ -90,7 +91,7 @@ async function fetchSessionDetail(id: string): Promise<SessionDetail> {
   for (const row of (envRes.data ?? []) as Record<string, unknown>[]) {
     const p = point(Number(row.t_sec ?? 0));
     p.noise = num(row.noise);
-    p.tempC = num(row.temp_c);
+    p.tempC = roomTempOrNull(row.temp_c);
     p.lightLux = num(row.light_lux);
   }
 
@@ -111,7 +112,7 @@ async function fetchSessionDetail(id: string): Promise<SessionDetail> {
       presenceInterruptions: Number(s.presence_interruptions ?? 0),
       focusLoadAvg: Number(s.focus_load_avg ?? 0),
       noiseAvg: num(s.noise_avg),
-      tempC: num(s.temp_c),
+      tempC: roomTempOrNull(s.temp_c),
       lightLux: num(s.light_lux),
       companions: s.companions === "with_others" ? "with_others" : "solo",
     },

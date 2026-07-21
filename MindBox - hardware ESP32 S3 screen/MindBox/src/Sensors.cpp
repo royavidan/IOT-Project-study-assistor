@@ -53,6 +53,9 @@ static int      s_medRing[3] = { -1, -1, -1 };    // last-3 valid distances for 
 static uint32_t s_medN      = 0;
 static int      s_prevDist  = -1;
 static bool     s_seenLife  = false;              // have we ever seen movement/activity (else a boot-time object)
+static bool     s_wasNear   = false;              // previous frame's near bit (arrival edge detection)
+static bool     s_arrived   = false;              // this near target APPEARED (walked in) vs was-there-at-boot
+static uint16_t s_notNearFrames = 0;              // consecutive not-near/invalid frames before a near frame
 static uint32_t s_lastMoveAt = 0, s_lastActivityAt = 0, s_lastNearAt = 0;
 static float    s_sensGuard = 1.0f, s_sensMove = 1.0f, s_sensStill = 1.0f;  // sensitivity scales (Low/Med/High)
 #endif
@@ -167,6 +170,16 @@ static int median3(int a, int b, int c) {
 static void updateOccupancy(int rawDist, bool valid, uint32_t now) {
   bool nearNow = false;
 
+  // Fusion FIRST: mic level + light p-p variance corroborate a living occupant. Conservative — it can HOLD/
+  // boost confidence but never fabricate presence with no near target (so a loud empty room != present).
+  // Computed before the distance logic so the near test + baseline learning can consult it this frame.
+  bool activity = (s_noise > PRESENCE_FUSE_NOISE);
+#if HAS_LIGHT
+  if (s_lightVar > PRESENCE_FUSE_LIGHTVAR) activity = true;
+#endif
+  if (activity) { s_lastActivityAt = now; s_seenLife = true; }
+  bool activityRecent = (now - s_lastActivityAt) < PRESENCE_FUSE_RECENT_MS;
+
   if (valid) {
     // Median-of-3 smoothing kills single-sample spikes while preserving real fidget/posture motion.
     s_medRing[s_medN % 3] = rawDist; s_medN++;
@@ -182,31 +195,48 @@ static void updateOccupancy(int rawDist, bool valid, uint32_t now) {
     }
     s_prevDist = working;
 
+    bool movingRecent = (now - s_lastMoveAt) < PRESENCE_MOVE_RECENT_MS;
+
     // Adaptive near test: closer than the learned empty-desk baseline (by a sensitivity-scaled guard).
+    // A MOVING in-range target is also near regardless of the baseline: walls/monitors are dead still, so
+    // motion alone proves this echo is not background. Without this, a person seated less than the guard
+    // above the baseline was "not near" and then got LEARNED INTO the baseline (poisoning it), which is how
+    // the box got stuck saying "away" at an occupied desk.
     int guard = (int)(PRESENCE_BG_GUARD_MM * s_sensGuard);
     int nearThresh = s_bgDist - guard;
     if (nearThresh > PRESENCE_ABS_MAX) nearThresh = PRESENCE_ABS_MAX;
-    nearNow = (working >= PRESENCE_MIN_MM && working <= nearThresh);
+    bool inRange = (working >= PRESENCE_MIN_MM && working <= PRESENCE_ABS_MAX);
+    nearNow = inRange && (working <= nearThresh || (s_seenLife && movingRecent));
+
     if (nearNow) {
       s_lastNearAt = now;
+      // Arrival edge: a target that APPEARS after the desk was clear for a while can only be a person
+      // walking in — a static object cannot newly show up at near range on its own. Count the arrival as
+      // life (the person may sit down calmly between two 200ms polls, or re-acquire through an invalid
+      // stretch where no frame-to-frame delta ever fires) and remember it: an arrived occupant is never
+      // demoted to "object" while they stay near. (Present at boot -> no edge -> strict object logic.)
+      if (!s_wasNear && s_notNearFrames >= PRESENCE_ARRIVE_FRAMES) {
+        s_arrived = true;
+        s_seenLife = true;
+        s_lastMoveAt = now;
+      }
+      s_notNearFrames = 0;
     } else {
-      // Learn the empty-desk distance ONLY from not-near reads (never pollute it with an occupant).
-      s_bgDist += (int)((working - s_bgDist) * PRESENCE_BG_ALPHA);
-      if (s_bgDist > 4000) s_bgDist = 4000;
-      if (s_bgDist < PRESENCE_MIN_MM) s_bgDist = PRESENCE_MIN_MM;
+      if (s_notNearFrames < 0xFFFF) s_notNearFrames++;
+      // Learn the empty-desk distance ONLY from not-near reads with NO life signs — a fidgeting/typing
+      // person just beyond the guard band must never be absorbed into the "empty desk" baseline.
+      if (!movingRecent && !activityRecent) {
+        s_bgDist += (int)((working - s_bgDist) * PRESENCE_BG_ALPHA);
+        if (s_bgDist > 4000) s_bgDist = 4000;
+        if (s_bgDist < PRESENCE_MIN_MM) s_bgDist = PRESENCE_MIN_MM;
+      }
     }
   } else {
     s_prevDist = -1;   // a re-acquired target must not register as one giant jump
+    s_medN = 0;        // stale pre-absence distances must not median-filter the return frames
+    if (s_notNearFrames < 0xFFFF) s_notNearFrames++;
   }
 
-  // Fusion: mic level + light p-p variance corroborate a living occupant. Conservative — it can HOLD/boost
-  // confidence but never fabricate presence with no near target (so a loud empty room != present).
-  bool activity = (s_noise > PRESENCE_FUSE_NOISE);
-#if HAS_LIGHT
-  if (s_lightVar > PRESENCE_FUSE_LIGHTVAR) activity = true;
-#endif
-  if (activity) { s_lastActivityAt = now; s_seenLife = true; }
-  bool activityRecent = (now - s_lastActivityAt) < PRESENCE_FUSE_RECENT_MS;
   bool moving = ((now - s_lastMoveAt) < PRESENCE_MOVE_RECENT_MS) ||
                 (s_movement > PRESENCE_MOVE_PRESENT * s_sensMove);
 
@@ -216,13 +246,17 @@ static void updateOccupancy(int rawDist, bool valid, uint32_t now) {
     uint32_t stillFor = now - lastLife;
     unsigned long stillLimit = (unsigned long)(PRESENCE_STILL_OBJECT_MS * s_sensStill);
     if (moving || activityRecent) score = 1.0f;               // near + alive -> clearly a person
+    else if (s_arrived) score = 0.85f;                        // they ARRIVED: hold present until they leave
     else if (s_seenLife && stillFor < stillLimit) score = 0.70f;  // near, recently alive -> hold (grace)
     else score = 0.0f;                                        // near but dead-still + silent -> object, not person
   } else {
     // Possibly leaned out of the ~27deg cone but still working -> hold present briefly.
     if (s_occupied && activityRecent && (now - s_lastNearAt) < PRESENCE_FUSE_HOLD_MS) score = 0.50f;
     else score = 0.0f;
+    // Target genuinely gone (not just a lean-out): the next near frame is a fresh arrival.
+    if ((now - s_lastNearAt) > PRESENCE_FUSE_HOLD_MS) s_arrived = false;
   }
+  s_wasNear = nearNow;
 
   s_conf += PRESENCE_CONF_ALPHA * (score - s_conf);
   if (s_conf >= PRESENCE_CONF_ENTER) s_occupied = true;        // hysteresis: two thresholds = no flicker
@@ -262,6 +296,9 @@ void init() {
     // Seed the occupancy estimator: baseline far, "life" clock unset so a static object at boot isn't "present".
     s_bgDist = PRESENCE_ABS_MAX;
     s_seenLife = false;
+    s_wasNear = false;
+    s_arrived = false;
+    s_notNearFrames = 0;
     s_lastMoveAt = s_lastActivityAt = s_lastNearAt = millis();
     setPresenceSensitivity(Storage::presenceSensIdx());
     Serial.println("[tof] VL53L1X init OK @0x29 - ranging (short mode, occupancy estimator)");

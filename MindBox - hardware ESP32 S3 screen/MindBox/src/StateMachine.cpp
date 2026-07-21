@@ -527,7 +527,9 @@ static void scheduleCycleOffer(Mode completedMode) {
   if (completedMode == MODE_WORK) {
     s_cycleNextMode = MODE_BREAK;
     // Long break after every N completed focus blocks (s_setFocusDone already bumped).
-    bool longBreak = s_cfg.longBreakEnabled && s_cfg.longBreakEvery > 0 &&
+    // Set-scoped: outside a set s_setFocusDone is stuck at 0 and 0 % N == 0 would
+    // turn EVERY standalone break into the long one.
+    bool longBreak = s_setActive && s_cfg.longBreakEnabled && s_cfg.longBreakEvery > 0 &&
                      (s_setFocusDone % s_cfg.longBreakEvery == 0);
     s_cycleNextMin = longBreak ? s_cfg.longBreakMin : s_breakDur;
   } else {
@@ -571,7 +573,9 @@ static void onTimerComplete() {
 
   if (s_setActive && completed == MODE_WORK) {
     s_setFocusDone++;
-    if (s_setFocusDone >= s_setCycleTotal) {
+    if (s_setFocusDone >= s_setCycleTotal &&
+        !(s_cfg.longBreakEnabled && s_cfg.longBreakMin > 0)) {
+      // Long break disabled: the set ends right after the last focus block (old behaviour).
       clearSet();
       s_pendingCycleOffer = false;
       s_pendingSetComplete = true;
@@ -581,13 +585,20 @@ static void onTimerComplete() {
       enter(ST_COMPLETE);
       return;
     }
+    // Not the last block -> offer the short break. LAST block -> the set is NOT closed
+    // yet: scheduleCycleOffer picks the LONG break (focusDone % longBreakEvery == 0) and
+    // the set completes when that final break finishes (below) or is skipped
+    // (MENU_SKIP_CYCLE). Closing the set here is why the site's long break never fired.
     scheduleCycleOffer(MODE_WORK);
   } else if (s_setActive && completed == MODE_BREAK) {
     if (s_setFocusDone < s_setCycleTotal)
       scheduleCycleOffer(MODE_BREAK);
     else {
+      // Final (long) break done -> NOW the whole set is complete: celebrate.
       clearSet();
       s_pendingCycleOffer = false;
+      s_pendingSetComplete = true;
+      Storage::recordSetComplete();
     }
   } else {
     scheduleCycleOffer(completed);
@@ -794,6 +805,9 @@ static void handleMenuAction(MenuAction a) {
       startSessionMode(s_cycleNextMode, s_cycleNextMin);
       break;
     case MENU_SKIP_CYCLE:
+      // Declining the offer after the LAST focus block still completes the set —
+      // all focus blocks are done; only the trailing long break was skipped.
+      if (s_setActive && s_setFocusDone >= s_setCycleTotal) Storage::recordSetComplete();
       clearSet();
       enter(ST_IDLE);
       break;
@@ -1257,9 +1271,8 @@ void tick() {
         if (ta == TimerScreen::TA_RESET) { restartCurrentInterval(); break; }
       }
       if (btn == 2) { beginEnd("aborted"); break; }
-      if (btn == 1) {   // physical click = pause (touch taps open the options menu via the gear path)
-        saveCheckpointNow();
-        enterPaused(PAUSE_MANUAL);
+      if (btn == 1) {   // encoder click = same as a tap: open the session menu (Pause/Skip/End/Settings)
+        Menu::runningOpen();
         s_uiDirty = true;
         break;
       }
