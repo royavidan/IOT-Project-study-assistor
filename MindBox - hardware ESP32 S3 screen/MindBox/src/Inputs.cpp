@@ -1,0 +1,269 @@
+#include "Inputs.h"
+#include "config.h"
+#include <Arduino.h>
+#if HAS_ENCODER
+#include <AiEsp32RotaryEncoder.h>
+#endif
+#if USE_TOUCH
+#include "Touch.h"
+#include "Display.h"
+#include "TimerScreen.h"
+#endif
+
+// ============================================================================
+// Inputs (S3) — produces the same rotationDir()/button() the Menu/StateMachine
+// expect, from EITHER a KY-040 encoder (HAS_ENCODER) and/or the touchscreen.
+//
+// Touch is a plain click, NOT a position picker: the encoder (or a vertical
+// swipe) moves the menu highlight, and touch only confirms:
+//   short tap     -> select the currently-highlighted item (button 1)
+//   long press    -> back (button 2)
+//   swipe up/down -> move the highlight (same as an encoder detent)
+// Selection is independent of WHERE you tap, so a slightly-off touch calibration
+// can't land on the wrong row (which it did under the old row-hit-test).
+// ============================================================================
+
+static bool s_rotated = false, s_clicked = false;
+static int  s_button = 0;
+static int  s_minutes = DUR_DEFAULT_MIN;
+static int  s_rotDir = 0;
+static InputMode s_mode = INPUT_MENU;
+static bool s_sidePressed = false;
+static bool s_stuckLow = false;
+#if USE_TOUCH
+static bool s_timerScreen = false;             // bare RUNNING/PAUSED timer is showing
+static int  s_timerAction = TimerScreen::TA_NONE; // latched transport action this tick
+static bool s_rawTouch    = false;             // on-screen keyboard: latch raw taps
+static bool s_tapped      = false;
+static int  s_tapX = 0, s_tapY = 0;
+#endif
+
+#if HAS_ENCODER
+static AiEsp32RotaryEncoder enc(PIN_ENC_CLK, PIN_ENC_DT, PIN_ENC_SW, -1, 4);
+static int  s_lastEnc = 0;
+static void IRAM_ATTR isr() { enc.readEncoder_ISR(); }
+#endif
+
+static bool sideIsPressed(int raw) {
+#if BTN_ACTIVE_LOW
+  return raw == LOW;
+#else
+  return raw == HIGH;
+#endif
+}
+
+namespace Inputs {
+
+void init() {
+#if BTN_ACTIVE_LOW
+  pinMode(PIN_BUTTON, INPUT_PULLUP);
+#else
+  pinMode(PIN_BUTTON, INPUT_PULLDOWN);
+#endif
+#if USE_SPDT_TOGGLE
+  pinMode(PIN_SPDT, INPUT_PULLUP);
+#endif
+#if HAS_ENCODER
+  enc.begin();
+  enc.setup(isr);
+  enc.setBoundaries(-512, 512, false);
+  enc.setAcceleration(0);
+  s_lastEnc = 0;
+  enc.setEncoderValue(0);
+#endif
+  delay(20);
+#if BTN_ACTIVE_LOW
+  // A wired tact at rest reads HIGH; LOW means shorted/miswired -> disable it.
+  // On the bare S3 board (no side button) the pull-up keeps this HIGH.
+  if (digitalRead(PIN_BUTTON) == LOW) s_stuckLow = true;
+#endif
+#if USE_TOUCH
+  Touch::begin();   // apply saved touch calibration, or run it once
+#endif
+}
+
+void setInputMode(InputMode m) {
+  s_mode = m;
+#if HAS_ENCODER
+  if (m == INPUT_MENU) {
+    enc.setBoundaries(-512, 512, false);
+    s_lastEnc = enc.readEncoder();
+  } else {
+    enc.setBoundaries(DUR_MIN_MIN / DUR_STEP_MIN, DUR_MAX_MIN / DUR_STEP_MIN, false);
+    enc.setEncoderValue(s_minutes / DUR_STEP_MIN);
+    s_lastEnc = enc.readEncoder();
+  }
+#endif
+}
+
+// Side tact: short tap on release = select; hold >= BTN_LONG_MS = back.
+static void pollSideButton() {
+  if (s_stuckLow) { s_sidePressed = false; return; }
+
+  static int      stableRaw = -1;
+  static int      lastRaw = -1;
+  static uint32_t debounceAt = 0;
+  static uint32_t pressAt = 0;
+  static bool     longSent = false;
+
+  int raw = digitalRead(PIN_BUTTON);
+  if (raw != lastRaw) { lastRaw = raw; debounceAt = millis(); }
+
+  if ((int32_t)(millis() - debounceAt) >= (int32_t)BTN_DEBOUNCE_MS) {
+    if (raw != stableRaw) {
+      bool was = (stableRaw >= 0) ? sideIsPressed(stableRaw) : false;
+      stableRaw = raw;
+      bool now = sideIsPressed(stableRaw);
+      s_sidePressed = now;
+      if (now && !was) { pressAt = millis(); longSent = false; }
+      else if (!now && was) {
+        if (!longSent && (millis() - pressAt) >= BTN_SHORT_MIN_MS) s_button = 1;
+      }
+    } else {
+      s_sidePressed = sideIsPressed(stableRaw);
+    }
+  }
+  if (s_sidePressed && !longSent && (millis() - pressAt) >= BTN_LONG_MS) {
+    s_button = 2; longSent = true;
+  }
+}
+
+#if USE_TOUCH
+static void pollTouch() {
+  int x, y;
+  Touch::Gesture g = Touch::poll(x, y);
+  if (g == Touch::G_NONE) return;
+
+  // Raw-tap mode (keyboard): latch the tap point; a long-press counts as a tap too; swipes scroll.
+  if (s_rawTouch) {
+    if (g == Touch::G_TAP || g == Touch::G_LONG_PRESS) { s_tapped = true; s_tapX = x; s_tapY = y; }
+    else if (g == Touch::G_DRAG_UP)   { s_rotDir =  1; s_rotated = true; }
+    else if (g == Touch::G_DRAG_DOWN) { s_rotDir = -1; s_rotated = true; }
+    return;
+  }
+
+  // On the bare timer screen ANY touch opens the session menu (deterministic) — the old tiny transport
+  // circles split taps between two overlays and mostly missed; now one touch = one menu. Swipes do nothing.
+  if (s_timerScreen) {
+    if (g == Touch::G_TAP || g == Touch::G_LONG_PRESS) s_timerAction = TimerScreen::TA_MENU;
+    return;
+  }
+
+  // Menu: the encoder (or a swipe) moves the highlight; TOUCH is just the click.
+  //   long press -> back;  swipe -> move highlight;  short tap -> select the highlighted item.
+  // Selection no longer depends on WHERE you tap, so an off touch calibration can't pick the
+  // wrong row (the old row-hit-test is why aiming at "Mode" landed on "Start").
+  if (g == Touch::G_LONG_PRESS) { s_button = 2; return; }                     // back
+  if (g == Touch::G_DRAG_UP)    { s_rotDir =  1; s_rotated = true; return; }  // scroll the highlight
+  if (g == Touch::G_DRAG_DOWN)  { s_rotDir = -1; s_rotated = true; return; }
+  if (g == Touch::G_TAP)        { s_button = 1; return; }                     // select highlighted item
+}
+#endif
+
+void poll() {
+  s_button = 0;
+  s_rotDir = 0;
+  s_rotated = false;
+#if USE_TOUCH
+  s_timerAction = TimerScreen::TA_NONE;
+  s_tapped = false;
+#endif
+#if HAS_ENCODER
+  s_rotated = enc.encoderChanged();
+  if (s_rotated) {
+    int v = enc.readEncoder();
+    int delta = v - s_lastEnc;          // detents since last poll (signed) — keep the MAGNITUDE,
+    s_lastEnc = v;                      // not just the sign, so fast/multi-step turns aren't dropped
+    if (delta >  20) delta =  20;       // clamp wild jumps (noise / boundary saturation)
+    if (delta < -20) delta = -20;
+    s_rotDir = delta;                   // consumers already scale by rotDir (moveCursor / val*STEP)
+    if (s_mode == INPUT_DURATION) s_minutes = v * DUR_STEP_MIN;   // absolute — unchanged
+  }
+#if PIN_ENC_SW >= 0
+  s_clicked = enc.isEncoderButtonClicked();   // real shaft button wired
+#else
+  // No shaft button (PIN_ENC_SW < 0): the library reads the invalid pin as "held" and busy-waits
+  // its full ~330ms release-timeout EVERY call — that stalled the whole loop. Skip it entirely.
+  s_clicked = false;
+#endif
+#else
+  s_clicked = false;
+#endif
+  pollSideButton();
+#if USE_TOUCH
+  if (s_button == 0 && s_rotDir == 0) pollTouch();
+#endif
+}
+
+void setTimerScreenActive(bool on) {
+#if USE_TOUCH
+  s_timerScreen = on;
+#else
+  (void)on;
+#endif
+}
+int timerAction() {
+#if USE_TOUCH
+  return s_timerAction;
+#else
+  return -1;   // TimerScreen::TA_NONE (header not included in the no-touch build)
+#endif
+}
+
+void setRawTouchActive(bool on) {
+#if USE_TOUCH
+  s_rawTouch = on;
+  Touch::setRawMode(on);   // keyboard: every release becomes a tap, so a press is never lost to a swipe
+  if (!on) s_tapped = false;
+#else
+  (void)on;
+#endif
+}
+bool tapped() {
+#if USE_TOUCH
+  return s_tapped;
+#else
+  return false;
+#endif
+}
+int tapX() {
+#if USE_TOUCH
+  return s_tapX;
+#else
+  return 0;
+#endif
+}
+int tapY() {
+#if USE_TOUCH
+  return s_tapY;
+#else
+  return 0;
+#endif
+}
+
+bool rotated()     { return s_rotated; }
+int  rotationDir() { return s_rotDir; }
+int  minutes()     { return s_minutes; }
+void setMinutes(int m) {
+  if (m < DUR_MIN_MIN) m = DUR_MIN_MIN;
+  if (m > DUR_MAX_MIN) m = DUR_MAX_MIN;
+  s_minutes = m;
+#if HAS_ENCODER
+  enc.setEncoderValue(m / DUR_STEP_MIN);
+#endif
+}
+bool knobClicked() { return s_clicked; }
+int  button()      { return s_button; }
+bool sidePressed() { return s_sidePressed; }
+int  sideRaw()     { return digitalRead(PIN_BUTTON); }
+bool sideFault()   { return s_stuckLow; }
+
+bool spdtPresentWork() {
+#if USE_SPDT_TOGGLE
+  return digitalRead(PIN_SPDT) == LOW;
+#else
+  return true;
+#endif
+}
+
+} // namespace Inputs

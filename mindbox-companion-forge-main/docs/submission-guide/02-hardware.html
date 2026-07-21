@@ -1,0 +1,243 @@
+<!-- Chapter 2: the board, full pin map, buses -->
+<h1>2. החומרה: הלוח, מפת הפינים המלאה והבאסים</h1>
+
+<div class="lead">
+  זהו פרק ה"חומרה ב-100%". הלוח הוא <b>LCDWIKI ES3C28P/ES3N28P</b> — לוח מוכן עם ESP32-S3, מסך
+  ILI9341 בגודל 2.8", בקר מגע FT6336, וקודק שמע ES8311 — שאליו חיברנו ידנית חיישנים חיצוניים.
+  מקור-האמת היחיד למיפוי הפינים הוא הקובץ <code>src/config.h</code> (כל מודול כולל אותו; שום מקום
+  אחר לא מקודד פין). כל המספרים למטה אומתו ישירות מולו.
+</div>
+
+<h2>2.1 ה-SoC: למה ESP32-S3</h2>
+<p>
+  ה-<b>ESP32-S3</b> הוא dual-core (שתי ליבות Xtensa LX7 @240MHz), עם Wi-Fi 2.4GHz, PSRAM חיצוני,
+  ו-<code>esp_timer</code>/FreeRTOS מובנים. שתי הליבות הן הבסיס לכל הארכיטקטורה שלנו (פרק 4): ליבה
+  אחת לממשק ולחיישנים, השנייה לרשת ולשמע. ה-PSRAM (במצב OPI) קריטי — בלעדיו ה-sprite של המסך נופל
+  ל-draw ישיר מהבהב (פרק 5).
+</p>
+<div class="facts">
+  <span><b>SoC:</b> ESP32-S3 (dual-core LX7)</span>
+  <span><b>Flash:</b> 16 MB</span>
+  <span><b>PSRAM:</b> OPI</span>
+  <span><b>Partition:</b> Huge APP (3MB / 1MB SPIFFS)</span>
+  <span><b>USB:</b> CDC On Boot</span>
+  <span><b>Serial:</b> 115200</span>
+</div>
+<p class="small">
+  הגדרות ה-build הן מדויקות ונדרשות: <span class="src">MindBox/CLAUDE.md → "Build / flash"</span>.
+  מחיצת ה-SPIFFS היא המקום שבו LittleFS מרכיב את תור ה-offline (פרק 8).
+</p>
+
+<h2>2.2 מפת הפינים המלאה (מאומתת מול <code>config.h</code>)</h2>
+<table>
+  <tr>
+    <th>תת-מערכת</th>
+    <th>רכיב</th>
+    <th>פרוטוקול</th>
+    <th class="ltr">פינים (GPIO)</th>
+    <th class="ltr">config.h</th>
+  </tr>
+  <tr>
+    <td>תצוגה</td>
+    <td>ILI9341 TFT 240×320 (סובב ל-320×240)</td>
+    <td>SPI (SPI2_HOST) @40MHz</td>
+    <td class="ltr">SCLK=12, MOSI=11, MISO=13, DC=46, CS=10, RST=-1 (tied to EN), BL=45 (PWM)</td>
+    <td class="ltr">L43-55</td>
+  </tr>
+  <tr>
+    <td>מגע</td>
+    <td>FT6336 קיבולי</td>
+    <td>I2C 0x38 @400kHz</td>
+    <td class="ltr">SDA=16, SCL=15, INT=17, RST=18</td>
+    <td class="ltr">L64-72</td>
+  </tr>
+  <tr>
+    <td>נוכחות</td>
+    <td>VL53L1X ToF (על אותו באס)</td>
+    <td>I2C 0x29</td>
+    <td class="ltr">SDA=16, SCL=15 (no XSHUT)</td>
+    <td class="ltr">L115-116</td>
+  </tr>
+  <tr>
+    <td>שמע — מיקרופון</td>
+    <td>ES8311 MEMS mic</td>
+    <td>I2S</td>
+    <td class="ltr">DIN=6 (mic ADC), BCLK=5, LRCK=7, MCLK=4</td>
+    <td class="ltr">L82-88</td>
+  </tr>
+  <tr>
+    <td>שמע — רמקול</td>
+    <td>ES8311 DAC → FM8002E amp</td>
+    <td>I2S</td>
+    <td class="ltr">DOUT=8, AMP_EN=1 (active-low)</td>
+    <td class="ltr">L84,89</td>
+  </tr>
+  <tr>
+    <td>שמע — בקרת קודק</td>
+    <td>ES8311 control</td>
+    <td>soft-I2C 0x18 (boot-only)</td>
+    <td class="ltr">SDA=16, SCL=15</td>
+    <td class="ltr">L90-92</td>
+  </tr>
+  <tr>
+    <td>אנקודר</td>
+    <td>KY-040 rotary</td>
+    <td>digital A/B (ISR)</td>
+    <td class="ltr">CLK=IO2, DT=IO14, SW=-1</td>
+    <td class="ltr">L112-114</td>
+  </tr>
+  <tr>
+    <td>כפתור צד</td>
+    <td>לחצן ציר האנקודר</td>
+    <td>digital (active-low)</td>
+    <td class="ltr">IO21 (משותף עם DHT11)</td>
+    <td class="ltr">L117</td>
+  </tr>
+  <tr>
+    <td>כפתור BOOT</td>
+    <td>מובנה בלוח</td>
+    <td>digital</td>
+    <td class="ltr">IO0</td>
+    <td class="ltr">L119</td>
+  </tr>
+  <tr>
+    <td>טמפ'/לחות</td>
+    <td>DHT11</td>
+    <td>1-wire (bit-bang)</td>
+    <td class="ltr">DATA=IO21 (+ pull-up 4.7k–10k)</td>
+    <td class="ltr">L122</td>
+  </tr>
+  <tr>
+    <td>אור</td>
+    <td>KY-018 photoresistor</td>
+    <td>analog ADC1 12-bit</td>
+    <td class="ltr">AO=IO3</td>
+    <td class="ltr">L123</td>
+  </tr>
+</table>
+
+<h3>פינים מובנים בלוח שאיננו מנצלים</h3>
+<table>
+  <tr>
+    <th>רכיב</th>
+    <th class="ltr">פינים</th>
+    <th>סטטוס</th>
+  </tr>
+  <tr>
+    <td>RGB LED מובנה (WS2812-style)</td>
+    <td class="ltr">IO42</td>
+    <td>לא מונע ע"י הקושחה</td>
+  </tr>
+  <tr>
+    <td>מדידת סוללה (ADC)</td>
+    <td class="ltr">IO9</td>
+    <td><code>HAS_BATTERY=0</code> — מוחזר −1</td>
+  </tr>
+  <tr>
+    <td>חריץ SD-card</td>
+    <td class="ltr">38/40/39/41/48/47</td>
+    <td>לא בשימוש (משתמשים ב-LittleFS על ה-flash הפנימי)</td>
+  </tr>
+  <tr>
+    <td>UART0 / USB</td>
+    <td class="ltr">TX=43, RX=44 / USB=19,20</td>
+    <td>מובנה</td>
+  </tr>
+</table>
+
+<h2>2.3 האילוץ המגדיר: רק 4 פינים חשופים</h2>
+<div class="danger">
+  <b>זו הנקודה שממנה נגזרות כל ההחלטות בפרק 7.</b> מעבר לפינים המובנים של המסך/מגע/שמע, הלוח חושף
+  ב-header <b>ארבעה פינים בלבד</b>: <code>IO2, IO3, IO14, IO21</code>. חיברנו חמישה חיישנים חיצוניים
+  לארבעה פינים, אז חלק חייבים <b>לחלוק</b> פין. ההקצאה: IO2/IO14 = אנקודר (CLK/DT), IO3 = אור, ו-<b
+    >IO21 מוקצה פעמיים</b
+  >
+  — DATA של ה-DHT11 <i>וגם</i> לחצן ציר האנקודר. אין פין חמישי.
+  <span class="src">MindBox/docs/WIRING.md §1 · config.h L108-117</span>
+</div>
+
+<h2>2.4 מה חי ומה מושבת (דגלי <code>HAS_*</code>)</h2>
+<p>
+  הקושחה בנויה מדגלי-קומפילציה. הדגלים הם ה-SSOT ל"מה מחובר" — בודקים אותם לפני שמניחים שרכיב קיים.
+</p>
+<table>
+  <tr>
+    <th>דגל</th>
+    <th>ערך</th>
+    <th>משמעות</th>
+  </tr>
+  <tr>
+    <td class="ltr">USE_TOUCH</td>
+    <td>1</td>
+    <td>ניווט במסך מגע FT6336</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_ENCODER</td>
+    <td>1</td>
+    <td>אנקודר KY-040 (מתקיים במקביל למגע)</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_PRESENCE</td>
+    <td>1</td>
+    <td>ToF VL53L1X על באס המגע (single master)</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_I2S_MIC</td>
+    <td>1</td>
+    <td>מיקרופון ES8311 I2S — <b>המיקרופון היחיד בלוח</b>, DIN=IO6</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_SPEAKER</td>
+    <td>1</td>
+    <td>רמקול ES8311 + מגבר FM8002E, DOUT=IO8</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_LIGHT</td>
+    <td>1</td>
+    <td>חיישן אור KY-018 → IO3 (ADC1)</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_TEMP</td>
+    <td>1</td>
+    <td>DHT11 טמפ'/לחות → IO21</td>
+  </tr>
+  <tr>
+    <td class="ltr">ENABLE_WIFI / ENABLE_CLOUD</td>
+    <td>1</td>
+    <td>Wi-Fi + NTP + העלאת ingest / משיכת config</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_MIC</td>
+    <td>0</td>
+    <td>נתיב מיקרופון אנלוגי ישן — נזנח (המיקרופון דיגיטלי)</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_HAPTIC</td>
+    <td>0</td>
+    <td>מנוע רטט — הוסר</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_LED_RING / HAS_BATTERY</td>
+    <td>0</td>
+    <td>טבעת LED חיצונית / מדידת סוללה — מושבתים</td>
+  </tr>
+</table>
+
+<div class="note">
+  <b>סייג לתיעוד:</b> בתיקיית ה-docs יש שני קבצים ישנים חלקית —
+  <code>docs/HARDWARE.md §2</code> מפרט את הפינים של הלוח ה<b>קלאסי</b> (OLED, לא S3), ו-<code
+    >docs/WIRING.md</code
+  >
+  ישן לגבי המיקרופון/רמקול. <b>מקור-האמת הוא תמיד <code>config.h</code></b> (וה-<code
+    >CLAUDE.md</code
+  >
+  של הקושחה). המספרים במסמך זה נלקחו מ-<code>config.h</code>.
+</div>
+
+<div class="proof">
+  <b>איך מוכיחים את מפת הפינים:</b> ב-boot הקושחה מריצה <code>selfTest()</code> שמדפיס ל-Serial
+  (115200) סריקת I2C — צריכים להופיע
+  <b>שתי כתובות: <code>0x38</code> (מגע) ו-<code>0x29</code> (ToF)</b> — הוכחה ששני התקנים חיים על
+  אותו באס. באותו self-test מודפסים גם שם דרייבר התצוגה (ILI9341), מצב ה-PSRAM וגודלו, וה-heap.
+  <span class="src">Diagnostics.cpp selfTest()</span>
+</div>

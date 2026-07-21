@@ -1,0 +1,157 @@
+<!-- Chapter 3: sensors, one by one -->
+<h1>3. החיישנים וההתקנים — אחד-אחד</h1>
+
+<div class="lead">
+  לכל רכיב: <b>העיקרון הפיזיקלי</b>, הפרוטוקול, החיווט, קצב הדגימה, קובץ הדרייבר, ו<b
+    >איך מוכיחים</b
+  >
+  שהוא חי. חמישה חיישני קלט (מגע, ToF, מיקרופון, אור, טמפ'/לחות), ושלושה התקני קלט/פלט (מסך, אנקודר,
+  כפתור) + רמקול.
+</div>
+
+<h2>3.1 מסך ILI9341 (SPI)</h2>
+<div class="facts">
+  <span><b>פרוטוקול:</b> SPI2 @40MHz</span>
+  <span><b>דרייבר:</b> LovyanGFX</span>
+  <span><b>DMA:</b> SPI_DMA_CH_AUTO</span>
+  <span><b>רזולוציה:</b> 320×240 (landscape)</span>
+  <span><b>תאורה אחורית:</b> PWM (IO45)</span>
+</div>
+<p>
+  המסך מנוהל דרך <b>LovyanGFX</b> — מחלקת התקן <code>LGFX_Hosyond_S3_28</code> עם bus SPI, פאנל
+  ILI9341 ותאורת PWM. הכתיבה עוברת ב-<b>DMA</b> (לא byte-banging), מה שמקצר push של פריים מלא
+  מ-~80ms ל-~30ms. הרנדור עצמו (sprite יחיד, throttle, מדוע אין קריסה) מוסבר בפרק 5.
+  <span class="src">Panel.cpp L5-46, L14-16</span>
+</p>
+
+<h2>3.2 מגע FT6336 (I2C קיבולי)</h2>
+<div class="facts">
+  <span><b>פרוטוקול:</b> I2C 0x38 @400kHz</span>
+  <span><b>דרייבר:</b> Wire ידני (Touch.cpp)</span>
+  <span><b>כיול:</b> 4 פינות ב-NVS</span>
+  <span><b>long-press:</b> 500ms</span>
+</div>
+<p>
+  בקר מגע קיבולי הנקרא <b>ישירות מעל Arduino <code>Wire</code></b> (לא דרך דרייבר המגע של LovyanGFX,
+  שהוסר). המגע הוא <b>"קליק", לא בורר-מיקום</b>: <i>איפה</i> נוגעים לא משנה — נגיעה קצרה = בחירה
+  בשורה המודגשת, לחיצה ארוכה = חזרה, החלקה אנכית = הזזת ההדגשה (כמו detent של אנקודר). הגישה הישנה
+  (<code>rowHitTest</code>) הוסרה כי כיול לא מדויק נחת על השורה הלא-נכונה. הכיול הוא מפה לינארית
+  raw→screen שנלמדת ב-4 פינות ונשמרת ב-NVS (מזהה swap/mirror לכל rotation); לחיצה ארוכה על BOOT
+  מריצה כיול מחדש. <span class="src">Touch.cpp L45-59, L73-163</span>
+</p>
+
+<h2>3.3 נוכחות VL53L1X (חיישן מרחק Time-of-Flight)</h2>
+<div class="facts">
+  <span><b>פרוטוקול:</b> I2C 0x29 (באס משותף)</span>
+  <span><b>עיקרון:</b> זמן-מעוף של לייזר</span>
+  <span><b>קצב:</b> 500ms (<code>TOF_POLL_MS</code>)</span>
+  <span><b>סף נוכחות:</b> 700mm</span>
+</div>
+<p>
+  ה-VL53L1X מודד מרחק ע"י מדידת <b>זמן המעוף</b> של פולס אור לייזר עד המשתמש וחזרה. מתחת ל-<b
+    >700mm</b
+  >
+  (<code>PRESENCE_NEAR_MM</code>) נחשב "נוכח". קריאות לא-סבירות נדחות (<code
+    >d&gt;0 &amp;&amp; d&lt;4000</code
+  >). בזמן סשן, התרחקות מפעילה השהיה אוטומטית אחרי 30 שניות והפסקה אחרי 5 דקות. אם ה-ToF נכשל
+  באתחול, המערכת יורדת בחן ל"תמיד נוכח". <span class="src">Sensors.cpp L165-168, L222-233</span>
+</p>
+<div class="proof">
+  <b>איך מוכיחים:</b> Serial <code>m</code> (מוניטור 1Hz) מציג <code>dist=Nmm</code> שמשתנה חי
+  כשמזיזים יד קדימה/אחורה. בזמן סשן — התרחקות מציגה חיווי Away על הטיימר.
+</div>
+
+<h2>3.4 מיקרופון ES8311 (I2S דיגיטלי) — <span class="src">DIN=IO6</span></h2>
+<div class="facts">
+  <span><b>פרוטוקול:</b> I2S 16kHz 16-bit mono</span>
+  <span><b>עיבוד:</b> AC-RMS ~1Hz (DC מוסר)</span>
+  <span><b>DIN:</b> IO6 (ADC של הקודק)</span>
+  <span><b>full-scale:</b> AUDIO_MIC_RMS_FULL=1000</span>
+</div>
+<p>
+  זה <b>המיקרופון היחיד בלוח</b> — MEMS דיגיטלי דרך קודק ES8311 על I2S. משימה בליבה 0 קוראת פריימים,
+  מסירה את רכיב ה-DC ומחשבת <b>AC-RMS מתגלגל ב-~1Hz</b> כ-<code>micLevel()</code>, שממנו נגזר "רעש"
+  (0..1) ו-dB משוער: <code>dB_SPL = 20·log10(acRms/32768) + 116</code>. הרעש מזין את צינור
+  ההפרעות/הטלמטריה. עוצמת פלט נשלטת ב-<b>סקיילינג תוכנה של הדגימות</b>, לא בכתיבה חוזרת לקודק.
+  <span class="src">Audio.cpp L205-257 · config.h L82-97</span>
+</p>
+<div class="danger">
+  <b>באג אמיתי שפתרנו (2 באגים):</b> (1) ה-DIN/DOUT היו <b>מוחלפים</b> — קראנו את קו הרמקול הלא-מונע
+  ב-IO8 וקיבלנו קבוע <code>0xFFFF</code>/−1. התיקון: <b>DIN=IO6</b> (מיקרופון),
+  <b>DOUT=IO8</b> (רמקול). (2) הקודק החזיר אפסים עד שכתבנו לרגיסטר ה-ADC clock (<code
+    >reg 0x01 = 0x3F</code
+  >).
+  <span class="src">config.h L84-88 · Audio.cpp L83-123</span>
+</div>
+<div class="proof">
+  <b>איך מוכיחים:</b> Serial <code>a</code> (audio probe) מדפיס ACK של הקודק ב-boot + raw I2S
+  min/max/RMS. מחיאת כף/דיבור ⇒ ה-RMS קופץ. במסך Diag מופיע
+  <code>8311:ACK rdy:1 pp:&lt;n&gt;</code> שבו ה-<code>pp</code> (peak-to-peak של השנייה האחרונה)
+  קופץ כשמדברים.
+</div>
+
+<h2>3.5 רמקול + מגבר FM8002E — <span class="src">DOUT=IO8, AMP_EN=IO1</span></h2>
+<p>
+  ה-DAC של אותו קודק ES8311 מוציא I2S ל-IO8, מוגבר ע"י <b>FM8002E</b> (enable ב-IO1,
+  <b>active-low</b>). משמש לצלילי מחזור-חיים (start/pause/resume/complete) ולצלצול "find-my".
+  <code>Sound.*</code> הוא שכבת מחזור-החיים שמכניסה צלילים לתור לפי הגדרות/שעות שקט.
+  <span class="src">Audio.cpp L246-251 · Sound.cpp</span>
+</p>
+
+<h2>3.6 אנקודר KY-040 (סיבוב) — <span class="src">CLK=IO2, DT=IO14</span></h2>
+<div class="facts">
+  <span><b>עיקרון:</b> quadrature A/B</span>
+  <span><b>קריאה:</b> ISR (<code>IRAM_ATTR</code>)</span>
+  <span><b>ספרייה:</b> AiEsp32RotaryEncoder</span>
+  <span><b>מתח:</b> 3V3 (לא 5V)</span>
+</div>
+<p>
+  סיבוב הכפתור מזיז את סמן התפריט. הקריאה היא <b>מונחית-פסיקות</b> (<code>IRAM_ATTR isr()</code>) על
+  פינים <b>נפרדים לגמרי</b> (IO2/IO14), עם delta מסומן (כך שסיבובים מהירים לא נופלים), clamped ל-±20
+  detents. <b>חשוב:</b> לחצן <i>הציר</i> של האנקודר לא נקרא דרך הספרייה
+  (<code>PIN_ENC_SW=-1</code>), כי הפונקציה שלה עושה busy-wait ~330ms ותוקעת את הלולאה — הוא מחווט
+  ל-IO21 ונקרא כ"כפתור צד" (3.7).
+  <span class="src">Inputs.cpp L42-44, L66-73 · config.h L112-114</span>
+</p>
+
+<h2>3.7 כפתור צד (לחצן ציר האנקודר) — <span class="src">IO21</span></h2>
+<p>
+  לחצן tact פשוט (active-low, <code>INPUT_PULLUP</code>), <b>חולק את IO21 עם ה-DHT11</b>. debounce
+  50ms; <b>נגיעה קצרה = בחירה, החזקה ≥500ms = חזרה</b>. פין שנמצא תקוע-LOW ב-boot נחשב מחווט-שגוי
+  ומתעלמים ממנו (<code>sideFault()</code>). איך השיתוף עם ה-DHT11 עובד — פרק 7.
+  <span class="src">Inputs.cpp L100-129</span>
+</p>
+
+<h2>3.8 טמפרטורה ולחות DHT11 — <span class="src">IO21 (משותף)</span></h2>
+<div class="facts">
+  <span><b>פרוטוקול:</b> 1-wire (bit-bang)</span>
+  <span><b>קצב מינ':</b> 2000ms</span>
+  <span><b>warmup:</b> 5s</span>
+  <span><b>טווח תקף:</b> −20..60°C</span>
+</div>
+<p>
+  DHT11 מוסר טמפרטורה ולחות בפרוטוקול חד-חוטי (bit-bang). נדרש <b>pull-up 4.7k–10k ל-3V3</b> — שגם
+  מחזיק את קו הכפתור (active-low) גבוה במנוחה. קריאה שנכשלת (NaN) שומרת את הערך האחרון הטוב; ערכים
+  מחוץ לטווח נחתכים. <span class="src">Sensors.cpp L51-80 · config.h L122,166</span>
+</p>
+<div class="proof">
+  <b>איך מוכיחים:</b> נשיפה חמה על ה-DHT11 ⇒ הטמפ' עולה ב-Serial/Diag תוך שניות, וב-"Room right now"
+  באתר בפעימה הבאה.
+</div>
+
+<h2>3.9 אור KY-018 (photoresistor אנלוגי) — <span class="src">IO3 (ADC1)</span></h2>
+<p>
+  פוטו-רזיסטור על ADC1 12-bit. חלון של ~1Hz מחשב "lux" ושונות (variance). ה-AO עולה ב<b>חושך</b>
+  (ה-LDR ברגל התחתונה של המחלק), אז הופכים אותו (<code>LIGHT_RAW_DARK_HIGH</code>) כדי ש-lux יעקוב
+  אחרי בהירות. משמש ל<b>בהירות מסך אוטומטית</b>.
+  <span class="src">Sensors.cpp L90-106 · config.h L123,159-164</span>
+</p>
+<div class="proof">
+  <b>איך מוכיחים:</b> מכסים את החיישן ביד ⇒ ה-lux צונח ב-Diag וה<b>מסך מתעמעם פיזית</b>.
+</div>
+
+<div class="note">
+  <b>למה ADC1 דווקא:</b> ב-ESP32-S3 רק GPIO 1–10 הם ADC1, ו-ADC2 מתנגש עם ה-Wi-Fi. IO2 ו-IO3 הם
+  הפינים האנלוגיים היחידים ב-header — לכן חיישן האור על IO3.
+  <span class="src">docs/WIRING.md §5</span>
+</div>

@@ -1,0 +1,27 @@
+#pragma once
+// ============================================================================
+// Haptics — non-blocking vibration-motor pattern player (GPIO 2, via driver).
+// Patterns come from the Control->Feedback table. Respects cfg.hapticsEnabled.
+// Call tick() every loop; the named helpers fire a pattern and return at once.
+// ============================================================================
+#include <Arduino.h>
+
+namespace Haptics {
+  void init();
+  void tick();                 // advance the active pattern (call every loop)
+  void setEnabled(bool e);     // driven by DeviceConfig.hapticsEnabled
+  void setLevel(uint8_t level); // 0=low 1=med 2=high motor strength (PWM duty)
+
+  void play(const uint16_t* steps, uint8_t len);  // on,off,on,... durations (ms)
+  void stopAll();
+  bool isHolding();            // true while the motor is currently energized
+
+  void tap();       // confirm / start          (1 short)
+  void click();     // menu detent              (1 very short)
+  void enableTest(); // settings: haptics ON confirmation pulse
+  void testPulse();  // settings: Test motor (always fires, for wiring check)
+  void pause();     // presence-loss / break    (2 short)
+  void resume();    // presence-return          (1 long)
+  void complete();  // timer end                (strong alert)
+  void reset();     // long-press reset
+}

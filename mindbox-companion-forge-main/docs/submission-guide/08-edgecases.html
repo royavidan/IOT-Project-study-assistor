@@ -1,0 +1,135 @@
+<!-- Chapter 8: edge cases & resilience -->
+<h1>8. מקרי קצה וחוסן</h1>
+
+<div class="lead">
+  "המערכת שורדת את העולם האמיתי" — ניתוקי רשת, תקלות חיישן, נעילת באס, נפילות מתח, וכיבוי-פתאום
+  באמצע סשן. כל אחד מהמקרים למטה <b>מטופל בקוד</b>, וברובם <b>ניתן להדגמה חיה</b>.
+</div>
+
+<h2>8.1 טבלת החוסן</h2>
+<table>
+  <tr>
+    <th>מקרה קצה</th>
+    <th>הטיפול בקוד</th>
+    <th class="ltr">מקור</th>
+  </tr>
+  <tr>
+    <td>ניתוק Wi-Fi באמצע סשן</td>
+    <td>
+      ספירת הסשן על <code>esp_timer</code> עצמאי — לא נעצרת; טלמטריה/העלאות נכנסות לבאפר; reconnect
+      כל 15s
+    </td>
+    <td class="ltr">Session.cpp L28-53 · Cloud.cpp L936-941</td>
+  </tr>
+  <tr>
+    <td>קריאת חיישן נכשלת</td>
+    <td>
+      DHT NaN ⇒ שומר ערך אחרון טוב; ToF לא-סביר נדחה (<code>0&lt;d&lt;4000</code>); כשל אתחול ToF ⇒
+      "תמיד נוכח"
+    </td>
+    <td class="ltr">Sensors.cpp L63-67, L227, L171-179</td>
+  </tr>
+  <tr>
+    <td>נעילת באס I2C</td>
+    <td>
+      ToF כ-"canary": ping כל 2s; שני no-ACK ⇒ <code>i2cRecover()</code> (עד 9 שעוני SCL לשחרר slave
+      שמחזיק SDA, STOP, re-init)
+    </td>
+    <td class="ltr">Sensors.cpp L112-139, L238-254</td>
+  </tr>
+  <tr>
+    <td>נפילת מתח (brownout)</td>
+    <td>
+      סיבת האיפוס מוצגת על המסך ב-boot; TX power מוגבל לריכוך הקפיצה; הפתרון האמיתי — ספק 5V חזק
+      יותר
+    </td>
+    <td class="ltr">config.h L221-234 · MindBox.ino L103-109</td>
+  </tr>
+  <tr>
+    <td>כיבוי-פתאום באמצע סשן</td>
+    <td>
+      <b>Checkpoint</b> ב-NVS בכל start/pause/resume/add-time; ב-boot ⇒ מסך <code>ST_RESUME</code>
+    </td>
+    <td class="ltr">StateMachine.cpp L266-274 · Storage.cpp L465-592</td>
+  </tr>
+  <tr>
+    <td>עבודה ללא רשת</td>
+    <td>
+      סשנים גמורים ל<b>תור עמיד ב-LittleFS</b> (12 סשנים, drop-oldest); ניקוז עם backoff 5s→300s;
+      401 עוצר ניקוז
+    </td>
+    <td class="ltr">UploadQueue.cpp L168-199 · Cloud.cpp L439-479</td>
+  </tr>
+  <tr>
+    <td>אין שעון עדיין (לפני NTP)</td>
+    <td>סשן offline מקבל חותמות 1970, ש<b>מתוקנות</b> לזמן אמיתי ברגע שה-NTP עולה</td>
+    <td class="ltr">Cloud.cpp L423-437</td>
+  </tr>
+  <tr>
+    <td>גלישת באפר</td>
+    <td>
+      <code>HTTP_MAX_BODY=8192</code> עם drop ל-body חורג; parsers מגבילים אורכים;
+      <code>strncpy</code> חסום
+    </td>
+    <td class="ltr">Cloud.cpp L85, L245-407</td>
+  </tr>
+  <tr>
+    <td>אזל זיכרון (OOM)</td>
+    <td>
+      <b>tripwire</b>: <code>heap_caps_register_failed_alloc_callback</code> מדפיס את הגודל שנכשל +
+      heap פנוי, מ-buffer על ה-stack (בלי הקצאה)
+    </td>
+    <td class="ltr">MindBox.ino L56-64</td>
+  </tr>
+  <tr>
+    <td>ריצוד כפתור/מגע</td>
+    <td>debounce 50ms + סיווג short/long לכפתור; סיווג מחוות למגע</td>
+    <td class="ltr">Inputs.cpp L100-129 · config.h L257-259</td>
+  </tr>
+</table>
+
+<h2>8.2 שחזור באס I2C (ה-"canary")</h2>
+<p>
+  באס I2C יכול להינעל אם slave נתקע ומחזיק את SDA נמוך. אנחנו מזהים את זה: ה-ToF נבדק כל 2s
+  (<code>I2C_HEALTH_MS</code>); שני no-ACK רצופים מפעילים <code>i2cRecover()</code> ש<b
+    >מדמה ידנית עד 9 שעוני SCL</b
+  >
+  כדי ל"שחרר" את ה-slave, שולח STOP, ומאתחל מחדש את <code>Wire</code> + ToF. אם SDA עדיין תקוע —
+  מסמנים <code>s_fault=true</code> וה-FSM עובר ל-<code>ST_ERROR</code> (במקום להיתקע בשקט).
+  <code>Wire.setTimeOut(50ms)</code> מונע תקיעת טרנזקציה.
+  <span class="src">Sensors.cpp L112-139</span>
+</p>
+
+<h2>8.3 שחזור מכיבוי-פתאום (Checkpoint)</h2>
+<p>
+  <code>SessionCheckpoint</code> נשמר ל-NVS בכל אירוע משמעותי, כ-struct
+  <b>מגובה-גרסה ו-magic</b> (<code>CK_MAGIC</code>, <code>CK_VER</code>) עם זנב של 10 הדגימות
+  האחרונות. ב-boot, <code>loadCheckpoint()</code> מזהה סשן פתוח ומציע
+  <code>ST_RESUME</code> ("Resume session?"). <code>tailCount</code> פגום נחתך בבטחה גם בשמירה וגם
+  בשחזור. <span class="src">Storage.cpp L465-592 · Session.cpp L153-159</span>
+</p>
+
+<h2>8.4 תור offline וסנכרון</h2>
+<p>
+  סשן שהסתיים נכתב ל<b>תור עמיד ב-LittleFS</b> (על מחיצת ה-SPIFFS) לפני הכתיבה ל-NVS. worker הניקוז
+  מעלה oldest-first עם backoff אקספוננציאלי (5s→300s), ו-<b>העלאה idempotent</b> (upsert על
+  <code>(device_id, id)</code>) מבטיחה שבאצ' שנשלח שוב לא ייצור כפילויות. תגובת 401 עוצרת ניקוז (כשל
+  אימות). <span class="src">UploadQueue.cpp · Cloud.cpp L439-479 · ingest.server.ts</span>
+</p>
+
+<h2>8.5 סנכרון זמן (NTP)</h2>
+<p>
+  בחיבור הראשון מופעל NTP ב-UTC (<code>configTime(0,0,...)</code>) עם מחרוזת ה-TZ של ישראל (DST
+  אוטומטי). <code>haveClock()</code> = <code>time() &gt; 1.7e9</code>. כפי שראינו בפרק 6, ה-SNTP
+  מוגבל ל-12 שעות כדי לא לפתוח socket UDP באמצע HTTP.
+  <span class="src">Cloud.cpp L945-955 · config.h L190-191</span>
+</p>
+
+<div class="proof">
+  <b>איך מוכיחים חוסן (שתי הדגמות חזקות):</b><br />
+  (1) <b>שחזור חשמל:</b> באמצע סשן — מנתקים את ה-USB ומחברים. המכשיר עולה עם "Resume session?"
+  מה-checkpoint, ומסך ה-boot מציג את סיבת האיפוס.<br />
+  (2) <b>offline מלא:</b> מכבים את הראוטר, מריצים סשן שלם, מדליקים חזרה. Serial <code>q</code> מראה
+  את הסשן בתור; אחרי חיבור הוא מופיע באתר עם הזמנים הנכונים (תוקנו ע"י NTP). תקלת חיישן ניתנת להדגמה
+  ע"י ניתוק ה-DHT (שורת Fault אדומה ב-<code>/device</code>).
+</div>

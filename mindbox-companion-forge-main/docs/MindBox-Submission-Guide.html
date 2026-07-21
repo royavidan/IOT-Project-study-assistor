@@ -1,0 +1,1378 @@
+<!doctype html>
+<html dir="rtl" lang="he">
+<head>
+<meta charset="utf-8">
+<title>MindBox — מדריך הגשה ותסריט הדגמה</title>
+<style>/* MindBox Submission Guide — print stylesheet (Hebrew RTL, A4 via puppeteer). */
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  color-scheme: light only;
+}
+
+body {
+  direction: rtl;
+  font-family: "Segoe UI", "Arial", "Noto Sans Hebrew", sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.55;
+  color: #1a1a2e;
+  background: #fff;
+  margin: 0;
+}
+
+h1 {
+  page-break-before: always;
+  font-size: 20pt;
+  color: #16213e;
+  border-bottom: 3px solid #e5352b;
+  padding-bottom: 6px;
+  margin: 0 0 14px;
+}
+
+h1.no-break {
+  page-break-before: avoid;
+}
+
+h2 {
+  font-size: 14pt;
+  color: #16213e;
+  margin: 18px 0 8px;
+  border-right: 4px solid #e5352b;
+  padding-right: 8px;
+  page-break-after: avoid;
+}
+
+h3 {
+  font-size: 11.5pt;
+  color: #0f3460;
+  margin: 14px 0 6px;
+  page-break-after: avoid;
+}
+
+p {
+  margin: 6px 0;
+}
+
+/* Code + technical identifiers are always LTR islands. */
+code {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 9pt;
+  background: #f1f2f6;
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+pre {
+  direction: ltr;
+  text-align: left;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 8.5pt;
+  background: #f7f8fa;
+  border: 1px solid #d9dde3;
+  border-radius: 5px;
+  padding: 8px 10px;
+  overflow: hidden;
+  white-space: pre-wrap;
+  page-break-inside: avoid;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 12px;
+  font-size: 9pt;
+  page-break-inside: auto;
+}
+
+th {
+  background: #16213e;
+  color: #fff;
+  padding: 5px 7px;
+  text-align: right;
+  font-weight: 600;
+}
+
+td {
+  border: 1px solid #d9dde3;
+  padding: 4px 7px;
+  vertical-align: top;
+}
+
+tr:nth-child(even) td {
+  background: #f7f8fa;
+}
+
+tr {
+  page-break-inside: avoid;
+}
+
+table .ltr,
+td.ltr,
+th.ltr {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
+}
+
+.diagram {
+  direction: ltr;
+  text-align: center;
+  margin: 12px 0;
+  page-break-inside: avoid;
+}
+
+.note {
+  background: #fff8e6;
+  border-right: 4px solid #f0a000;
+  padding: 7px 10px;
+  border-radius: 4px;
+  margin: 8px 0;
+  page-break-inside: avoid;
+}
+
+.danger {
+  background: #fdeceb;
+  border-right: 4px solid #e5352b;
+  padding: 7px 10px;
+  border-radius: 4px;
+  margin: 8px 0;
+  page-break-inside: avoid;
+}
+
+.proof {
+  background: #eaf7ef;
+  border-right: 4px solid #2e9b4f;
+  padding: 7px 10px;
+  border-radius: 4px;
+  margin: 8px 0;
+  page-break-inside: avoid;
+}
+
+/* Cover page */
+.cover {
+  height: 250mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.cover .logo-dot {
+  width: 26px;
+  height: 26px;
+  background: #e5352b;
+  border-radius: 50%;
+  margin-bottom: 18px;
+}
+
+.cover h1 {
+  border: none;
+  font-size: 30pt;
+  page-break-before: avoid;
+  margin-bottom: 4px;
+}
+
+.cover .subtitle {
+  font-size: 14pt;
+  color: #555;
+}
+
+.cover .meta {
+  margin-top: 30px;
+  font-size: 10pt;
+  color: #777;
+}
+
+/* Table of contents */
+.toc {
+  font-size: 11pt;
+}
+
+.toc li {
+  margin: 4px 0;
+}
+
+.kv {
+  font-size: 9pt;
+}
+
+.small {
+  font-size: 8.5pt;
+  color: #555;
+}
+
+/* ---- Additions for the submission guide ---- */
+
+/* A quiet "source" tag that ties a claim to a file:line in the repo. */
+.src {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 7.5pt;
+  color: #6b7280;
+}
+
+/* Lead paragraph / TL;DR box at the top of a chapter. */
+.lead {
+  background: #f3f6fb;
+  border-right: 4px solid #16213e;
+  padding: 8px 11px;
+  border-radius: 4px;
+  margin: 8px 0 12px;
+  font-size: 10pt;
+}
+
+/* Fact strip — a compact key: value line used in hardware chapters. */
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.facts span {
+  background: #eef1f6;
+  border: 1px solid #d9dde3;
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 8.5pt;
+}
+
+.facts span b {
+  color: #0f3460;
+}
+
+/* Time column in the run-of-show table. */
+td.time {
+  direction: ltr;
+  text-align: center;
+  font-family: Consolas, "Courier New", monospace;
+  font-weight: 600;
+  color: #8b1e16;
+  white-space: nowrap;
+}
+
+/* Small numbered pill for claims. */
+.pill {
+  display: inline-block;
+  min-width: 18px;
+  text-align: center;
+  background: #16213e;
+  color: #fff;
+  border-radius: 9px;
+  font-size: 8pt;
+  padding: 1px 6px;
+}
+</style>
+</head>
+<body>
+<!-- Chapter 0: cover + table of contents -->
+<div class="cover">
+  <div class="logo-dot"></div>
+  <h1 class="no-break">MindBox</h1>
+  <div class="subtitle">מדריך הגשה טכני מלא + תסריט הדגמה ל-30 דקות</div>
+  <div class="meta">
+    פרויקט IoT · שעון פוקוס חכם על בסיס ESP32-S3<br>
+    גרסת קושחה: <code>0.2.0-s3</code> · לוח: LCDWIKI ES3C28P/ES3N28P (ESP32-S3, מסך מגע 2.8")<br>
+    צוות: Taiyo Yemin · Maor Lisker · Roy Avidan — Technion ICST<br><br>
+    <span class="small">כל טענה חומרתית במסמך מלווה בהפניה מדויקת לקוד המקור (קובץ:שורה) ובדרך להוכיח אותה בזמן אמת מול הקהל.</span>
+  </div>
+</div>
+
+<h1>תוכן העניינים</h1>
+<ol class="toc">
+  <li><b>הסיפור והארכיטקטורה</b> — למה הפרויקט קיים, מה הוא, ואיך הוא בנוי</li>
+  <li><b>החומרה: הלוח, מפת הפינים המלאה והבאסים</b> — הבנת ה-ESP32-S3 ב-100%</li>
+  <li><b>החיישנים וההתקנים — אחד-אחד</b> — עיקרון, פרוטוקול, חיווט, דרייבר, קצב</li>
+  <li><b>ליבות ומשימות (Cores &amp; Tasks)</b> — מי רץ על איזו ליבה ולמה</li>
+  <li><b>למה המסך לא קורס</b> — Single-writer sprite, DMA, וניהול זיכרון</li>
+  <li><b>תקלת הקישוריות ותיקון ה-<code>pbuf_free</code></b> — הבאג ש"אתחל את הקופסה כל כמה דקות"</li>
+  <li><b>Trade-offs ומשאבים משותפים</b> — שיתוף IO21 (אנקודר↔טמפרטורה), באס I2C יחיד, ועוד</li>
+  <li><b>מקרי קצה וחוסן</b> — ניתוק Wi-Fi, תקלות חיישן, שחזור I2C, brownout, offline</li>
+  <li><b>מכונת המצבים וזרימת הנתונים</b> — 16 מצבים, מחזור חיי סשן, טלמטריה, צימוד</li>
+  <li><b>התקן ↔ ענן ↔ אתר</b> — חוזה ה-ingest, אימות, והמסכים החיים באתר</li>
+  <li><b>דיאגנוסטיקה — איך מוכיחים כל טענה</b> — Serial, self-test, מסך Diag</li>
+  <li><b>תסריט ההדגמה (30 דקות) + נספחים</b> — טבלת טענה→הוכחה, run-of-show, וגיבוי סימולטור</li>
+</ol>
+
+<div class="note">
+<b>איך לקרוא את המסמך:</b> טקסט בעברית, אך שמות פינים, פונקציות, קבצים ומספרי-שורה נשארים באנגלית
+(LTR) כדי שיהיו מדויקים וניתנים לחיפוש בקוד. תיבה ירוקה (<span style="color:#2e9b4f">■</span>) = "איך מוכיחים
+את זה"; תיבה כתומה (<span style="color:#f0a000">■</span>) = הערה/סייג; תיבה אדומה
+(<span style="color:#e5352b">■</span>) = מלכודת/כשל אמיתי שנתקלנו בו.
+</div>
+
+<!-- Chapter 1: the story + architecture -->
+<h1>1. הסיפור והארכיטקטורה</h1>
+
+<div class="lead">
+<b>במשפט אחד:</b> MindBox היא קופסה פיזית על בסיס ESP32-S3 שמריצה סשני פוקוס (פומודורו),
+<b>מודדת את סביבת הלימוד בזמן אמת</b> (רעש, טמפרטורה, לחות, אור, נוכחות), ומסתנכרנת דו-כיוונית
+עם אפליקציית ווב — כולל עבודה מלאה גם ללא רשת. המכשיר מריץ <b>שתי ליבות</b>, חמישה חיישנים פעילים,
+מסך מגע, ושמע דו-כיווני (מיקרופון I2S + רמקול).
+</div>
+
+<h2>1.1 הבעיה שפתרנו</h2>
+<p>
+סטודנטים נכשלים לא מחוסר זמן אלא מחוסר <b>פוקוס</b>: הטלפון, הרעש, החדר החם, ואפס משוב על מה
+שבאמת קורה בזמן הלמידה. אפליקציות טיימר קיימות הן פסיביות — הן סופרות זמן אבל לא יודעות אם
+באמת למדת. <b>MindBox</b> הופכת את סביבת הלמידה למדידה: היא רואה אם אתה מול השולחן (ToF),
+שומעת אם החדר רועש (מיקרופון), יודעת אם חשוך או חם מדי (אור/טמפרטורה), ומחברת את כל זה
+ל"עומס פוקוס" (Focus Load) שמוצג בזמן אמת ונשמר לניתוח מאוחר באתר.
+</p>
+
+<h2>1.2 מסע ההנדסה: מ-OLED קלאסי ל-S3 עם מסך מגע</h2>
+<p>
+הפרויקט התחיל כקושחת ESP32 קלאסית (DOIT DevKit) עם מסך OLED קטן ואנקודר בלבד. ה"מוח" —
+מכונת המצבים, מחזור הסשן, והתפריטים (<code>StateMachine</code> / <code>Session</code> /
+<code>Menu</code>) — נכתב כך שהוא <b>אגנוסטי לתצוגה</b>: הוא מייצר ערך <code>UiModel</code>,
+והרנדרר מצייר אותו. בזכות זה הצלחנו <b>לעשות port מלא</b> ללוח ESP32-S3 חדש (LCDWIKI ES3C28P,
+מסך מגע צבעוני 2.8") כמעט בלי לגעת בלוגיקה: רק ה<b>תצוגה</b> (TFT SPI במקום OLED I2C)
+וה<b>קלט</b> (מגע + אנקודר במקום אנקודר בלבד) השתנו. זהו הסיפור ההנדסי המרכזי — ארכיטקטורה
+נכונה מאפשרת החלפת חומרה שלמה בעלות מינימלית.
+</p>
+<p class="small">מקור: <span class="src">MindBox - hardware ESP32 S3 screen/MindBox/CLAUDE.md</span> (סעיף "Context for this variant").</p>
+
+<h2>1.3 תמונת-על של המערכת</h2>
+<div class="diagram">
+<svg width="700" height="330" viewBox="0 0 700 330" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
+  <rect x="10" y="20" width="240" height="290" rx="10" fill="#f7f8fa" stroke="#16213e" stroke-width="2"/>
+  <text x="130" y="42" text-anchor="middle" font-weight="bold" fill="#16213e">MindBox (ESP32-S3)</text>
+  <rect x="25" y="55" width="210" height="22" rx="4" fill="#e5352b" opacity="0.12" stroke="#e5352b"/>
+  <text x="130" y="70" text-anchor="middle" fill="#8b1e16">ILI9341 TFT 320×240 + FT6336 Touch</text>
+  <rect x="25" y="83" width="100" height="22" rx="4" fill="#fff" stroke="#888"/>
+  <text x="75" y="98" text-anchor="middle">DHT11 temp/RH</text>
+  <rect x="135" y="83" width="100" height="22" rx="4" fill="#fff" stroke="#888"/>
+  <text x="185" y="98" text-anchor="middle">VL53L1X ToF</text>
+  <rect x="25" y="111" width="100" height="22" rx="4" fill="#fff" stroke="#888"/>
+  <text x="75" y="126" text-anchor="middle">KY-018 light</text>
+  <rect x="135" y="111" width="100" height="22" rx="4" fill="#fff" stroke="#888"/>
+  <text x="185" y="126" text-anchor="middle">ES8311 I2S mic</text>
+  <rect x="25" y="139" width="100" height="22" rx="4" fill="#fff" stroke="#888"/>
+  <text x="75" y="154" text-anchor="middle">Speaker + amp</text>
+  <rect x="135" y="139" width="100" height="22" rx="4" fill="#fff" stroke="#888"/>
+  <text x="185" y="154" text-anchor="middle">KY-040 encoder</text>
+  <rect x="25" y="172" width="210" height="30" rx="4" fill="#16213e"/>
+  <text x="130" y="191" text-anchor="middle" fill="#fff">Core 1: UI + FSM + Sensors</text>
+  <rect x="25" y="207" width="210" height="30" rx="4" fill="#0f3460"/>
+  <text x="130" y="226" text-anchor="middle" fill="#fff">Core 0: Wi-Fi/HTTP + Audio tasks</text>
+  <rect x="25" y="243" width="210" height="24" rx="4" fill="#fff" stroke="#888"/>
+  <text x="130" y="259" text-anchor="middle">NVS + LittleFS (offline queue)</text>
+  <rect x="25" y="273" width="210" height="24" rx="4" fill="#fff" stroke="#888"/>
+  <text x="130" y="289" text-anchor="middle">NTP clock (UTC + tz)</text>
+
+  <path d="M255 120 H 330" stroke="#2e9b4f" stroke-width="3" marker-end="url(#ar)"/>
+  <text x="292" y="112" text-anchor="middle" fill="#2e9b4f">uplink (POST)</text>
+  <path d="M330 200 H 255" stroke="#0f6ec4" stroke-width="3" marker-end="url(#ar2)"/>
+  <text x="292" y="222" text-anchor="middle" fill="#0f6ec4">downlink (GET 60s)</text>
+
+  <rect x="335" y="60" width="170" height="210" rx="10" fill="#f7f8fa" stroke="#16213e" stroke-width="2"/>
+  <text x="420" y="84" text-anchor="middle" font-weight="bold" fill="#16213e">Server (fetch entry)</text>
+  <rect x="348" y="97" width="144" height="46" rx="4" fill="#2e9b4f" opacity="0.12" stroke="#2e9b4f"/>
+  <text x="420" y="115" text-anchor="middle">/ingest/* (device path)</text>
+  <text x="420" y="132" text-anchor="middle" font-size="10">x-device-secret · service-role</text>
+  <rect x="348" y="150" width="144" height="46" rx="4" fill="#0f6ec4" opacity="0.12" stroke="#0f6ec4"/>
+  <text x="420" y="168" text-anchor="middle">App router (browser path)</text>
+  <text x="420" y="185" text-anchor="middle" font-size="10">auth · RLS · CSRF</text>
+  <rect x="348" y="203" width="144" height="30" rx="4" fill="#fff" stroke="#888"/>
+  <text x="420" y="222" text-anchor="middle">/jobs/* (cron)</text>
+
+  <rect x="530" y="40" width="160" height="90" rx="10" fill="#f7f8fa" stroke="#16213e" stroke-width="2"/>
+  <text x="610" y="64" text-anchor="middle" font-weight="bold">Supabase (Postgres)</text>
+  <text x="610" y="84" text-anchor="middle" font-size="10">sessions · device_status</text>
+  <text x="610" y="100" text-anchor="middle" font-size="10">device_commands · homework</text>
+  <text x="610" y="116" text-anchor="middle" font-size="10">env/focus samples · settings</text>
+  <rect x="530" y="180" width="160" height="90" rx="10" fill="#f7f8fa" stroke="#16213e" stroke-width="2"/>
+  <text x="610" y="204" text-anchor="middle" font-weight="bold">Web App (React 19)</text>
+  <text x="610" y="224" text-anchor="middle" font-size="10">/device · dashboard · insights</text>
+  <text x="610" y="240" text-anchor="middle" font-size="10">remote control · settings</text>
+  <text x="610" y="256" text-anchor="middle" font-size="10">live refetch 5–10s</text>
+
+  <path d="M505 110 H 525" stroke="#555" stroke-width="2" marker-end="url(#ar3)"/>
+  <path d="M525 220 H 505" stroke="#555" stroke-width="2" marker-end="url(#ar4)"/>
+  <path d="M610 135 V 175" stroke="#555" stroke-width="2" marker-end="url(#ar5)"/>
+
+  <defs>
+    <marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2e9b4f"/></marker>
+    <marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#0f6ec4"/></marker>
+    <marker id="ar3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#555"/></marker>
+    <marker id="ar4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#555"/></marker>
+    <marker id="ar5" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#555"/></marker>
+  </defs>
+</svg>
+</div>
+
+<h2>1.4 ששת ערוצי התקשורת</h2>
+<table>
+  <tr><th>ערוץ</th><th class="ltr">Route</th><th>כיוון</th><th>קצב</th><th>מה עובר</th></tr>
+  <tr><td>סשנים</td><td class="ltr">POST /ingest/sessions</td><td>מכשיר → שרת</td><td>בסיום סשן (+ תור offline)</td><td>סשן מלא: זמנים, מצב, אגרגטים סביבתיים, דגימות לדקה</td></tr>
+  <tr><td>טלמטריה</td><td class="ltr">POST /ingest/telemetry</td><td>מכשיר → שרת</td><td>כל 30 שניות (פעימת-לב)</td><td>מצב, סוללה, WiFi RSSI, תקינות חיישנים, טמפ'/לחות/אור/רעש חיים, גרסת קושחה</td></tr>
+  <tr><td>קונפיגורציה</td><td class="ltr">GET /ingest/config</td><td>שרת → מכשיר</td><td>כל 60 שניות (3–5 בזמן צימוד)</td><td>הגדרות, לו"ז יומי+שבועי, ערכת צבעים, זמני פומודורו, מצב מבחן, סטריק, שיעורי בית, פקודה מרחוק</td></tr>
+  <tr><td>צימוד</td><td class="ltr">POST /ingest/pairing</td><td>מכשיר → שרת</td><td>לפי דרישה</td><td>קוד 6 ספרות שהמכשיר מציג (תוקף 15 דק')</td></tr>
+  <tr><td>שחרור</td><td class="ltr">POST /ingest/unpair</td><td>מכשיר → שרת</td><td>לפי דרישה</td><td>שחרור בעלות מהמכשיר ("Sign out")</td></tr>
+  <tr><td>שיעורי בית</td><td class="ltr">POST /ingest/homework</td><td>מכשיר → שרת</td><td>לפי פעולה במסך המגע</td><td>עדכון אחוז התקדמות מטלה מהמכשיר</td></tr>
+</table>
+<p>
+כל הערוצים מאומתים ב-header <code>x-device-secret</code> (השוואה בזמן-קבוע נגד timing attacks).
+הכתיבות רצות דרך service-role client (עוקף RLS), אך הבעלות נבדקת מחדש בקוד לכל פעולה רגישה.
+<span class="src">src/features/device/ingest.server.ts · MindBox/src/Cloud.cpp</span>
+</p>
+
+<div class="proof">
+<b>הוכחה מהירה שהכול חי:</b> פותחים את <code>/device</code> באתר ליד המכשיר — נקודת ה-Online,
+הסוללה, עוצמת ה-Wi-Fi ותנאי החדר ("Room right now") מתעדכנים מכל פעימת טלמטריה (30 שניות
+מהמכשיר, רענון UI כל 10 שניות). מכבים את המכשיר — תוך 90 שניות החיווי הופך ל-"Last seen".
+ההרחבה המלאה בפרק 12.
+</div>
+
+<!-- Chapter 2: the board, full pin map, buses -->
+<h1>2. החומרה: הלוח, מפת הפינים המלאה והבאסים</h1>
+
+<div class="lead">
+זהו פרק ה"חומרה ב-100%". הלוח הוא <b>LCDWIKI ES3C28P/ES3N28P</b> — לוח מוכן עם ESP32-S3, מסך
+ILI9341 בגודל 2.8", בקר מגע FT6336, וקודק שמע ES8311 — שאליו חיברנו ידנית חיישנים חיצוניים.
+מקור-האמת היחיד למיפוי הפינים הוא הקובץ <code>src/config.h</code> (כל מודול כולל אותו; שום מקום
+אחר לא מקודד פין). כל המספרים למטה אומתו ישירות מולו.
+</div>
+
+<h2>2.1 ה-SoC: למה ESP32-S3</h2>
+<p>
+ה-<b>ESP32-S3</b> הוא dual-core (שתי ליבות Xtensa LX7 @240MHz), עם Wi-Fi 2.4GHz, PSRAM חיצוני,
+ו-<code>esp_timer</code>/FreeRTOS מובנים. שתי הליבות הן הבסיס לכל הארכיטקטורה שלנו (פרק 4):
+ליבה אחת לממשק ולחיישנים, השנייה לרשת ולשמע. ה-PSRAM (במצב OPI) קריטי — בלעדיו ה-sprite של
+המסך נופל ל-draw ישיר מהבהב (פרק 5).
+</p>
+<div class="facts">
+  <span><b>SoC:</b> ESP32-S3 (dual-core LX7)</span>
+  <span><b>Flash:</b> 16 MB</span>
+  <span><b>PSRAM:</b> OPI</span>
+  <span><b>Partition:</b> Huge APP (3MB / 1MB SPIFFS)</span>
+  <span><b>USB:</b> CDC On Boot</span>
+  <span><b>Serial:</b> 115200</span>
+</div>
+<p class="small">הגדרות ה-build הן מדויקות ונדרשות: <span class="src">MindBox/CLAUDE.md → "Build / flash"</span>.
+מחיצת ה-SPIFFS היא המקום שבו LittleFS מרכיב את תור ה-offline (פרק 8).</p>
+
+<h2>2.2 מפת הפינים המלאה (מאומתת מול <code>config.h</code>)</h2>
+<table>
+  <tr><th>תת-מערכת</th><th>רכיב</th><th>פרוטוקול</th><th class="ltr">פינים (GPIO)</th><th class="ltr">config.h</th></tr>
+  <tr><td>תצוגה</td><td>ILI9341 TFT 240×320 (סובב ל-320×240)</td><td>SPI (SPI2_HOST) @40MHz</td><td class="ltr">SCLK=12, MOSI=11, MISO=13, DC=46, CS=10, RST=-1 (tied to EN), BL=45 (PWM)</td><td class="ltr">L43-55</td></tr>
+  <tr><td>מגע</td><td>FT6336 קיבולי</td><td>I2C 0x38 @400kHz</td><td class="ltr">SDA=16, SCL=15, INT=17, RST=18</td><td class="ltr">L64-72</td></tr>
+  <tr><td>נוכחות</td><td>VL53L1X ToF (על אותו באס)</td><td>I2C 0x29</td><td class="ltr">SDA=16, SCL=15 (no XSHUT)</td><td class="ltr">L115-116</td></tr>
+  <tr><td>שמע — מיקרופון</td><td>ES8311 MEMS mic</td><td>I2S</td><td class="ltr">DIN=6 (mic ADC), BCLK=5, LRCK=7, MCLK=4</td><td class="ltr">L82-88</td></tr>
+  <tr><td>שמע — רמקול</td><td>ES8311 DAC → FM8002E amp</td><td>I2S</td><td class="ltr">DOUT=8, AMP_EN=1 (active-low)</td><td class="ltr">L84,89</td></tr>
+  <tr><td>שמע — בקרת קודק</td><td>ES8311 control</td><td>soft-I2C 0x18 (boot-only)</td><td class="ltr">SDA=16, SCL=15</td><td class="ltr">L90-92</td></tr>
+  <tr><td>אנקודר</td><td>KY-040 rotary</td><td>digital A/B (ISR)</td><td class="ltr">CLK=IO2, DT=IO14, SW=-1</td><td class="ltr">L112-114</td></tr>
+  <tr><td>כפתור צד</td><td>לחצן ציר האנקודר</td><td>digital (active-low)</td><td class="ltr">IO21 (משותף עם DHT11)</td><td class="ltr">L117</td></tr>
+  <tr><td>כפתור BOOT</td><td>מובנה בלוח</td><td>digital</td><td class="ltr">IO0</td><td class="ltr">L119</td></tr>
+  <tr><td>טמפ'/לחות</td><td>DHT11</td><td>1-wire (bit-bang)</td><td class="ltr">DATA=IO21 (+ pull-up 4.7k–10k)</td><td class="ltr">L122</td></tr>
+  <tr><td>אור</td><td>KY-018 photoresistor</td><td>analog ADC1 12-bit</td><td class="ltr">AO=IO3</td><td class="ltr">L123</td></tr>
+</table>
+
+<h3>פינים מובנים בלוח שאיננו מנצלים</h3>
+<table>
+  <tr><th>רכיב</th><th class="ltr">פינים</th><th>סטטוס</th></tr>
+  <tr><td>RGB LED מובנה (WS2812-style)</td><td class="ltr">IO42</td><td>לא מונע ע"י הקושחה</td></tr>
+  <tr><td>מדידת סוללה (ADC)</td><td class="ltr">IO9</td><td><code>HAS_BATTERY=0</code> — מוחזר −1</td></tr>
+  <tr><td>חריץ SD-card</td><td class="ltr">38/40/39/41/48/47</td><td>לא בשימוש (משתמשים ב-LittleFS על ה-flash הפנימי)</td></tr>
+  <tr><td>UART0 / USB</td><td class="ltr">TX=43, RX=44 / USB=19,20</td><td>מובנה</td></tr>
+</table>
+
+<h2>2.3 האילוץ המגדיר: רק 4 פינים חשופים</h2>
+<div class="danger">
+<b>זו הנקודה שממנה נגזרות כל ההחלטות בפרק 7.</b> מעבר לפינים המובנים של המסך/מגע/שמע, הלוח חושף
+ב-header <b>ארבעה פינים בלבד</b>: <code>IO2, IO3, IO14, IO21</code>. חיברנו חמישה חיישנים חיצוניים
+לארבעה פינים, אז חלק חייבים <b>לחלוק</b> פין. ההקצאה: IO2/IO14 = אנקודר (CLK/DT), IO3 = אור,
+ו-<b>IO21 מוקצה פעמיים</b> — DATA של ה-DHT11 <i>וגם</i> לחצן ציר האנקודר. אין פין חמישי.
+<span class="src">MindBox/docs/WIRING.md §1 · config.h L108-117</span>
+</div>
+
+<h2>2.4 מה חי ומה מושבת (דגלי <code>HAS_*</code>)</h2>
+<p>הקושחה בנויה מדגלי-קומפילציה. הדגלים הם ה-SSOT ל"מה מחובר" — בודקים אותם לפני שמניחים שרכיב קיים.</p>
+<table>
+  <tr><th>דגל</th><th>ערך</th><th>משמעות</th></tr>
+  <tr><td class="ltr">USE_TOUCH</td><td>1</td><td>ניווט במסך מגע FT6336</td></tr>
+  <tr><td class="ltr">HAS_ENCODER</td><td>1</td><td>אנקודר KY-040 (מתקיים במקביל למגע)</td></tr>
+  <tr><td class="ltr">HAS_PRESENCE</td><td>1</td><td>ToF VL53L1X על באס המגע (single master)</td></tr>
+  <tr><td class="ltr">HAS_I2S_MIC</td><td>1</td><td>מיקרופון ES8311 I2S — <b>המיקרופון היחיד בלוח</b>, DIN=IO6</td></tr>
+  <tr><td class="ltr">HAS_SPEAKER</td><td>1</td><td>רמקול ES8311 + מגבר FM8002E, DOUT=IO8</td></tr>
+  <tr><td class="ltr">HAS_LIGHT</td><td>1</td><td>חיישן אור KY-018 → IO3 (ADC1)</td></tr>
+  <tr><td class="ltr">HAS_TEMP</td><td>1</td><td>DHT11 טמפ'/לחות → IO21</td></tr>
+  <tr><td class="ltr">ENABLE_WIFI / ENABLE_CLOUD</td><td>1</td><td>Wi-Fi + NTP + העלאת ingest / משיכת config</td></tr>
+  <tr><td class="ltr">HAS_MIC</td><td>0</td><td>נתיב מיקרופון אנלוגי ישן — נזנח (המיקרופון דיגיטלי)</td></tr>
+  <tr><td class="ltr">HAS_HAPTIC</td><td>0</td><td>מנוע רטט — הוסר</td></tr>
+  <tr><td class="ltr">HAS_LED_RING / HAS_BATTERY</td><td>0</td><td>טבעת LED חיצונית / מדידת סוללה — מושבתים</td></tr>
+</table>
+
+<div class="note">
+<b>סייג לתיעוד:</b> בתיקיית ה-docs יש שני קבצים ישנים חלקית — <code>docs/HARDWARE.md §2</code>
+מפרט את הפינים של הלוח ה<b>קלאסי</b> (OLED, לא S3), ו-<code>docs/WIRING.md</code> ישן לגבי
+המיקרופון/רמקול. <b>מקור-האמת הוא תמיד <code>config.h</code></b> (וה-<code>CLAUDE.md</code> של
+הקושחה). המספרים במסמך זה נלקחו מ-<code>config.h</code>.
+</div>
+
+<div class="proof">
+<b>איך מוכיחים את מפת הפינים:</b> ב-boot הקושחה מריצה <code>selfTest()</code> שמדפיס ל-Serial
+(115200) סריקת I2C — צריכים להופיע <b>שתי כתובות: <code>0x38</code> (מגע) ו-<code>0x29</code> (ToF)</b>
+— הוכחה ששני התקנים חיים על אותו באס. באותו self-test מודפסים גם שם דרייבר התצוגה (ILI9341),
+מצב ה-PSRAM וגודלו, וה-heap. <span class="src">Diagnostics.cpp selfTest()</span>
+</div>
+
+<!-- Chapter 3: sensors, one by one -->
+<h1>3. החיישנים וההתקנים — אחד-אחד</h1>
+
+<div class="lead">
+לכל רכיב: <b>העיקרון הפיזיקלי</b>, הפרוטוקול, החיווט, קצב הדגימה, קובץ הדרייבר, ו<b>איך מוכיחים</b>
+שהוא חי. חמישה חיישני קלט (מגע, ToF, מיקרופון, אור, טמפ'/לחות), ושלושה התקני קלט/פלט (מסך, אנקודר,
+כפתור) + רמקול.
+</div>
+
+<h2>3.1 מסך ILI9341 (SPI)</h2>
+<div class="facts">
+  <span><b>פרוטוקול:</b> SPI2 @40MHz</span>
+  <span><b>דרייבר:</b> LovyanGFX</span>
+  <span><b>DMA:</b> SPI_DMA_CH_AUTO</span>
+  <span><b>רזולוציה:</b> 320×240 (landscape)</span>
+  <span><b>תאורה אחורית:</b> PWM (IO45)</span>
+</div>
+<p>
+המסך מנוהל דרך <b>LovyanGFX</b> — מחלקת התקן <code>LGFX_Hosyond_S3_28</code> עם bus SPI, פאנל
+ILI9341 ותאורת PWM. הכתיבה עוברת ב-<b>DMA</b> (לא byte-banging), מה שמקצר push של פריים מלא
+מ-~80ms ל-~30ms. הרנדור עצמו (sprite יחיד, throttle, מדוע אין קריסה) מוסבר בפרק 5.
+<span class="src">Panel.cpp L5-46, L14-16</span>
+</p>
+
+<h2>3.2 מגע FT6336 (I2C קיבולי)</h2>
+<div class="facts">
+  <span><b>פרוטוקול:</b> I2C 0x38 @400kHz</span>
+  <span><b>דרייבר:</b> Wire ידני (Touch.cpp)</span>
+  <span><b>כיול:</b> 4 פינות ב-NVS</span>
+  <span><b>long-press:</b> 500ms</span>
+</div>
+<p>
+בקר מגע קיבולי הנקרא <b>ישירות מעל Arduino <code>Wire</code></b> (לא דרך דרייבר המגע של LovyanGFX,
+שהוסר). המגע הוא <b>"קליק", לא בורר-מיקום</b>: <i>איפה</i> נוגעים לא משנה — נגיעה קצרה = בחירה
+בשורה המודגשת, לחיצה ארוכה = חזרה, החלקה אנכית = הזזת ההדגשה (כמו detent של אנקודר). הגישה הישנה
+(<code>rowHitTest</code>) הוסרה כי כיול לא מדויק נחת על השורה הלא-נכונה. הכיול הוא מפה לינארית
+raw→screen שנלמדת ב-4 פינות ונשמרת ב-NVS (מזהה swap/mirror לכל rotation); לחיצה ארוכה על BOOT
+מריצה כיול מחדש. <span class="src">Touch.cpp L45-59, L73-163</span>
+</p>
+
+<h2>3.3 נוכחות VL53L1X (חיישן מרחק Time-of-Flight)</h2>
+<div class="facts">
+  <span><b>פרוטוקול:</b> I2C 0x29 (באס משותף)</span>
+  <span><b>עיקרון:</b> זמן-מעוף של לייזר</span>
+  <span><b>קצב:</b> 500ms (<code>TOF_POLL_MS</code>)</span>
+  <span><b>סף נוכחות:</b> 700mm</span>
+</div>
+<p>
+ה-VL53L1X מודד מרחק ע"י מדידת <b>זמן המעוף</b> של פולס אור לייזר עד המשתמש וחזרה. מתחת ל-<b>700mm</b>
+(<code>PRESENCE_NEAR_MM</code>) נחשב "נוכח". קריאות לא-סבירות נדחות (<code>d&gt;0 &amp;&amp; d&lt;4000</code>).
+בזמן סשן, התרחקות מפעילה השהיה אוטומטית אחרי 30 שניות והפסקה אחרי 5 דקות. אם ה-ToF נכשל באתחול,
+המערכת יורדת בחן ל"תמיד נוכח". <span class="src">Sensors.cpp L165-168, L222-233</span>
+</p>
+<div class="proof">
+<b>איך מוכיחים:</b> Serial <code>m</code> (מוניטור 1Hz) מציג <code>dist=Nmm</code> שמשתנה חי כשמזיזים
+יד קדימה/אחורה. בזמן סשן — התרחקות מציגה חיווי Away על הטיימר.
+</div>
+
+<h2>3.4 מיקרופון ES8311 (I2S דיגיטלי) — <span class="src">DIN=IO6</span></h2>
+<div class="facts">
+  <span><b>פרוטוקול:</b> I2S 16kHz 16-bit mono</span>
+  <span><b>עיבוד:</b> AC-RMS ~1Hz (DC מוסר)</span>
+  <span><b>DIN:</b> IO6 (ADC של הקודק)</span>
+  <span><b>full-scale:</b> AUDIO_MIC_RMS_FULL=1000</span>
+</div>
+<p>
+זה <b>המיקרופון היחיד בלוח</b> — MEMS דיגיטלי דרך קודק ES8311 על I2S. משימה בליבה 0 קוראת פריימים,
+מסירה את רכיב ה-DC ומחשבת <b>AC-RMS מתגלגל ב-~1Hz</b> כ-<code>micLevel()</code>, שממנו נגזר "רעש"
+(0..1) ו-dB משוער: <code>dB_SPL = 20·log10(acRms/32768) + 116</code>. הרעש מזין את צינור
+ההפרעות/הטלמטריה. עוצמת פלט נשלטת ב-<b>סקיילינג תוכנה של הדגימות</b>, לא בכתיבה חוזרת לקודק.
+<span class="src">Audio.cpp L205-257 · config.h L82-97</span>
+</p>
+<div class="danger">
+<b>באג אמיתי שפתרנו (2 באגים):</b> (1) ה-DIN/DOUT היו <b>מוחלפים</b> — קראנו את קו הרמקול הלא-מונע
+ב-IO8 וקיבלנו קבוע <code>0xFFFF</code>/−1. התיקון: <b>DIN=IO6</b> (מיקרופון), <b>DOUT=IO8</b> (רמקול).
+(2) הקודק החזיר אפסים עד שכתבנו לרגיסטר ה-ADC clock (<code>reg 0x01 = 0x3F</code>).
+<span class="src">config.h L84-88 · Audio.cpp L83-123</span>
+</div>
+<div class="proof">
+<b>איך מוכיחים:</b> Serial <code>a</code> (audio probe) מדפיס ACK של הקודק ב-boot + raw I2S
+min/max/RMS. מחיאת כף/דיבור ⇒ ה-RMS קופץ. במסך Diag מופיע <code>8311:ACK rdy:1 pp:&lt;n&gt;</code>
+שבו ה-<code>pp</code> (peak-to-peak של השנייה האחרונה) קופץ כשמדברים.
+</div>
+
+<h2>3.5 רמקול + מגבר FM8002E — <span class="src">DOUT=IO8, AMP_EN=IO1</span></h2>
+<p>
+ה-DAC של אותו קודק ES8311 מוציא I2S ל-IO8, מוגבר ע"י <b>FM8002E</b> (enable ב-IO1, <b>active-low</b>).
+משמש לצלילי מחזור-חיים (start/pause/resume/complete) ולצלצול "find-my". <code>Sound.*</code> הוא שכבת
+מחזור-החיים שמכניסה צלילים לתור לפי הגדרות/שעות שקט. <span class="src">Audio.cpp L246-251 · Sound.cpp</span>
+</p>
+
+<h2>3.6 אנקודר KY-040 (סיבוב) — <span class="src">CLK=IO2, DT=IO14</span></h2>
+<div class="facts">
+  <span><b>עיקרון:</b> quadrature A/B</span>
+  <span><b>קריאה:</b> ISR (<code>IRAM_ATTR</code>)</span>
+  <span><b>ספרייה:</b> AiEsp32RotaryEncoder</span>
+  <span><b>מתח:</b> 3V3 (לא 5V)</span>
+</div>
+<p>
+סיבוב הכפתור מזיז את סמן התפריט. הקריאה היא <b>מונחית-פסיקות</b> (<code>IRAM_ATTR isr()</code>) על
+פינים <b>נפרדים לגמרי</b> (IO2/IO14), עם delta מסומן (כך שסיבובים מהירים לא נופלים), clamped ל-±20
+detents. <b>חשוב:</b> לחצן <i>הציר</i> של האנקודר לא נקרא דרך הספרייה (<code>PIN_ENC_SW=-1</code>),
+כי הפונקציה שלה עושה busy-wait ~330ms ותוקעת את הלולאה — הוא מחווט ל-IO21 ונקרא כ"כפתור צד" (3.7).
+<span class="src">Inputs.cpp L42-44, L66-73 · config.h L112-114</span>
+</p>
+
+<h2>3.7 כפתור צד (לחצן ציר האנקודר) — <span class="src">IO21</span></h2>
+<p>
+לחצן tact פשוט (active-low, <code>INPUT_PULLUP</code>), <b>חולק את IO21 עם ה-DHT11</b>. debounce 50ms;
+<b>נגיעה קצרה = בחירה, החזקה ≥500ms = חזרה</b>. פין שנמצא תקוע-LOW ב-boot נחשב מחווט-שגוי ומתעלמים
+ממנו (<code>sideFault()</code>). איך השיתוף עם ה-DHT11 עובד — פרק 7. <span class="src">Inputs.cpp L100-129</span>
+</p>
+
+<h2>3.8 טמפרטורה ולחות DHT11 — <span class="src">IO21 (משותף)</span></h2>
+<div class="facts">
+  <span><b>פרוטוקול:</b> 1-wire (bit-bang)</span>
+  <span><b>קצב מינ':</b> 2000ms</span>
+  <span><b>warmup:</b> 5s</span>
+  <span><b>טווח תקף:</b> −20..60°C</span>
+</div>
+<p>
+DHT11 מוסר טמפרטורה ולחות בפרוטוקול חד-חוטי (bit-bang). נדרש <b>pull-up 4.7k–10k ל-3V3</b> — שגם
+מחזיק את קו הכפתור (active-low) גבוה במנוחה. קריאה שנכשלת (NaN) שומרת את הערך האחרון הטוב; ערכים
+מחוץ לטווח נחתכים. <span class="src">Sensors.cpp L51-80 · config.h L122,166</span>
+</p>
+<div class="proof">
+<b>איך מוכיחים:</b> נשיפה חמה על ה-DHT11 ⇒ הטמפ' עולה ב-Serial/Diag תוך שניות, וב-"Room right now"
+באתר בפעימה הבאה.
+</div>
+
+<h2>3.9 אור KY-018 (photoresistor אנלוגי) — <span class="src">IO3 (ADC1)</span></h2>
+<p>
+פוטו-רזיסטור על ADC1 12-bit. חלון של ~1Hz מחשב "lux" ושונות (variance). ה-AO עולה ב<b>חושך</b>
+(ה-LDR ברגל התחתונה של המחלק), אז הופכים אותו (<code>LIGHT_RAW_DARK_HIGH</code>) כדי ש-lux יעקוב
+אחרי בהירות. משמש ל<b>בהירות מסך אוטומטית</b>. <span class="src">Sensors.cpp L90-106 · config.h L123,159-164</span>
+</p>
+<div class="proof">
+<b>איך מוכיחים:</b> מכסים את החיישן ביד ⇒ ה-lux צונח ב-Diag וה<b>מסך מתעמעם פיזית</b>.
+</div>
+
+<div class="note">
+<b>למה ADC1 דווקא:</b> ב-ESP32-S3 רק GPIO 1–10 הם ADC1, ו-ADC2 מתנגש עם ה-Wi-Fi. IO2 ו-IO3 הם
+הפינים האנלוגיים היחידים ב-header — לכן חיישן האור על IO3. <span class="src">docs/WIRING.md §5</span>
+</div>
+
+<!-- Chapter 4: cores & tasks -->
+<h1>4. ליבות ומשימות (Cores &amp; Tasks)</h1>
+
+<div class="lead">
+ה-ESP32-S3 הוא dual-core, ואנחנו מנצלים את זה במכוון: <b>ליבה 1</b> מריצה את הממשק, מכונת המצבים
+והחיישנים; <b>ליבה 0</b> מריצה את הרשת ואת השמע. בנוסף רץ <b>טיימר חומרה (<code>esp_timer</code>)</b>
+של 10ms לספירת הסשן. הפרדה זו היא הסיבה שהמסך נשאר חלק גם כשה-Wi-Fi תקוע על בקשת HTTP איטית.
+</div>
+
+<h2>4.1 שלושת ההקשרים + טיימר החומרה</h2>
+<table>
+  <tr><th>הקשר ריצה</th><th class="ltr">Core</th><th class="ltr">Priority / Stack</th><th>מה עושה</th><th class="ltr">מקור</th></tr>
+  <tr><td>Arduino <code>loop()</code></td><td class="ltr">1</td><td class="ltr">Arduino default</td><td>קלט → FSM → רנדור + חיישנים; מזין את ה-watchdog כל ~1ms</td><td class="ltr">MindBox.ino L159-167</td></tr>
+  <tr><td>משימת רשת <code>"net"</code></td><td class="ltr">0</td><td class="ltr">prio 1 · 16384B</td><td>Wi-Fi/HTTP: telemetry POST, config GET, ניקוז תור העלאה, צימוד</td><td class="ltr">Cloud.cpp L1153, L971-1137</td></tr>
+  <tr><td>משימת שמע <code>"audio"</code></td><td class="ltr">0</td><td class="ltr">prio 5 · 4096B</td><td>קריאת I2S מהמיקרופון → RMS; ניגון צלילים לרמקול</td><td class="ltr">Audio.cpp L325, L205-257</td></tr>
+  <tr><td>טיימר סשן <code>esp_timer</code></td><td class="ltr">—</td><td class="ltr">10ms periodic</td><td>מוריד את הזמן הנותר בסשן; צובר זמן-היעדרות</td><td class="ltr">Session.cpp L28-53</td></tr>
+</table>
+<p class="small">
+אלו <b>כל</b> ה-tasks — חיפוש <code>xTaskCreatePinnedToCore</code> על כל ה-sketch מחזיר בדיוק שתי
+תוצאות (Cloud.cpp, Audio.cpp). אין tasks נסתרים.
+</p>
+
+<h2>4.2 חלוקת העבודה בין הליבות</h2>
+<div class="diagram">
+<svg width="660" height="250" viewBox="0 0 660 250" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
+  <rect x="15" y="20" width="300" height="210" rx="10" fill="#16213e" opacity="0.06" stroke="#16213e" stroke-width="2"/>
+  <text x="165" y="44" text-anchor="middle" font-weight="bold" fill="#16213e">Core 1 — זמן-אמת של המשתמש</text>
+  <rect x="35" y="58" width="260" height="30" rx="5" fill="#fff" stroke="#16213e"/>
+  <text x="165" y="78" text-anchor="middle">loop(): Inputs → StateMachine → Display</text>
+  <rect x="35" y="94" width="260" height="30" rx="5" fill="#fff" stroke="#16213e"/>
+  <text x="165" y="114" text-anchor="middle">Sensors::tick() — I2C/ADC/DHT</text>
+  <rect x="35" y="130" width="260" height="30" rx="5" fill="#fff" stroke="#16213e"/>
+  <text x="165" y="150" text-anchor="middle">רנדור sprite יחיד (הכותב היחיד למסך)</text>
+  <rect x="35" y="166" width="260" height="30" rx="5" fill="#fff" stroke="#16213e"/>
+  <text x="165" y="186" text-anchor="middle">feed watchdog כל ~1ms</text>
+  <text x="165" y="218" text-anchor="middle" font-size="10" fill="#555">חייב להישאר responsive — אסור לחסום</text>
+
+  <rect x="345" y="20" width="300" height="210" rx="10" fill="#0f3460" opacity="0.08" stroke="#0f3460" stroke-width="2"/>
+  <text x="495" y="44" text-anchor="middle" font-weight="bold" fill="#0f3460">Core 0 — עבודה חוסמת</text>
+  <rect x="365" y="58" width="260" height="46" rx="5" fill="#fff" stroke="#0f3460"/>
+  <text x="495" y="77" text-anchor="middle">net task (prio 1)</text>
+  <text x="495" y="94" text-anchor="middle" font-size="10">HTTP חוסם ~18-20s worst case</text>
+  <rect x="365" y="112" width="260" height="46" rx="5" fill="#fff" stroke="#0f3460"/>
+  <text x="495" y="131" text-anchor="middle">audio task (prio 5)</text>
+  <text x="495" y="148" text-anchor="middle" font-size="10">קריאות I2S חוסמות — מותר כאן</text>
+  <rect x="365" y="166" width="260" height="30" rx="5" fill="#eaf7ef" stroke="#2e9b4f"/>
+  <text x="495" y="186" text-anchor="middle" fill="#2e6b3f">כל Wi-Fi.* מרוכז כאן בלבד</text>
+  <text x="495" y="218" text-anchor="middle" font-size="10" fill="#555">חסימה כאן לא פוגעת במסך</text>
+</svg>
+</div>
+
+<h2>4.3 למה ההפרדה קריטית</h2>
+<p>
+בקשת HTTP על arduino-esp32 יכולה לחסום <b>~18-20 שניות</b> ב-worst case (socket חצי-פתוח), וקריאת
+I2S מהמיקרופון חוסמת מטבעה. אם היו רצים על ליבת הממשק — המסך היה קופא והמגע לא היה מגיב. בכך שהם
+על <b>ליבה 0</b>, ליבה 1 ממשיכה לצייר ולקרוא מגע בלי הפרעה. יתרה מזו, <b>כל קריאות ה-<code>WiFi.*</code>
+מרוכזות במשימת הרשת</b> — מוטציה של הרדיו מליבה אחרת גורמת ל-panic (LoadProhibited), אז ה-UI קורא
+רק snapshot מוקּאש של SSID/IP. <span class="src">config.h L230-233 · Cloud.cpp L34-36, L974-987</span>
+</p>
+
+<h2>4.4 טיימר החומרה: למה הסשן לא מפספס זמן</h2>
+<p>
+ספירת הזמן של הסשן <b>לא</b> תלויה בלולאה הראשית. היא רצה על <code>esp_timer</code> תקופתי של
+<b>10ms</b> (<code>onClockTimer</code>) שמוריד את הזמן הנותר וצובר זמן-היעדרות. כך, גם אם הלולאה
+הראשית נתקעת רגע (רנדור כבד, קריאת חיישן), <b>שעון הסשן מדויק</b> ולא מדלג. זה גם מה שמאפשר ספירה
+נכונה גם כשאין רשת בכלל. <span class="src">Session.cpp L28-53 · config.h L181</span>
+</p>
+
+<h2>4.5 סדר האתחול (boot order) ושיתוף מצב</h2>
+<p>
+ב-<code>setup()</code> הסדר מכוון: Storage → <b>Audio (לפני Display!)</b> → Display/Panel → Theme →
+Sound → Inputs → Sensors → UploadQueue → Cloud → StateMachine → זריעת watchdog. ה-Audio חייב לרוץ
+ראשון כי הוא מאתחל את הקודק ES8311 ב-soft-I2C על פיני המגע (IO16/15) — <b>לפני</b> ש-LovyanGFX/המגע
+תופסים את הבאס. שיתוף המצב בין הליבות נעשה דרך shims בטוחי-thread + <b>mutex רקורסיבי של NVS</b>
+ב-<code>Storage</code>. <span class="src">MindBox.ino L66-134 · MindBox/CLAUDE.md → Threading</span>
+</p>
+
+<div class="proof">
+<b>איך מוכיחים את המבנה הדו-ליבתי חי:</b> מריצים סשן ובמקביל מנתקים את ה-Wi-Fi (הרשת על ליבה 0
+תיכנס ל-retry) — <b>המסך והמגע ממשיכים לעבוד חלק</b> וספירת הסשן ממשיכה מדויק. ב-Serial המוניטור
+(<code>m</code>) מראה את הזמן יורד גם כשה-Wi-Fi מציג off.
+</div>
+
+<!-- Chapter 5: why the screen doesn't crash -->
+<h1>5. למה המסך לא קורס (ולא נקרע)</h1>
+
+<div class="lead">
+מסך שמצויר משתי ליבות במקביל נקרע (tearing) וקורס (race על ה-SPI). הפתרון שלנו הוא <b>משמעת
+כותב-יחיד</b>: רק ליבה 1 מציירת, לתוך <b>sprite אחד מחוץ-למסך</b>, ואז blit יחיד ב-DMA. בגלל זה
+<b>לא צריך mutex למסך בכלל</b> — אין למי להתחרות. בנוסף, ה-sprite נשמר ב-8bpp ב-RAM הפנימי כדי
+לפנות זיכרון ל-Wi-Fi.
+</div>
+
+<h2>5.1 כותב יחיד — הסיבה שאין קריסה</h2>
+<p>
+כל הציור עובר דרך <code>StateMachine::tick()</code>, שהוא ה<b>קורא היחיד</b> לנתיב
+<code>Display::*</code> / <code>Panel::push()</code>, והוא רץ ב-<code>loop()</code> על <b>ליבה 1
+בלבד</b>. משימות הרשת והשמע (ליבה 0) <b>אף פעם לא נוגעות במסך או ב-SPI</b>. מכיוון שיש כותב יחיד —
+אין race, ולכן <b>אין צורך ב-mutex לתצוגה</b>. (לשם השוואה: באס ה-I2C וה-NVS <i>כן</i> נגישים משתי
+הליבות, ולכן לכל אחד יש mutex — ראו פרקים 7 ו-8.) <span class="src">StateMachine.cpp L1425-1500</span>
+</p>
+
+<h2>5.2 Sprite יחיד + blit ב-DMA = אפס tearing</h2>
+<p>
+הכול מצויר לתוך <b>sprite אחד בגודל מסך מלא</b> (<code>LGFX_Sprite spr</code>) דרך
+<code>Panel::canvas()</code>, ואז מוטבע פעם אחת עם <code>spr.pushSprite(0,0)</code> ב-<b>DMA</b>.
+הרכבה-מחוץ-למסך ואז blit-יחיד פירושה שהמשתמש אף פעם לא רואה פריים חלקי — אין הבהוב ואין קריעה.
+<span class="src">Panel.cpp L49, L94-98</span>
+</p>
+<div class="diagram">
+<svg width="640" height="150" viewBox="0 0 640 150" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="11">
+  <rect x="20" y="45" width="150" height="60" rx="6" fill="#fff" stroke="#16213e" stroke-width="2"/>
+  <text x="95" y="70" text-anchor="middle" font-weight="bold">Draw</text>
+  <text x="95" y="88" text-anchor="middle" font-size="10">רכיבים → sprite (RAM)</text>
+  <path d="M175 75 H 235" stroke="#555" stroke-width="2" marker-end="url(#a)"/>
+  <rect x="240" y="45" width="150" height="60" rx="6" fill="#eef1f6" stroke="#16213e" stroke-width="2"/>
+  <text x="315" y="70" text-anchor="middle" font-weight="bold">Compose</text>
+  <text x="315" y="88" text-anchor="middle" font-size="10">פריים מלא מוכן מחוץ-למסך</text>
+  <path d="M395 75 H 455" stroke="#2e9b4f" stroke-width="3" marker-end="url(#b)"/>
+  <text x="425" y="66" text-anchor="middle" font-size="9" fill="#2e9b4f">DMA</text>
+  <rect x="460" y="45" width="160" height="60" rx="6" fill="#16213e"/>
+  <text x="540" y="70" text-anchor="middle" font-weight="bold" fill="#fff">pushSprite()</text>
+  <text x="540" y="88" text-anchor="middle" font-size="10" fill="#fff">blit יחיד למסך</text>
+  <defs>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#555"/></marker>
+    <marker id="b" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2e9b4f"/></marker>
+  </defs>
+</svg>
+</div>
+
+<h2>5.3 8bpp ב-RAM הפנימי — המיטיגציה נגד OOM</h2>
+<p>
+ה-sprite מוגדר ב-<b>8 סיביות לפיקסל (RGB332)</b> במקום 16 — זה חוצה את הבאפר מ-~150KB ל-<b>~75KB</b>,
+ומפנה ~75KB של RAM פנימי ל-stack של ה-Wi-Fi/HTTP <b>שקודם היה מרוקן את ה-heap וגורם ל-panic מסוג
+OOM</b>. הוא נשמר במכוון ב-RAM הפנימי (<code>setPsram(false)</code>) כי sprite ב-PSRAM איטי פי ~10;
+רק אם ה-alloc הפנימי נכשל יש נפילה ל-PSRAM. <span class="src">Panel.cpp L70-88</span>
+</p>
+<div class="note">
+<b>Trade-off מודע:</b> 8bpp = 256 צבעים במקום 65K. ויתרנו על עומק צבע כדי לשמור על יציבות הרשת
+ומהירות רנדור. עבור ממשק עם כמה צבעי accent — הפשרה בלתי-מורגשת, והרווח (יציבות) עצום. (עוד על זה
+בפרק 7.)
+</div>
+
+<h2>5.4 Redraw מווסת (throttle)</h2>
+<p>
+לא מציירים כל לולאה. דגל <code>s_uiDirty</code> + <code>renderPeriodMs()=200ms</code> מגבילים רנדור
+כללי ל-~5 פריימים לשנייה, והטיימר הרץ מתעדכן ב-1Hz. פחות ציור = פחות עומס SPI, פחות חום, פחות
+סיכון להרעיב את שאר המערכת. <span class="src">StateMachine.cpp L137-146</span>
+</p>
+
+<h2>5.5 Watchdog — רשת ביטחון אחרונה</h2>
+<p>
+אם משהו בכל זאת נתקע, ה-<b>Task Watchdog</b> (<code>WDT_TIMEOUT_MS=30000</code>,
+<code>trigger_panic=true</code>) מאתחל את הקופסה במקום להשאיר אותה תקועה. הוא מוזן מהלולאה כל ~1ms,
+וגם ממשימת הרשת בכל pass וסביב כל קריאת HTTP. ה-30s (במקום 15s) מכוון: קריאת HTTP חוסמת יכולה להימשך
+~18-20s, וה-WDT חייב "לחכות אותה" כדי שבקשה אחת ביש-מזל לא תאתחל את הקופסה. <span class="src">MindBox.ino L128-133 · config.h L230-234</span>
+</p>
+
+<div class="proof">
+<b>איך מוכיחים שאין קריסה תחת עומס:</b> מריצים סשן (רנדור טיימר 1Hz) + מחוללים תעבורת רשת (פעימות
+טלמטריה כל 30s, משיכת config) + מדברים למיקרופון (עומס I2S על ליבה 0) בו-זמנית. המסך נשאר חלק, אין
+הבהוב, המגע מגיב. ה-self-test ב-boot מדפיס את מצב ה-render (<code>sprite-internal</code>) ואת גודל
+ה-heap הפנוי — עדות שה-sprite אכן ב-RAM פנימי ושנשאר זיכרון לרשת.
+</div>
+
+<!-- Chapter 6: the pbuf_free connectivity fix -->
+<h1>6. תקלת הקישוריות ותיקון ה-<code>pbuf_free</code></h1>
+
+<div class="lead">
+<b>הבאג:</b> הקופסה התאתחלה "כל כמה דקות" — אבל <b>רק כשהיא מחוברת ל-Wi-Fi</b>. זה היה ה-bug ההנדסי
+הקשה ביותר בפרויקט. השורש: assertion של מחסנית ה-רשת lwIP —
+<code>assert failed: pbuf_free ... p-&gt;ref &gt; 0</code> — שחרור-כפול (double-free) של buffer רשת.
+התיקון הוא <b>מחסנית של תשעה שינויים</b>, שכולם נועדו לסגור את חלון ה-race של שחרור-הכפול.
+</div>
+
+<h2>6.1 מה קרה בפועל</h2>
+<p>
+כל פתיחה וסגירה של socket TCP מקצה ומשחררת <code>pbuf</code>-ים. כאשר <b>שני שחקנים</b> (משימת הרשת
+שלנו + משימת האירועים הפנימית של ה-Wi-Fi, או ה-thread של SNTP) נגעו במחסנית ה-רשת <b>בו-זמנית</b>,
+אותו buffer שוחרר פעמיים — וה-assert הפיל את הצ'יפ. תסמין קלאסי: יציב לגמרי במצב offline, מתאתחל
+מחזורית רק כשמחובר. <span class="src">Cloud.cpp L86-91</span>
+</p>
+
+<h2>6.2 מחסנית התיקון (9 שינויים)</h2>
+<table>
+  <tr><th>#</th><th>השינוי</th><th>למה זה עוזר</th><th class="ltr">מקור</th></tr>
+  <tr><td>1</td><td><b>Socket keep-alive</b>: <code>HTTPClient</code> + <code>WiFiClient</code> משותפים, ממוחזרים בכל קריאות ה-<code>/ingest/*</code> עם <code>setReuse(true)</code>; <code>http.end()</code> משאיר את ה-socket פתוח</td><td>פירוק ה-TCP הוא בדיוק המקום שבו חי השחרור-הכפול; מיחזור מוריד ~2 sockets/דקה לכמעט-אפס</td><td class="ltr">Cloud.cpp L106-124, L168-180</td></tr>
+  <tr><td>2</td><td><b><code>autoReconnect</code> מושבת במכוון</b> + reconnect ידני מסונכרן על משימת הרשת (<code>manageWifi()</code> כל 15s)</td><td>auto-reconnect רץ ב-EVENT task נפרד ומתאסס מחדש <i>במקביל</i> ל-socket פעיל → חלון double-free בין שחקנים</td><td class="ltr">Cloud.cpp L982-985, L936-941</td></tr>
+  <tr><td>3</td><td><b>Settle gate של 500ms</b> לפני הבקשה הראשונה אחרי חיבור</td><td>מפריד את הקמת ה-SNTP/DNS מה-pass של ה-TCP connect הראשון</td><td class="ltr">Cloud.cpp L1101, L934</td></tr>
+  <tr><td>4</td><td><b>SNTP capped ל-12 שעות</b> + <code>sntp_restart()</code></td><td>re-sync ברירת-מחדל (~1h) פותח socket UDP/DNS על ה-tcpip thread באמצע HTTP → אותו double-free</td><td class="ltr">Cloud.cpp L947-954</td></tr>
+  <tr><td>5</td><td><b>בקשת HTTP אחת ל-pass</b> (שרשרת else-if)</td><td>מונע ערימה של כמה stalls של ~18-20s בתוך חלון WDT יחיד</td><td class="ltr">Cloud.cpp L1102-1134</td></tr>
+  <tr><td>6</td><td><b>Coalescing</b> של פעימות-מעבר: <code>TELEMETRY_MIN_GAP_MS=3000</code></td><td>רצף pause→resume→skip מהיר מתכווץ ל-POST אחד במקום סדרה של sockets</td><td class="ltr">config.h L177-180</td></tr>
+  <tr><td>7</td><td><code>vTaskDelay(20ms)</code> אחרי כל בקשה</td><td>נותן ל-lwIP לעשות housekeeping ל-pbuf</td><td class="ltr">Cloud.cpp L185-187</td></tr>
+  <tr><td>8</td><td>כל <code>WiFi.*</code> מרוכז בליבה 0; SSID/IP ב-snapshot ל-UI</td><td>מוטציה של הרדיו מליבה אחרת גורמת panic (LoadProhibited)</td><td class="ltr">Cloud.cpp L34-36, L974-987</td></tr>
+  <tr><td>9</td><td><b>Modem-sleep כבוי</b> (<code>WIFI_PS_NONE</code>)</td><td>שומר על הקישור יציב כדי ש-HTTP תקופתי לא ייתקע ויפיל את ה-WDT</td><td class="ltr">config.h L196-200</td></tr>
+</table>
+
+<h2>6.3 הלקח: <b>לא</b> <code>autoReconnect</code></h2>
+<div class="danger">
+<b>נקודה חשובה למי שיקרא את הקוד:</b> אינטואיטיבית היינו מצפים ש"החיבור נופל" נפתר ע"י
+<code>WiFi.setAutoReconnect(true)</code>. אצלנו זה בדיוק <b>מה שהשבתנו</b>. auto-reconnect הוא בעצמו
+מקור הבעיה — הוא מריץ re-association ב-thread נפרד שמתנגש עם ה-socket הפעיל שלנו. במקומו אנחנו
+<b>מסנכרנים את ה-reconnect ידנית על משימת הרשת</b> (שחקן אחד בכל רגע). כך מתארים את התיקון: <b>keep-alive
+של ה-socket + reconnect מסונכרן</b> — לא autoReconnect. <span class="src">Cloud.cpp L982-985</span>
+</div>
+
+<div class="proof">
+<b>איך מוכיחים שהתיקון עובד:</b> משאירים את המכשיר מחובר ל-Wi-Fi ורצים לאורך זמן — הוא <b>לא מתאתחל</b>
+(לפני התיקון: אתחול מחזורי). ב-Serial, סביב חיבור, מודפס ה-heap הפנוי + הבלוק הגדול ביותר, וכל ~30s
+המשימה מדפיסה מדדי heap — יציבים לאורך זמן, בלי דליפה. אם רוצים להראות את סיבת האיפוס, ה-self-test
+ב-boot מדפיס אותה (למשל <code>task-wdt</code> מול <code>brownout</code> מול panic).
+</div>
+
+<!-- Chapter 7: trade-offs & shared resources -->
+<h1>7. Trade-offs ומשאבים משותפים</h1>
+
+<div class="lead">
+כל פרויקט חומרה אמיתי הוא סדרת פשרות. הפרק הזה מרכז את ההחלטות שקיבלנו במודע — הבולטת שבהן היא
+ש<b>לחצן ציר האנקודר וחיישן הטמפרטורה DHT11 חולקים פין GPIO אחד (IO21)</b> — ומסביר בדיוק מה חולק
+מה, למה זה בטוח חשמלית, ואיך התוכנה מונעת התנגשות.
+</div>
+
+<h2>7.1 השיתוף המרכזי: IO21 = כפתור האנקודר + טמפרטורה</h2>
+<p>
+כמו שראינו בפרק 2, הלוח חושף רק 4 פינים (IO2, IO3, IO14, IO21). חיברנו חמישה חיישנים, אז
+<b>IO21 מוקצה פעמיים</b>: קו ה-DATA של ה-DHT11 (<code>PIN_DHT11=21</code>) <b>וגם</b> לחצן ציר
+האנקודר (<code>PIN_BUTTON=21</code>). <span class="src">config.h L117, L122</span>
+</p>
+
+<h3>מה בדיוק חולק — ומה לא</h3>
+<div class="note">
+<b>חולק:</b> רק ה<b>פין הדיגיטלי הפיזי</b>. <b>לא</b> חולק: פסיקה (interrupt), ולא טיימר. סיבוב
+האנקודר (CLK=IO2, DT=IO14) הוא מונחה-פסיקות על פינים <b>נפרדים לגמרי</b> — <b>אין</b> התנגשות בין
+ה-ISR של הסיבוב לבין ה-timing של ה-1-wire של ה-DHT.
+</div>
+<div class="diagram">
+<svg width="640" height="180" viewBox="0 0 640 180" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="11">
+  <!-- rotation pins -->
+  <rect x="20" y="20" width="180" height="46" rx="6" fill="#eef1f6" stroke="#0f3460"/>
+  <text x="110" y="40" text-anchor="middle" font-weight="bold">סיבוב אנקודר</text>
+  <text x="110" y="57" text-anchor="middle" font-size="10">IO2 (CLK) · IO14 (DT) — ISR נפרד</text>
+  <!-- IO21 shared -->
+  <rect x="230" y="70" width="180" height="90" rx="8" fill="#fdeceb" stroke="#e5352b" stroke-width="2"/>
+  <text x="320" y="92" text-anchor="middle" font-weight="bold" fill="#8b1e16">IO21 (משותף)</text>
+  <text x="320" y="112" text-anchor="middle" font-size="10">DHT11 DATA (bit-bang)</text>
+  <text x="320" y="128" text-anchor="middle" font-size="10">+</text>
+  <text x="320" y="144" text-anchor="middle" font-size="10">כפתור ציר (polled, active-low)</text>
+  <!-- pullup -->
+  <rect x="450" y="70" width="170" height="90" rx="8" fill="#eaf7ef" stroke="#2e9b4f"/>
+  <text x="535" y="96" text-anchor="middle" font-weight="bold" fill="#2e6b3f">Pull-up 4.7k–10k</text>
+  <text x="535" y="116" text-anchor="middle" font-size="10">מחזיק את הקו HIGH במנוחה</text>
+  <text x="535" y="134" text-anchor="middle" font-size="10">= מה שהכפתור active-low</text>
+  <text x="535" y="149" text-anchor="middle" font-size="10">צריך ממילא</text>
+  <path d="M410 115 H 448" stroke="#2e9b4f" stroke-width="2" marker-end="url(#p)"/>
+  <defs><marker id="p" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2e9b4f"/></marker></defs>
+</svg>
+</div>
+
+<h3>למה זה בטוח חשמלית</h3>
+<p>
+ה-DHT11 דורש <b>pull-up של 4.7k–10k ל-3V3</b> על קו ה-DATA. ה-pull-up הזה מחזיק את IO21 <b>גבוה
+במנוחה</b> — וזה <b>בדיוק</b> מה שכפתור active-low ב-<code>INPUT_PULLUP</code> צריך. שני השימושים
+"מסכימים" על מצב-המנוחה של הקו, אז הם דרים בכפיפה אחת בלי רכיב נוסף. <span class="src">config.h L117 · Inputs.cpp L58-59</span>
+</p>
+
+<h3>למה אין התנגשות בתוכנה</h3>
+<p>
+לחצן הציר <b>לא</b> נקרא דרך ספריית האנקודר (<code>PIN_ENC_SW=-1</code>) — הפונקציה שלה עושה
+busy-wait של ~330ms ותוקעת את הלולאה. במקום זה הוא <b>נדגם תוכנתית</b> ב-<code>pollSideButton</code>
+עם <code>digitalRead()</code>, וה-DHT11 נקרא ב-<b>bit-bang</b>. שניהם polled/bit-banged, ואף פעם לא
+רצים בו-זמנית. וכדי לסגור את הפינה האחרונה: כש<b>מחזיקים</b> את הכפתור (הקו נמשך LOW), קריאת DHT
+הייתה נכשלת <i>וגם</i> מבלבלת את החיישן — אז הקוד פשוט <b>מדלג</b> על הקריאה ושומר את הערך האחרון:
+</p>
+<pre>// Sensors.cpp — refreshDht()
+// IO21 shared with the encoder SW; a held line would fail the DHT read.
+if (digitalRead(PIN_DHT11) == LOW) return s_tempOk;   // keep last value</pre>
+<p>
+ה-tick הרקעי (כל 2s) אף פעם לא חוסם ולא עושה retry; רק הנתיב הא-סינכרוני לפי-דרישה עושה retry עם
+השהיית 60ms. כך <b>קצב דגימת הכפתור לעולם לא נפגע מקריאת DHT</b>. <span class="src">Sensors.cpp L54-62</span>
+</p>
+<div class="note">
+<b>נקודה יפה להצגה:</b> בקושחה ה<b>קלאסית</b> (הלוח הישן) האנקודר והטמפרטורה <b>לא</b> חולקים פין —
+שם CLK=18/DT=19/SW=23 וה-DHT על 26, כולם נפרדים. השיתוף הוא <b>תוצאה ייחודית של לוח ה-S3</b> שחושף
+רק 4 פינים. זה ממחיש שהפשרה נבעה מאילוץ חומרתי אמיתי, לא מבחירה שרירותית. <span class="src">MindBox - hardware/MindBox/config.h L22-24,35</span>
+</div>
+
+<h2>7.2 באס I2C יחיד: מגע + ToF (+ קודק) על master אחד</h2>
+<p>
+FT6336 (0x38), VL53L1X (0x29) — ובזמן boot גם ES8311 (0x18) — כולם על <b>Arduino <code>Wire</code>
+יחיד</b> (SDA=16, SCL=15). הם <b>מסתדרים בתור</b> (serialize) כי שניהם נקראים רק מלולאת ליבה 1 —
+אין master שני ואין החלפת-פדים. <b>למה זה חשוב:</b> הגישה הקודמת (שני masters עם pad-swap) <b>הרגה
+את המגע</b>. הקודק נכתב רק ב-boot ב-soft-I2C לפני שהמגע תופס את הבאס, ואז משוחרר; בזמן ריצה השמע הוא
+I2S בלבד. <span class="src">config.h L31, L76-92 · Sensors.cpp L7-9</span>
+</p>
+
+<h2>7.3 פשרות נוספות שקיבלנו במודע</h2>
+<table>
+  <tr><th>הפשרה</th><th>ויתרנו על</th><th>קיבלנו</th></tr>
+  <tr><td>Sprite ב-<b>8bpp</b> (RGB332)</td><td>עומק צבע (256 במקום 65K)</td><td>~75KB RAM פנוי ל-Wi-Fi — יציבות מול קריסות OOM (פרק 5)</td></tr>
+  <tr><td>Sprite ב-<b>RAM פנימי</b> ולא PSRAM</td><td>קצת מה-RAM הפנימי היקר</td><td>רנדור מהיר פי ~10 (PSRAM sprite איטי)</td></tr>
+  <tr><td><b>TX power</b> מוגבל ל-8.5dBm</td><td>מעט טווח Wi-Fi</td><td>ריכוך קפיצת הזרם ב-association — פחות brownout על ספק חלש (פרק 8)</td></tr>
+  <tr><td><b>Modem-sleep כבוי</b></td><td>מעט זרם ממוצע גבוה יותר</td><td>קישור יציב; HTTP תקופתי לא נתקע ולא מפיל WDT</td></tr>
+  <tr><td><b>HTTP רגיל</b> (<code>CLOUD_USE_TLS=0</code>)</td><td>הצפנת TLS</td><td>build קל יותר, פחות זיכרון/CPU; האימות נשען על <code>x-device-secret</code></td></tr>
+  <tr><td>מגע = <b>קליק, לא בורר-מיקום</b></td><td>נגיעה מדויקת בשורה ספציפית</td><td>אמינות — כיול לא-מדויק כבר לא נוחת על השורה הלא-נכונה (פרק 3)</td></tr>
+</table>
+
+<div class="proof">
+<b>איך מוכיחים את שיתוף IO21 חי:</b> (א) מסובבים את האנקודר — הסמן זז (סיבוב על IO2/IO14).
+(ב) לוחצים על ציר האנקודר — בחירה/חזרה (הכפתור על IO21). (ג) נושפים על ה-DHT11 — הטמפ' עולה (DHT
+על IO21). כל השלושה עובדים <b>מאותו רכיב פיזי</b> בלי להתנגש. Serial <code>b</code> (button live test)
+מראה את מצב הכפתור הגולמי; Serial <code>m</code> מראה את הטמפ' — שניהם על IO21.
+</div>
+
+<!-- Chapter 8: edge cases & resilience -->
+<h1>8. מקרי קצה וחוסן</h1>
+
+<div class="lead">
+"המערכת שורדת את העולם האמיתי" — ניתוקי רשת, תקלות חיישן, נעילת באס, נפילות מתח, וכיבוי-פתאום
+באמצע סשן. כל אחד מהמקרים למטה <b>מטופל בקוד</b>, וברובם <b>ניתן להדגמה חיה</b>.
+</div>
+
+<h2>8.1 טבלת החוסן</h2>
+<table>
+  <tr><th>מקרה קצה</th><th>הטיפול בקוד</th><th class="ltr">מקור</th></tr>
+  <tr><td>ניתוק Wi-Fi באמצע סשן</td><td>ספירת הסשן על <code>esp_timer</code> עצמאי — לא נעצרת; טלמטריה/העלאות נכנסות לבאפר; reconnect כל 15s</td><td class="ltr">Session.cpp L28-53 · Cloud.cpp L936-941</td></tr>
+  <tr><td>קריאת חיישן נכשלת</td><td>DHT NaN ⇒ שומר ערך אחרון טוב; ToF לא-סביר נדחה (<code>0&lt;d&lt;4000</code>); כשל אתחול ToF ⇒ "תמיד נוכח"</td><td class="ltr">Sensors.cpp L63-67, L227, L171-179</td></tr>
+  <tr><td>נעילת באס I2C</td><td>ToF כ-"canary": ping כל 2s; שני no-ACK ⇒ <code>i2cRecover()</code> (עד 9 שעוני SCL לשחרר slave שמחזיק SDA, STOP, re-init)</td><td class="ltr">Sensors.cpp L112-139, L238-254</td></tr>
+  <tr><td>נפילת מתח (brownout)</td><td>סיבת האיפוס מוצגת על המסך ב-boot; TX power מוגבל לריכוך הקפיצה; הפתרון האמיתי — ספק 5V חזק יותר</td><td class="ltr">config.h L221-234 · MindBox.ino L103-109</td></tr>
+  <tr><td>כיבוי-פתאום באמצע סשן</td><td><b>Checkpoint</b> ב-NVS בכל start/pause/resume/add-time; ב-boot ⇒ מסך <code>ST_RESUME</code></td><td class="ltr">StateMachine.cpp L266-274 · Storage.cpp L465-592</td></tr>
+  <tr><td>עבודה ללא רשת</td><td>סשנים גמורים ל<b>תור עמיד ב-LittleFS</b> (12 סשנים, drop-oldest); ניקוז עם backoff 5s→300s; 401 עוצר ניקוז</td><td class="ltr">UploadQueue.cpp L168-199 · Cloud.cpp L439-479</td></tr>
+  <tr><td>אין שעון עדיין (לפני NTP)</td><td>סשן offline מקבל חותמות 1970, ש<b>מתוקנות</b> לזמן אמיתי ברגע שה-NTP עולה</td><td class="ltr">Cloud.cpp L423-437</td></tr>
+  <tr><td>גלישת באפר</td><td><code>HTTP_MAX_BODY=8192</code> עם drop ל-body חורג; parsers מגבילים אורכים; <code>strncpy</code> חסום</td><td class="ltr">Cloud.cpp L85, L245-407</td></tr>
+  <tr><td>אזל זיכרון (OOM)</td><td><b>tripwire</b>: <code>heap_caps_register_failed_alloc_callback</code> מדפיס את הגודל שנכשל + heap פנוי, מ-buffer על ה-stack (בלי הקצאה)</td><td class="ltr">MindBox.ino L56-64</td></tr>
+  <tr><td>ריצוד כפתור/מגע</td><td>debounce 50ms + סיווג short/long לכפתור; סיווג מחוות למגע</td><td class="ltr">Inputs.cpp L100-129 · config.h L257-259</td></tr>
+</table>
+
+<h2>8.2 שחזור באס I2C (ה-"canary")</h2>
+<p>
+באס I2C יכול להינעל אם slave נתקע ומחזיק את SDA נמוך. אנחנו מזהים את זה: ה-ToF נבדק כל 2s
+(<code>I2C_HEALTH_MS</code>); שני no-ACK רצופים מפעילים <code>i2cRecover()</code> ש<b>מדמה ידנית עד
+9 שעוני SCL</b> כדי ל"שחרר" את ה-slave, שולח STOP, ומאתחל מחדש את <code>Wire</code> + ToF. אם SDA
+עדיין תקוע — מסמנים <code>s_fault=true</code> וה-FSM עובר ל-<code>ST_ERROR</code> (במקום להיתקע בשקט).
+<code>Wire.setTimeOut(50ms)</code> מונע תקיעת טרנזקציה. <span class="src">Sensors.cpp L112-139</span>
+</p>
+
+<h2>8.3 שחזור מכיבוי-פתאום (Checkpoint)</h2>
+<p>
+<code>SessionCheckpoint</code> נשמר ל-NVS בכל אירוע משמעותי, כ-struct <b>מגובה-גרסה ו-magic</b>
+(<code>CK_MAGIC</code>, <code>CK_VER</code>) עם זנב של 10 הדגימות האחרונות. ב-boot,
+<code>loadCheckpoint()</code> מזהה סשן פתוח ומציע <code>ST_RESUME</code> ("Resume session?").
+<code>tailCount</code> פגום נחתך בבטחה גם בשמירה וגם בשחזור. <span class="src">Storage.cpp L465-592 · Session.cpp L153-159</span>
+</p>
+
+<h2>8.4 תור offline וסנכרון</h2>
+<p>
+סשן שהסתיים נכתב ל<b>תור עמיד ב-LittleFS</b> (על מחיצת ה-SPIFFS) לפני הכתיבה ל-NVS. worker הניקוז
+מעלה oldest-first עם backoff אקספוננציאלי (5s→300s), ו-<b>העלאה idempotent</b> (upsert על
+<code>(device_id, id)</code>) מבטיחה שבאצ' שנשלח שוב לא ייצור כפילויות. תגובת 401 עוצרת ניקוז (כשל
+אימות). <span class="src">UploadQueue.cpp · Cloud.cpp L439-479 · ingest.server.ts</span>
+</p>
+
+<h2>8.5 סנכרון זמן (NTP)</h2>
+<p>
+בחיבור הראשון מופעל NTP ב-UTC (<code>configTime(0,0,...)</code>) עם מחרוזת ה-TZ של ישראל (DST
+אוטומטי). <code>haveClock()</code> = <code>time() &gt; 1.7e9</code>. כפי שראינו בפרק 6, ה-SNTP
+מוגבל ל-12 שעות כדי לא לפתוח socket UDP באמצע HTTP. <span class="src">Cloud.cpp L945-955 · config.h L190-191</span>
+</p>
+
+<div class="proof">
+<b>איך מוכיחים חוסן (שתי הדגמות חזקות):</b><br>
+(1) <b>שחזור חשמל:</b> באמצע סשן — מנתקים את ה-USB ומחברים. המכשיר עולה עם "Resume session?"
+מה-checkpoint, ומסך ה-boot מציג את סיבת האיפוס.<br>
+(2) <b>offline מלא:</b> מכבים את הראוטר, מריצים סשן שלם, מדליקים חזרה. Serial <code>q</code> מראה את
+הסשן בתור; אחרי חיבור הוא מופיע באתר עם הזמנים הנכונים (תוקנו ע"י NTP). תקלת חיישן ניתנת להדגמה ע"י
+ניתוק ה-DHT (שורת Fault אדומה ב-<code>/device</code>).
+</div>
+
+<!-- Chapter 9: state machine & data flow -->
+<h1>9. מכונת המצבים וזרימת הנתונים</h1>
+
+<div class="lead">
+המכשיר בנוי כ<b>מכונת מצבים (FSM)</b> של 16 מצבים. הלב הוא מחזור חיי הסשן; סביבו מצבים לצימוד,
+שחזור, אג'נדה, שיעורי בית, שגיאה ודיאגנוסטיקה. כל <code>tick</code> קורא קלט → מריץ את ה-FSM →
+מצייר → מפרסם טלמטריה.
+</div>
+
+<h2>9.1 המצבים</h2>
+<p>16 המצבים (<code>types.h</code>): <code class="ltr">ST_BOOTING, ST_IDLE, ST_RUNNING, ST_PAUSED,
+ST_COMPLETE, ST_LOGGING, ST_ERROR, ST_PAIRING, ST_DIAG, ST_RESUME, ST_CYCLE_OFFER, ST_WIFI_SETUP,
+ST_AGENDA, ST_AUTOSTART, ST_MESSAGE, ST_HOMEWORK</code>. הדיספאצ'ר הוא ה-switch הגדול ב-<code>StateMachine::tick()</code>.</p>
+<div class="diagram">
+<svg width="660" height="240" viewBox="0 0 660 240" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="10.5">
+  <rect x="20" y="100" width="80" height="34" rx="6" fill="#eef1f6" stroke="#16213e"/><text x="60" y="121" text-anchor="middle">BOOTING</text>
+  <rect x="140" y="100" width="80" height="34" rx="6" fill="#fff" stroke="#16213e"/><text x="180" y="121" text-anchor="middle">IDLE</text>
+  <rect x="270" y="100" width="90" height="34" rx="6" fill="#e5352b" opacity="0.85"/><text x="315" y="121" text-anchor="middle" fill="#fff">RUNNING</text>
+  <rect x="270" y="45" width="90" height="34" rx="6" fill="#fff" stroke="#16213e"/><text x="315" y="66" text-anchor="middle">PAUSED</text>
+  <rect x="410" y="100" width="90" height="34" rx="6" fill="#0f3460" opacity="0.85"/><text x="455" y="121" text-anchor="middle" fill="#fff">COMPLETE</text>
+  <rect x="540" y="100" width="100" height="34" rx="6" fill="#eaf7ef" stroke="#2e9b4f"/><text x="590" y="121" text-anchor="middle">HOMEWORK</text>
+  <rect x="140" y="170" width="80" height="34" rx="6" fill="#fff8e6" stroke="#f0a000"/><text x="180" y="191" text-anchor="middle">RESUME</text>
+  <rect x="410" y="170" width="90" height="34" rx="6" fill="#fdeceb" stroke="#e5352b"/><text x="455" y="191" text-anchor="middle">ERROR</text>
+
+  <path d="M100 117 H 138" stroke="#555" stroke-width="2" marker-end="url(#s)"/>
+  <path d="M220 117 H 268" stroke="#e5352b" stroke-width="2" marker-end="url(#s2)"/>
+  <text x="244" y="110" text-anchor="middle" font-size="9" fill="#e5352b">start</text>
+  <path d="M315 100 V 81" stroke="#555" stroke-width="2" marker-end="url(#s)"/>
+  <path d="M330 81 V 100" stroke="#555" stroke-width="2" marker-end="url(#s)"/>
+  <text x="360" y="92" text-anchor="middle" font-size="9">pause/resume</text>
+  <path d="M360 117 H 408" stroke="#555" stroke-width="2" marker-end="url(#s)"/>
+  <text x="384" y="110" text-anchor="middle" font-size="9">done</text>
+  <path d="M500 117 H 538" stroke="#2e9b4f" stroke-width="2" marker-end="url(#s3)"/>
+  <path d="M455 100 V 55 H 230" stroke="#555" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#s)"/>
+  <text x="330" y="48" text-anchor="middle" font-size="9" fill="#777">→ IDLE</text>
+  <path d="M100 125 Q 120 190 138 187" stroke="#f0a000" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#s4)"/>
+  <text x="95" y="165" text-anchor="middle" font-size="9" fill="#c07f00">checkpoint</text>
+  <defs>
+    <marker id="s" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#555"/></marker>
+    <marker id="s2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#e5352b"/></marker>
+    <marker id="s3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#2e9b4f"/></marker>
+    <marker id="s4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#f0a000"/></marker>
+  </defs>
+</svg>
+</div>
+
+<h2>9.2 מחזור חיי סשן</h2>
+<p>
+<b>Boot:</b> טעינת <code>DeviceConfig</code> מ-NVS; אם קיים checkpoint ⇒ <code>ST_RESUME</code>, אחרת
+⇒ <code>ST_IDLE</code> (offline-first: תמיד עולה לתפריט שמיש). <b>Start:</b>
+<code>startSessionMode(MODE_WORK)</code> ⇒ <code>Session::start()</code> חומש את הטיימר של 10ms, שומר
+checkpoint, מנגן צליל, ונכנס ל-<code>ST_RUNNING</code>. <b>Running:</b> מעקב הפרעות סביבתיות, coaching
+מסתגל, טיפול בנוכחות/היעדרות (עם auto-pause אופציונלי), ורישום דגימות. בסיום ⇒
+<code>onTimerComplete()</code> ⇒ שמירה + לוגיקת מחזור פומודורו ⇒ <code>ST_COMPLETE</code> ⇒
+<code>ST_IDLE</code> או <code>ST_HOMEWORK</code>. <span class="src">StateMachine.cpp L355-372, L545-576</span>
+</p>
+
+<h2>9.3 מה נאסף ונשלח</h2>
+<p>
+בתוך סשן נרשמת דגימה <code class="ltr">Sample{ t, fle, noise, tempC, lightLux }</code> כל
+<code>SAMPLE_PERIOD_MS</code> (WORK=60s, coaching=30s, break=120s; מקס' 120 דגימות). ה-<b>Focus Load
+Estimate (FLE)</b> הוא שקלול של התקדמות, רעש, שונות-אור ונוכחות. במקביל, snapshot חי נדחף למשימת
+הרשת ~1Hz ובכל מעבר-מצב (<code>publishTelemetry()</code> → <code>TelemetrySnap</code>): מצב, mode,
+זמן נותר, FLE, סוללה, JSON תקינות-חיישנים, ואופציונלית טמפ'/לחות/אור/רעש. <span class="src">Session.cpp L55-69 · StateMachine.cpp L236-264 · config.h L147-149,170</span>
+</p>
+
+<h2>9.4 צימוד ופקודות מרחוק</h2>
+<p>
+<b>צימוד:</b> <code>enterPairing()</code> מייצר קוד 6-ספרתי (<code>esp_random()%1000000</code>),
+שולח <code>POST /ingest/pairing</code>, ומצב <code>ST_PAIRING</code> מושך config כל 3s עד
+ש-<code>paired:true</code>. <b>Downlink:</b> <code>syncDownlink()</code> מפרסר JOSN שטוח ומחיל הגדרות
+(ערכת צבעים, זמני פומודורו לפי <code>timingRev</code>, מצב מבחן/DND, סטריק, שיעורי בית) ופקודות מרחוק
+(<code>CMD_START/END/RING/MESSAGE</code>). <b>Sign-out:</b> <code>signOutAccount()</code> שולח
+<code>/ingest/unpair</code> + guard של 90s נגד <code>paired:true</code> ישן שבדרך. <span class="src">StateMachine.cpp L301-334, L657-696 · Cloud.cpp L538-663</span>
+</p>
+
+<div class="proof">
+<b>איך מוכיחים את זרימת הנתונים:</b> מסיימים סשן ⇒ בעמוד <code>/session/$id</code> באתר מופיעים גרפי
+ה-FLE והרעש דקה-בדקה + ספירת ההפרעות — הנתונים שנאספו הרגע. פקודה מרחוק ("Ring") מדגימה את הכיוון
+ההפוך (פרק 10).
+</div>
+
+<!-- Chapter 10: device <-> cloud <-> web -->
+<h1>10. התקן ↔ ענן ↔ אתר</h1>
+
+<div class="lead">
+כאן נסגר המעגל: המכשיר מדבר עם השרת דרך <b>חוזה ingest</b> פשוט (HTTP + secret משותף), השרת כותב
+ל-Supabase, והאתר מציג הכול <b>כמעט בזמן אמת</b>. אלה נקודות ההוכחה החזקות ביותר לדמו — כי הן
+נראות על מסך גדול, לא רק ב-Serial.
+</div>
+
+<h2>10.1 חוזה ה-ingest</h2>
+<p>
+נקודת הכניסה <code>src/server.ts</code> מפרידה תעבורה <b>לפני</b> ה-router: כל <code>/ingest/*</code>
+הולך ל-<code>ingest.server.ts</code>. האימות: header <code>x-device-secret</code> בהשוואת זמן-קבוע
+מול <code>DEVICE_INGEST_SECRET</code>; חסר/שגוי ⇒ <b>401</b>. הכתיבות רצות ב-<b>service-role client
+(עוקף RLS)</b>, אך הבעלות נבדקת מחדש לכל פעולה רגישה.
+</p>
+<table>
+  <tr><th class="ltr">Route</th><th>גוף</th><th>מה השרת עושה</th><th class="ltr">טבלאות</th></tr>
+  <tr><td class="ltr">POST /ingest/sessions</td><td>מערך סשנים (batch)</td><td><b>upsert idempotent</b> על <code>(device_id, id)</code>; מחליף דגימות focus/env</td><td class="ltr">sessions, focus_load_samples, env_samples</td></tr>
+  <tr><td class="ltr">POST /ingest/telemetry</td><td>אובייקט יחיד</td><td>upsert לפי <code>device_id</code> — שורה אחת = ה-snapshot האחרון</td><td class="ltr">device_status</td></tr>
+  <tr><td class="ltr">GET /ingest/config</td><td class="ltr">?deviceId=&amp;ack=</td><td>מרכיב downlink: הגדרות, לו"ז, ערכת צבעים, סטריק, שיעורי בית, ופקודה אחת</td><td class="ltr">user_settings, schedule_events, homework, device_commands</td></tr>
+  <tr><td class="ltr">POST /ingest/pairing</td><td class="ltr">{deviceId, code}</td><td>upsert קוד 6-ספרות עם תוקף 15 דק'</td><td class="ltr">device_pairing_codes</td></tr>
+  <tr><td class="ltr">POST /ingest/unpair</td><td class="ltr">{deviceId}</td><td>מנקה בעלות, מוחק פרופילים ופקודות שלא נמסרו</td><td class="ltr">devices, device_profiles, device_commands</td></tr>
+  <tr><td class="ltr">POST /ingest/homework</td><td class="ltr">{deviceId, homeworkId, pct}</td><td>מעדכן אחוז; 100% + pending ⇒ submitted</td><td class="ltr">homework_assignments</td></tr>
+</table>
+<p class="small">מקור: <span class="src">src/features/device/ingest.server.ts · src/server.ts</span>. צד המכשיר: <span class="src">MindBox/src/Cloud.cpp</span>.</p>
+
+<h2>10.2 המסכים החיים באתר (נקודות ההוכחה)</h2>
+<div class="note">
+<b>הבהרה טכנית חשובה להצגה:</b> אין ב-אתר Supabase realtime/websockets. כל ה"חי" הוא <b>polling של
+react-query</b> (<code>refetchInterval</code>). זה למעשה <b>קל יותר להסביר ולהדגים ביושר</b> — "האתר
+שואל את השרת כל X שניות".
+</div>
+<table>
+  <tr><th>המסך</th><th>קצב רענון</th><th>מה זה מוכיח</th></tr>
+  <tr><td><code>/device</code> — נקודת Online, סוללה, Wi-Fi, "Room right now" (טמפ'/לחות/אור/רעש), תקינות חיישנים</td><td>כל 10 שניות (+ tick שעון 15s)</td><td>טלמטריה מהמכשיר ⇒ שינוי גלוי על המסך תוך ≤10s. ההוכחה החזקה ביותר.</td></tr>
+  <tr><td>סף Online/Offline</td><td class="ltr">90s (3×30s)</td><td>כיבוי המכשיר ⇒ תוך 90s הנקודה אפורה + "Last seen"</td></tr>
+  <tr><td>כרטיס שליטה מרחוק (Start/End/Ring/Message) + צ'יפים Queued→Sent→Done</td><td>כל 5 שניות</td><td>נתיב אתר→מכשיר: פקודה עוברת Queued→Sent (המכשיר משך config)→Done (אישר)</td></tr>
+  <tr><td>Dashboard "Today" (דקות פוקוס, סשנים, סטריק, מצב מכשיר)</td><td>חלק המכשיר כל 10s</td><td>סשן חדש מופיע בסיכומי היום</td></tr>
+  <tr><td><code>/session/$id</code> — גרפי FLE + דגימות סביבה</td><td>בטעינה</td><td>נתוני החיישנים דקה-בדקה שנחתו זה עתה</td></tr>
+</table>
+<p class="small">מקור: <span class="src">src/routes/device.tsx · src/features/device/freshness.ts · lib/queries/sessions.ts</span>.</p>
+
+<h2>10.3 הסימולטור — גיבוי לדמו בלי חומרה</h2>
+<p>
+שני סימולטורים, שכל אחד מוכיח את החוזה בלי מכשיר פיזי:
+</p>
+<ul>
+  <li><b>CLI</b> — <code>bun run simulate</code> (דורש dev server רץ). זורע מכשיר, שולח ~30 יום סשנים
+  (idempotent), ומזרים טלמטריה כל 3s. תרחישים: <code>--offline-then-sync</code>,
+  <code>--low-battery</code>, <code>--sensor-fault</code>, <code>--no-env</code>; ופקודות:
+  <code>--config</code> (מדפיס את ה-downlink בדיוק כמו שהמכשיר רואה), <code>--send-command</code>,
+  <code>--ack</code>, <code>--homework</code>. <span class="src">scripts/simulator.ts</span></li>
+  <li><b>עמוד <code>/simulator</code> באתר</b> — GUI ללחיצה: רישום סשן בודד או דחיפת snapshot טלמטריה.
+  אידאלי לדמו בלי טרמינל על המסך.</li>
+</ul>
+
+<div class="proof">
+<b>הוכחת מקצה-לקצה במשפט אחד:</b> המכשיר (או <code>bun run simulate</code>) שולח JSON מאומת-secret
+ל-<code>/ingest/telemetry</code> ⇒ שורה נוחתת ב-<code>device_status</code> ⇒ ה-polling של react-query
+(כל 10s) מצייר מחדש את נקודת ה-Online, הסוללה ותנאי החדר — והכיוון ההפוך מוכח ע"י הוצאת פקודה
+מהאתר וצפייה ב-Queued→Sent→Done. <b>לפני הדמו:</b> ודאו שה-<code>DEVICE_INGEST_SECRET</code> ומפתחות
+Supabase בסביבה שאליה המכשיר מדבר <b>תואמים</b> למה שהמכשיר צרוב איתו — אחרת המכשיר יקבל 401.
+</div>
+
+<!-- Chapter 11: diagnostics -->
+<h1>11. דיאגנוסטיקה — איך מוכיחים כל טענה</h1>
+
+<div class="lead">
+זהו ה"ארגז כלים" שהופך כל טענה חומרתית ל<b>נראית</b> — בדיוק מה שהצוות המנחה ביקש. שני משטחים:
+<b>Serial @115200</b> (על USB-CDC) ו<b>מסך ה-<code>ST_DIAG</code></b> שמראה נתונים חיים בלי מחשב בכלל.
+</div>
+
+<h2>11.1 תפריט פקודות Serial</h2>
+<table>
+  <tr><th class="ltr">מקש</th><th>מה מציג / עושה</th></tr>
+  <tr><td class="ltr">m</td><td>מוניטור 1Hz — שורה חיה עם מצב, טיימר, מרחק ToF, רעש, אור, טמפ', Wi-Fi, כפתור, תור</td></tr>
+  <tr><td class="ltr">a</td><td>probe שמע/מיקרופון — ACK של הקודק + raw I2S min/max/RMS (מוכיח מיקרופון חי)</td></tr>
+  <tr><td class="ltr">c</td><td>כיול חיישנים + קריאות חיות</td></tr>
+  <tr><td class="ltr">b</td><td>בדיקת כפתור חיה (8s) — מסמן חיווט תקוע-LOW</td></tr>
+  <tr><td class="ltr">t / k</td><td>probe מגע חי (crosshair) / כיול מגע מחדש</td></tr>
+  <tr><td class="ltr">q</td><td>סטטוס תור ההעלאה — כמה ממתינים, ה-seq הישן ביותר, כמה נזרקו</td></tr>
+  <tr><td class="ltr">w</td><td>הזנת Wi-Fi/URL/secret</td></tr>
+  <tr><td class="ltr">d / h</td><td>dump חד-פעמי / עזרה</td></tr>
+</table>
+<p class="small">מקור: <span class="src">Diagnostics.cpp L293-310</span>.</p>
+
+<h2>11.2 self-test ב-boot</h2>
+<p>
+בכל הדלקה מודפס דוח שמוכיח, שורה-שורה, שהמערכת בריאה:
+</p>
+<pre>firmware 0.2.0-s3
+reset reason: <power-on | panic | task-wdt | brownout>
+heap: free / total   ·   PSRAM: found, <size>
+render: sprite-internal            <-- ה-sprite ב-RAM פנימי (פרק 5)
+I2C scan: 0x38 (touch)  0x29 (ToF) <-- שני התקנים על באס אחד (פרק 2)
+display: ILI9341
+ToF: present=<0/1> dist=<n>mm
+mic: level=<n>   ES8311 ACK: ok   raw min/max/rms
+light: <lux>     temp: <c>C
+wifi: <connected/off></pre>
+<p class="small">מקור: <span class="src">Diagnostics.cpp selfTest() L234-288</span>.</p>
+
+<h2>11.3 מוניטור חי (1Hz) ומסך Diag</h2>
+<p>
+פקודת <code>m</code> מדפיסה כל שנייה: מצב, טיימר <code>M:SS</code>, mode, דגל נוכחות, <code>dist=Nmm</code>,
+רעש, lux, טמפ', ToF ok, Wi-Fi on/off, כפתור גולמי, דגל fault, מספר סשנים בבאפר, וכמות ממתינה בתור.
+מסך <code>ST_DIAG</code> מראה את אותו מידע <b>ללא מחשב</b>: שם דרייבר, ToF+mm, רעש dB + מצב כפתור,
+ובמיוחד <b><code>8311:ACK rdy:1 pp:&lt;n&gt;</code></b> — ה-ACK של הקודק, דגל שה-I2S זורם, וה-peak-to-peak
+של השנייה האחרונה שקופץ כשמדברים. <span class="src">Diagnostics.cpp L51-90 · StateMachine.cpp L838-870</span>
+</p>
+
+<div class="proof">
+<b>למה זה עונה בדיוק לדרישת המנחה:</b> ההנחיה הייתה "אם תגידו שיש חיישן שמקבל בזמן אמת נתונים ומתקשר
+עם מערכת — שאוכל לראות את זה". פקודת <code>m</code> מראה את החיישנים משתנים חי; ה-self-test מוכיח את
+מפת החומרה; מסך ה-Diag מראה הכול בלי מחשב; והאתר (פרק 10) מראה את אותם נתונים אחרי מסע הענן. פרק 12
+מרכז את הכול לתסריט של 30 דקות.
+</div>
+
+<!-- Chapter 12: 30-minute demo script + appendices -->
+<h1>12. תסריט ההדגמה (30 דקות)</h1>
+
+<div class="lead">
+עיקרון המנחה: <b>"תדאגו שיש דרך להציג ולוודא כל טענה שאתם טוענים."</b> הפרק הזה נותן תסריט מלא של
+30 דקות שבו <b>כל טענה מלווה בהוכחה חיה</b>, עם הפלט המדויק שצריך להצביע עליו, וגיבוי בסימולטור אם
+החומרה מסרבת לשתף פעולה.
+</div>
+
+<h2>12.1 צ'ק-ליסט לפני הדמו</h2>
+<table>
+  <tr><th>#</th><th>מה לוודא</th><th>למה</th></tr>
+  <tr><td>1</td><td><b>ספק 5V חזק</b> (מטען קיר/פאוורבנק טוב, לא רק USB של לפטופ)</td><td>המיקרופון+ToF מעלים זרם boot; ספק חלש ⇒ brownout ואתחול-לולאה (פרק 8)</td></tr>
+  <tr><td>2</td><td>רשת <b>Wi-Fi 2.4GHz</b> זמינה (לא 5GHz בלבד)</td><td>ה-ESP32-S3 תומך רק ב-2.4GHz</td></tr>
+  <tr><td>3</td><td>dev server רץ (<code>bun run dev</code> → <code>http://localhost:8080</code>) או האתר המפורסם, עם <code>DEVICE_INGEST_SECRET</code> ומפתחות Supabase <b>תואמים</b> למכשיר</td><td>אחרת המכשיר יקבל 401 מול הענן</td></tr>
+  <tr><td>4</td><td><code>/device</code> פתוח על מסך גדול; המכשיר <b>מצומד</b> לחשבון</td><td>נקודת ההוכחה החזותית המרכזית</td></tr>
+  <tr><td>5</td><td>Serial monitor פתוח @<b>115200</b></td><td>self-test + מוניטור <code>m</code></td></tr>
+  <tr><td>6</td><td>המגע <b>מכויל</b> (אם לא — החזקה ארוכה על BOOT)</td><td>ניווט חלק בזמן הדמו</td></tr>
+  <tr><td>7</td><td>גיבוי: <code>bun run simulate</code> נבדק שרץ</td><td>תוכנית-מגירה אם החומרה נופלת</td></tr>
+</table>
+
+<h2>12.2 טבלת טענה → הוכחה (עם הפלט המדויק)</h2>
+<table>
+  <tr><th class="ltr">#</th><th>הטענה</th><th>הפעולה החיה</th><th>הפלט המדויק להצביע עליו</th></tr>
+  <tr><td>1</td><td>המכשיר מדווח לענן כל 30s</td><td>לפתוח <code>/device</code> ולחכות</td><td>נקודת Online ירוקה; "Room right now" מתעדכן. כיבוי ⇒ "Last seen" תוך 90s</td></tr>
+  <tr><td>2</td><td>מיקרופון I2S אמיתי מודד רעש</td><td>מחיאת כף ליד הקופסה</td><td>Serial <code>a</code>: RMS קופץ; מסך Diag: <code>pp</code> קופץ; הערך באתר בפעימה הבאה</td></tr>
+  <tr><td>3</td><td>ToF מזהה נוכחות</td><td>להזיז יד קדימה/אחורה</td><td>Serial <code>m</code>: <code>dist=Nmm</code> משתנה חי; התרחקות בסשן ⇒ Away</td></tr>
+  <tr><td>4</td><td>טמפ'/לחות נמדדות</td><td>נשיפה חמה על ה-DHT11</td><td>הטמפ' עולה ב-Serial/Diag תוך שניות, ואז ב-"Room right now"</td></tr>
+  <tr><td>5</td><td>חיישן אור + בהירות אוטומטית</td><td>לכסות את החיישן ביד</td><td>ה-lux צונח ב-Diag; <b>המסך מתעמעם פיזית</b></td></tr>
+  <tr><td>6</td><td>הפרעות מגיעות לענן דגימה-בדגימה</td><td>סשן קצר עם רעש מכוון + התרחקות</td><td><code>/session/$id</code>: גרף FLE+רעש לאורך הדקות + ספירת הפרעות</td></tr>
+  <tr><td>7</td><td>האתר שולט במכשיר מרחוק</td><td>"Ring my device" מ-<code>/device</code></td><td>המכשיר מצלצל ≤60s; באתר Queued→Sent→Done</td></tr>
+  <tr><td>8</td><td>שינוי הגדרה מגיע למכשיר</td><td>להחליף ערכת צבעים ב-Settings</td><td>צבעי המסך מתחלפים ≤60s</td></tr>
+  <tr><td>9</td><td>שיתוף IO21 (אנקודר+טמפ') עובד</td><td>לסובב אנקודר, ללחוץ ציר, לנשוף על DHT</td><td>הסמן זז (IO2/14) · בחירה (IO21) · טמפ' עולה (IO21) — מאותו רכיב, בלי התנגשות</td></tr>
+  <tr><td>10</td><td>offline מלא + סנכרון</td><td>לכבות ראוטר, סשן שלם, להדליק</td><td>Serial <code>q</code>: סשן בתור ⇒ מופיע באתר עם זמנים נכונים (NTP)</td></tr>
+  <tr><td>11</td><td>תקלת חיישן מדווחת, לא נבלעת</td><td>לנתק DHT (או <code>--sensor-fault</code>)</td><td>שורת Fault אדומה ב-<code>/device</code>; StateBadge → danger</td></tr>
+  <tr><td>12</td><td>שרידות ניתוק חשמל</td><td>לנתק USB באמצע סשן ולחבר</td><td>עולה עם "Resume session?"; boot מציג את סיבת האיפוס</td></tr>
+  <tr><td>13</td><td>העברת דאטה מאומתת בזהות</td><td><code>curl</code> ל-<code>/ingest/config</code> בלי header</td><td><b>401</b>; עם ה-header ⇒ JSON מלא</td></tr>
+  <tr><td>14</td><td>שתי ליבות — המסך שורד עומס רשת</td><td>לנתק Wi-Fi באמצע סשן</td><td>המסך/מגע ממשיכים חלק; ספירת הסשן מדויקת</td></tr>
+  <tr><td>15</td><td>שני התקנים על באס I2C אחד</td><td>self-test ב-boot</td><td>סריקת I2C מציגה <code>0x38</code> + <code>0x29</code></td></tr>
+</table>
+
+<p>הפקודה להדגמת טענה 13 (אימות):</p>
+<pre># ללא header ⇒ 401
+curl -s -o /dev/null -w "%{http_code}\n" \
+  "$APP_BASE_URL/ingest/config?deviceId=mindbox-sim-01"
+
+# עם header ⇒ JSON מלא (downlink)
+curl -H "x-device-secret: $DEVICE_INGEST_SECRET" \
+  "$APP_BASE_URL/ingest/config?deviceId=mindbox-sim-01"</pre>
+
+<h2>12.3 Run-of-show — דקה אחר דקה</h2>
+<table>
+  <tr><th class="ltr">דקות</th><th>שלב</th><th>מה עושים ומה אומרים</th></tr>
+  <tr><td class="time">0–5</td><td>הסיפור והארכיטקטורה</td><td>הבעיה (פוקוס, לא זמן) → מה MindBox → תמונת-העל (פרק 1): מכשיר ↔ ענן ↔ אתר. להחזיק את הלוח ביד ולהצביע על המסך, המיקרופון, ה-ToF, האנקודר.</td></tr>
+  <tr><td class="time">5–9</td><td>הדלקה + self-test חי</td><td>הדלקה מול הקהל: boot breadcrumbs + <b>סיבת איפוס</b> על המסך; ב-Serial — סריקת I2C (<code>0x38</code>+<code>0x29</code>), PSRAM, render=sprite-internal, heap. <b>מוכיח טענות 15 + מפת החומרה.</b></td></tr>
+  <tr><td class="time">9–14</td><td>"החיישנים חיים" — Serial <code>m</code></td><td>יד (מרחק) · מחיאת כף (רעש/<code>pp</code>) · כיסוי (lux + עמעום מסך) · נשיפה (טמפ') — הכול בשורה חיה אחת. <b>מוכיח טענות 2–5.</b></td></tr>
+  <tr><td class="time">14–19</td><td>סשן חי עם הפרעות</td><td>התחלת סשן; רעש מכוון ⇒ אייקון + התראה קולית; התרחקות ⇒ Away; בסיום — סיכום על המכשיר. <b>מוכיח 3, 6.</b></td></tr>
+  <tr><td class="time">19–23</td><td>הדאטה בענן</td><td><code>/session/$id</code> — גרפי הדקה-בדקה של הסשן שהרגע נגמר; <code>/device</code> — "Room right now" חי. <b>מוכיח 1, 6.</b></td></tr>
+  <tr><td class="time">23–26</td><td>שליטה דו-כיוונית</td><td>"Ring my device" (Queued→Sent→Done); החלפת theme; הוספת אירוע ליומן ⇒ מופיע על המכשיר. <b>מוכיח 7, 8.</b></td></tr>
+  <tr><td class="time">26–30</td><td>עומק הנדסי + חוסן</td><td>2 ליבות (פרק 4), למה המסך לא קורס (פרק 5), <b>שיתוף IO21</b> (פרק 7), ותיקון ה-<code>pbuf_free</code> (פרק 6). לסיים ב<b>ניתוק חשמל חי</b> באמצע סשן ⇒ "Resume". <b>מוכיח 9, 12, 14.</b> להשאיר דקה ל-Q&amp;A.</td></tr>
+</table>
+
+<h2>12.4 גיבוי בלי חומרה</h2>
+<div class="note">
+אם החומרה נופלת (brownout, רשת) — כל נתיב שרת ניתן להדגמה עם הסימולטור: <code>bun run simulate</code>
+לזרם טלמטריה חי אל <code>/device</code>; <code>-- --sensor-fault</code> / <code>--low-battery</code> /
+<code>--offline-then-sync</code> לתרחישי קצה; <code>-- --config</code> להדפסת ה-downlink; ומחזור פקודות
+מלא (<code>--send-command</code> ⇒ Queued ⇒ <code>--config</code> ⇒ Sent ⇒ <code>--ack</code> ⇒ Done).
+לחלופין, עמוד <code>/simulator</code> באתר לדמו בלי טרמינל.
+</div>
+
+<h1>נספחים</h1>
+
+<h2>נספח A — מפת פינים מלאה (מרוכזת)</h2>
+<table>
+  <tr><th>רכיב</th><th class="ltr">פינים</th><th>פרוטוקול</th></tr>
+  <tr><td>ILI9341 TFT</td><td class="ltr">SCK12 MOSI11 MISO13 DC46 CS10 RST-1 BL45</td><td>SPI2 @40MHz + DMA</td></tr>
+  <tr><td>FT6336 touch</td><td class="ltr">SDA16 SCL15 INT17 RST18</td><td>I2C 0x38 @400kHz</td></tr>
+  <tr><td>VL53L1X ToF</td><td class="ltr">SDA16 SCL15 (shared)</td><td>I2C 0x29</td></tr>
+  <tr><td>ES8311 mic</td><td class="ltr">DIN6 BCLK5 LRCK7 MCLK4</td><td>I2S 16kHz</td></tr>
+  <tr><td>Speaker/amp</td><td class="ltr">DOUT8 AMP_EN1 (active-low)</td><td>I2S + FM8002E</td></tr>
+  <tr><td>ES8311 control</td><td class="ltr">SDA16 SCL15 (boot-only)</td><td>soft-I2C 0x18</td></tr>
+  <tr><td>KY-040 encoder</td><td class="ltr">CLK2 DT14 SW=-1</td><td>quadrature ISR</td></tr>
+  <tr><td>כפתור צד</td><td class="ltr">IO21 (shared w/ DHT11)</td><td>digital active-low</td></tr>
+  <tr><td>DHT11</td><td class="ltr">DATA IO21 (+pull-up)</td><td>1-wire</td></tr>
+  <tr><td>KY-018 light</td><td class="ltr">AO IO3</td><td>analog ADC1</td></tr>
+  <tr><td>BOOT btn</td><td class="ltr">IO0</td><td>digital (theme/recal)</td></tr>
+</table>
+<p class="small">פינים חשופים ב-header: <b>IO2, IO3, IO14, IO21</b> בלבד. מקור: <span class="src">config.h</span>.</p>
+
+<h2>נספח B — פקודות Serial</h2>
+<p><code>m</code> מוניטור 1Hz · <code>a</code> מיקרופון · <code>c</code> כיול חיישנים · <code>b</code> בדיקת כפתור ·
+<code>t</code>/<code>k</code> מגע/כיול מגע · <code>q</code> תור העלאה · <code>w</code> Wi-Fi/URL/secret ·
+<code>d</code> dump · <code>h</code> עזרה. (@115200)</p>
+
+<h2>נספח C — קבועים מרכזיים (<code>config.h</code>)</h2>
+<table>
+  <tr><th class="ltr">קבוע</th><th class="ltr">ערך</th><th>משמעות</th></tr>
+  <tr><td class="ltr">TELEMETRY_PERIOD_MS</td><td class="ltr">30000</td><td>פעימת-לב טלמטריה (30s)</td></tr>
+  <tr><td class="ltr">CONFIG_FETCH_MS</td><td class="ltr">60000</td><td>משיכת downlink (60s; 3s בצימוד)</td></tr>
+  <tr><td class="ltr">SESSION_CLOCK_MS</td><td class="ltr">10</td><td>טיימר סשן (esp_timer)</td></tr>
+  <tr><td class="ltr">TOF_POLL_MS</td><td class="ltr">500</td><td>קצב ToF</td></tr>
+  <tr><td class="ltr">PRESENCE_NEAR_MM</td><td class="ltr">700</td><td>סף נוכחות</td></tr>
+  <tr><td class="ltr">WDT_TIMEOUT_MS</td><td class="ltr">30000</td><td>task watchdog</td></tr>
+  <tr><td class="ltr">WIFI_RETRY_MS</td><td class="ltr">15000</td><td>reconnect ידני מסונכרן</td></tr>
+  <tr><td class="ltr">UPLOAD_QUEUE_MAX</td><td class="ltr">12</td><td>תור offline (LittleFS)</td></tr>
+  <tr><td class="ltr">I2C_HEALTH_MS</td><td class="ltr">2000</td><td>ping ToF (canary)</td></tr>
+</table>
+
+<h2>נספח D — מילון מונחים</h2>
+<p>
+<b>FLE</b> — Focus Load Estimate, אומדן עומס פוקוס (0–100). ·
+<b>ToF</b> — Time-of-Flight, חיישן מרחק לייזר. ·
+<b>ingest</b> — נתיבי ה-API שהמכשיר כותב אליהם. ·
+<b>downlink</b> — הקונפיג שהשרת מחזיר למכשיר. ·
+<b>pbuf</b> — packet buffer של מחסנית ה-רשת lwIP. ·
+<b>sprite</b> — באפר תמונה מחוץ-למסך שמורכב ואז מוטבע בבת-אחת. ·
+<b>NVS</b> — Non-Volatile Storage (הגדרות/checkpoint). ·
+<b>LittleFS</b> — מערכת קבצים על ה-flash הפנימי (תור ה-offline).
+</p>
+
+<div class="proof">
+<b>שורה תחתונה למנחה:</b> כל טענה במסמך — מפת הפינים, שיתוף IO21, שתי הליבות, אי-קריסת המסך, מסע
+הנתונים לענן — ניתנת להוכחה חיה תוך שניות, דרך Serial, מסך ה-Diag, או האתר. זה בדיוק מה שהתבקש:
+מערכת שבה <b>לכל טענה יש דרך להראות ולוודא אותה</b>.
+</div>
+
+</body>
+</html>

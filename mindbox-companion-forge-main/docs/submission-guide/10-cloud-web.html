@@ -1,0 +1,140 @@
+<!-- Chapter 10: device <-> cloud <-> web -->
+<h1>10. התקן ↔ ענן ↔ אתר</h1>
+
+<div class="lead">
+  כאן נסגר המעגל: המכשיר מדבר עם השרת דרך <b>חוזה ingest</b> פשוט (HTTP + secret משותף), השרת כותב
+  ל-Supabase, והאתר מציג הכול <b>כמעט בזמן אמת</b>. אלה נקודות ההוכחה החזקות ביותר לדמו — כי הן
+  נראות על מסך גדול, לא רק ב-Serial.
+</div>
+
+<h2>10.1 חוזה ה-ingest</h2>
+<p>
+  נקודת הכניסה <code>src/server.ts</code> מפרידה תעבורה <b>לפני</b> ה-router: כל
+  <code>/ingest/*</code> הולך ל-<code>ingest.server.ts</code>. האימות: header
+  <code>x-device-secret</code> בהשוואת זמן-קבוע מול <code>DEVICE_INGEST_SECRET</code>; חסר/שגוי ⇒
+  <b>401</b>. הכתיבות רצות ב-<b>service-role client (עוקף RLS)</b>, אך הבעלות נבדקת מחדש לכל פעולה
+  רגישה.
+</p>
+<table>
+  <tr>
+    <th class="ltr">Route</th>
+    <th>גוף</th>
+    <th>מה השרת עושה</th>
+    <th class="ltr">טבלאות</th>
+  </tr>
+  <tr>
+    <td class="ltr">POST /ingest/sessions</td>
+    <td>מערך סשנים (batch)</td>
+    <td><b>upsert idempotent</b> על <code>(device_id, id)</code>; מחליף דגימות focus/env</td>
+    <td class="ltr">sessions, focus_load_samples, env_samples</td>
+  </tr>
+  <tr>
+    <td class="ltr">POST /ingest/telemetry</td>
+    <td>אובייקט יחיד</td>
+    <td>upsert לפי <code>device_id</code> — שורה אחת = ה-snapshot האחרון</td>
+    <td class="ltr">device_status</td>
+  </tr>
+  <tr>
+    <td class="ltr">GET /ingest/config</td>
+    <td class="ltr">?deviceId=&amp;ack=</td>
+    <td>מרכיב downlink: הגדרות, לו"ז, ערכת צבעים, סטריק, שיעורי בית, ופקודה אחת</td>
+    <td class="ltr">user_settings, schedule_events, homework, device_commands</td>
+  </tr>
+  <tr>
+    <td class="ltr">POST /ingest/pairing</td>
+    <td class="ltr">{deviceId, code}</td>
+    <td>upsert קוד 6-ספרות עם תוקף 15 דק'</td>
+    <td class="ltr">device_pairing_codes</td>
+  </tr>
+  <tr>
+    <td class="ltr">POST /ingest/unpair</td>
+    <td class="ltr">{deviceId}</td>
+    <td>מנקה בעלות, מוחק פרופילים ופקודות שלא נמסרו</td>
+    <td class="ltr">devices, device_profiles, device_commands</td>
+  </tr>
+  <tr>
+    <td class="ltr">POST /ingest/homework</td>
+    <td class="ltr">{deviceId, homeworkId, pct}</td>
+    <td>מעדכן אחוז; 100% + pending ⇒ submitted</td>
+    <td class="ltr">homework_assignments</td>
+  </tr>
+</table>
+<p class="small">
+  מקור: <span class="src">src/features/device/ingest.server.ts · src/server.ts</span>. צד המכשיר:
+  <span class="src">MindBox/src/Cloud.cpp</span>.
+</p>
+
+<h2>10.2 המסכים החיים באתר (נקודות ההוכחה)</h2>
+<div class="note">
+  <b>הבהרה טכנית חשובה להצגה:</b> אין ב-אתר Supabase realtime/websockets. כל ה"חי" הוא
+  <b>polling של react-query</b> (<code>refetchInterval</code>). זה למעשה
+  <b>קל יותר להסביר ולהדגים ביושר</b> — "האתר שואל את השרת כל X שניות".
+</div>
+<table>
+  <tr>
+    <th>המסך</th>
+    <th>קצב רענון</th>
+    <th>מה זה מוכיח</th>
+  </tr>
+  <tr>
+    <td>
+      <code>/device</code> — נקודת Online, סוללה, Wi-Fi, "Room right now" (טמפ'/לחות/אור/רעש),
+      תקינות חיישנים
+    </td>
+    <td>כל 10 שניות (+ tick שעון 15s)</td>
+    <td>טלמטריה מהמכשיר ⇒ שינוי גלוי על המסך תוך ≤10s. ההוכחה החזקה ביותר.</td>
+  </tr>
+  <tr>
+    <td>סף Online/Offline</td>
+    <td class="ltr">90s (3×30s)</td>
+    <td>כיבוי המכשיר ⇒ תוך 90s הנקודה אפורה + "Last seen"</td>
+  </tr>
+  <tr>
+    <td>כרטיס שליטה מרחוק (Start/End/Ring/Message) + צ'יפים Queued→Sent→Done</td>
+    <td>כל 5 שניות</td>
+    <td>נתיב אתר→מכשיר: פקודה עוברת Queued→Sent (המכשיר משך config)→Done (אישר)</td>
+  </tr>
+  <tr>
+    <td>Dashboard "Today" (דקות פוקוס, סשנים, סטריק, מצב מכשיר)</td>
+    <td>חלק המכשיר כל 10s</td>
+    <td>סשן חדש מופיע בסיכומי היום</td>
+  </tr>
+  <tr>
+    <td><code>/session/$id</code> — גרפי FLE + דגימות סביבה</td>
+    <td>בטעינה</td>
+    <td>נתוני החיישנים דקה-בדקה שנחתו זה עתה</td>
+  </tr>
+</table>
+<p class="small">
+  מקור:
+  <span class="src"
+    >src/routes/device.tsx · src/features/device/freshness.ts · lib/queries/sessions.ts</span
+  >.
+</p>
+
+<h2>10.3 הסימולטור — גיבוי לדמו בלי חומרה</h2>
+<p>שני סימולטורים, שכל אחד מוכיח את החוזה בלי מכשיר פיזי:</p>
+<ul>
+  <li>
+    <b>CLI</b> — <code>bun run simulate</code> (דורש dev server רץ). זורע מכשיר, שולח ~30 יום סשנים
+    (idempotent), ומזרים טלמטריה כל 3s. תרחישים: <code>--offline-then-sync</code>,
+    <code>--low-battery</code>, <code>--sensor-fault</code>, <code>--no-env</code>; ופקודות:
+    <code>--config</code> (מדפיס את ה-downlink בדיוק כמו שהמכשיר רואה), <code>--send-command</code>,
+    <code>--ack</code>, <code>--homework</code>. <span class="src">scripts/simulator.ts</span>
+  </li>
+  <li>
+    <b>עמוד <code>/simulator</code> באתר</b> — GUI ללחיצה: רישום סשן בודד או דחיפת snapshot טלמטריה.
+    אידאלי לדמו בלי טרמינל על המסך.
+  </li>
+</ul>
+
+<div class="proof">
+  <b>הוכחת מקצה-לקצה במשפט אחד:</b> המכשיר (או <code>bun run simulate</code>) שולח JSON מאומת-secret
+  ל-<code>/ingest/telemetry</code> ⇒ שורה נוחתת ב-<code>device_status</code> ⇒ ה-polling של
+  react-query (כל 10s) מצייר מחדש את נקודת ה-Online, הסוללה ותנאי החדר — והכיוון ההפוך מוכח ע"י
+  הוצאת פקודה מהאתר וצפייה ב-Queued→Sent→Done. <b>לפני הדמו:</b> ודאו שה-<code
+    >DEVICE_INGEST_SECRET</code
+  >
+  ומפתחות Supabase בסביבה שאליה המכשיר מדבר <b>תואמים</b> למה שהמכשיר צרוב איתו — אחרת המכשיר יקבל
+  401.
+</div>

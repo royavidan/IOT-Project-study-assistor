@@ -1,0 +1,113 @@
+<!-- Chapter 5: why the screen doesn't crash -->
+<h1>5. למה המסך לא קורס (ולא נקרע)</h1>
+
+<div class="lead">
+  מסך שמצויר משתי ליבות במקביל נקרע (tearing) וקורס (race על ה-SPI). הפתרון שלנו הוא
+  <b>משמעת כותב-יחיד</b>: רק ליבה 1 מציירת, לתוך <b>sprite אחד מחוץ-למסך</b>, ואז blit יחיד ב-DMA.
+  בגלל זה <b>לא צריך mutex למסך בכלל</b> — אין למי להתחרות. בנוסף, ה-sprite נשמר ב-8bpp ב-RAM הפנימי
+  כדי לפנות זיכרון ל-Wi-Fi.
+</div>
+
+<h2>5.1 כותב יחיד — הסיבה שאין קריסה</h2>
+<p>
+  כל הציור עובר דרך <code>StateMachine::tick()</code>, שהוא ה<b>קורא היחיד</b> לנתיב
+  <code>Display::*</code> / <code>Panel::push()</code>, והוא רץ ב-<code>loop()</code> על
+  <b>ליבה 1 בלבד</b>. משימות הרשת והשמע (ליבה 0) <b>אף פעם לא נוגעות במסך או ב-SPI</b>. מכיוון שיש
+  כותב יחיד — אין race, ולכן <b>אין צורך ב-mutex לתצוגה</b>. (לשם השוואה: באס ה-I2C וה-NVS
+  <i>כן</i> נגישים משתי הליבות, ולכן לכל אחד יש mutex — ראו פרקים 7 ו-8.)
+  <span class="src">StateMachine.cpp L1425-1500</span>
+</p>
+
+<h2>5.2 Sprite יחיד + blit ב-DMA = אפס tearing</h2>
+<p>
+  הכול מצויר לתוך <b>sprite אחד בגודל מסך מלא</b> (<code>LGFX_Sprite spr</code>) דרך
+  <code>Panel::canvas()</code>, ואז מוטבע פעם אחת עם <code>spr.pushSprite(0,0)</code> ב-<b>DMA</b>.
+  הרכבה-מחוץ-למסך ואז blit-יחיד פירושה שהמשתמש אף פעם לא רואה פריים חלקי — אין הבהוב ואין קריעה.
+  <span class="src">Panel.cpp L49, L94-98</span>
+</p>
+<div class="diagram">
+  <svg
+    width="640"
+    height="150"
+    viewBox="0 0 640 150"
+    xmlns="http://www.w3.org/2000/svg"
+    font-family="Segoe UI, Arial"
+    font-size="11"
+  >
+    <rect
+      x="20"
+      y="45"
+      width="150"
+      height="60"
+      rx="6"
+      fill="#fff"
+      stroke="#16213e"
+      stroke-width="2"
+    />
+    <text x="95" y="70" text-anchor="middle" font-weight="bold">Draw</text>
+    <text x="95" y="88" text-anchor="middle" font-size="10">רכיבים → sprite (RAM)</text>
+    <path d="M175 75 H 235" stroke="#555" stroke-width="2" marker-end="url(#a)" />
+    <rect
+      x="240"
+      y="45"
+      width="150"
+      height="60"
+      rx="6"
+      fill="#eef1f6"
+      stroke="#16213e"
+      stroke-width="2"
+    />
+    <text x="315" y="70" text-anchor="middle" font-weight="bold">Compose</text>
+    <text x="315" y="88" text-anchor="middle" font-size="10">פריים מלא מוכן מחוץ-למסך</text>
+    <path d="M395 75 H 455" stroke="#2e9b4f" stroke-width="3" marker-end="url(#b)" />
+    <text x="425" y="66" text-anchor="middle" font-size="9" fill="#2e9b4f">DMA</text>
+    <rect x="460" y="45" width="160" height="60" rx="6" fill="#16213e" />
+    <text x="540" y="70" text-anchor="middle" font-weight="bold" fill="#fff">pushSprite()</text>
+    <text x="540" y="88" text-anchor="middle" font-size="10" fill="#fff">blit יחיד למסך</text>
+    <defs>
+      <marker id="a" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#555" />
+      </marker>
+      <marker id="b" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#2e9b4f" />
+      </marker>
+    </defs>
+  </svg>
+</div>
+
+<h2>5.3 8bpp ב-RAM הפנימי — המיטיגציה נגד OOM</h2>
+<p>
+  ה-sprite מוגדר ב-<b>8 סיביות לפיקסל (RGB332)</b> במקום 16 — זה חוצה את הבאפר מ-~150KB
+  ל-<b>~75KB</b>, ומפנה ~75KB של RAM פנימי ל-stack של ה-Wi-Fi/HTTP
+  <b>שקודם היה מרוקן את ה-heap וגורם ל-panic מסוג OOM</b>. הוא נשמר במכוון ב-RAM הפנימי
+  (<code>setPsram(false)</code>) כי sprite ב-PSRAM איטי פי ~10; רק אם ה-alloc הפנימי נכשל יש נפילה
+  ל-PSRAM. <span class="src">Panel.cpp L70-88</span>
+</p>
+<div class="note">
+  <b>Trade-off מודע:</b> 8bpp = 256 צבעים במקום 65K. ויתרנו על עומק צבע כדי לשמור על יציבות הרשת
+  ומהירות רנדור. עבור ממשק עם כמה צבעי accent — הפשרה בלתי-מורגשת, והרווח (יציבות) עצום. (עוד על זה
+  בפרק 7.)
+</div>
+
+<h2>5.4 Redraw מווסת (throttle)</h2>
+<p>
+  לא מציירים כל לולאה. דגל <code>s_uiDirty</code> + <code>renderPeriodMs()=200ms</code> מגבילים
+  רנדור כללי ל-~5 פריימים לשנייה, והטיימר הרץ מתעדכן ב-1Hz. פחות ציור = פחות עומס SPI, פחות חום,
+  פחות סיכון להרעיב את שאר המערכת. <span class="src">StateMachine.cpp L137-146</span>
+</p>
+
+<h2>5.5 Watchdog — רשת ביטחון אחרונה</h2>
+<p>
+  אם משהו בכל זאת נתקע, ה-<b>Task Watchdog</b> (<code>WDT_TIMEOUT_MS=30000</code>,
+  <code>trigger_panic=true</code>) מאתחל את הקופסה במקום להשאיר אותה תקועה. הוא מוזן מהלולאה כל
+  ~1ms, וגם ממשימת הרשת בכל pass וסביב כל קריאת HTTP. ה-30s (במקום 15s) מכוון: קריאת HTTP חוסמת
+  יכולה להימשך ~18-20s, וה-WDT חייב "לחכות אותה" כדי שבקשה אחת ביש-מזל לא תאתחל את הקופסה.
+  <span class="src">MindBox.ino L128-133 · config.h L230-234</span>
+</p>
+
+<div class="proof">
+  <b>איך מוכיחים שאין קריסה תחת עומס:</b> מריצים סשן (רנדור טיימר 1Hz) + מחוללים תעבורת רשת (פעימות
+  טלמטריה כל 30s, משיכת config) + מדברים למיקרופון (עומס I2S על ליבה 0) בו-זמנית. המסך נשאר חלק, אין
+  הבהוב, המגע מגיב. ה-self-test ב-boot מדפיס את מצב ה-render (<code>sprite-internal</code>) ואת גודל
+  ה-heap הפנוי — עדות שה-sprite אכן ב-RAM פנימי ושנשאר זיכרון לרשת.
+</div>

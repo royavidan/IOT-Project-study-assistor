@@ -1,0 +1,34 @@
+# Daily MindBox load review — the app has no built-in cron (TanStack Start on
+# Cloudflare), so GitHub Actions is the scheduler: it curls the secret-guarded
+# job route once a day and the server does the rest (assess -> AI narrative ->
+# email). Repo secrets needed:
+#   APP_BASE_URL   e.g. https://your-deployment.example.com  (no trailing slash)
+#   JOBS_SECRET    must match JOBS_SECRET in the app's server env
+# Alternatives (documented in docs/ASSUMPTIONS.md): cron-job.org hitting the
+# same URL, or Supabase pg_cron + the http extension.
+
+name: load-review
+
+on:
+  schedule:
+    # 14:00 UTC ≈ 17:00 Israel daylight time — after most classes, before evening study.
+    - cron: "0 14 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger /jobs/load-review
+        run: |
+          set -euo pipefail
+          if [ -z "${APP_BASE_URL:-}" ] || [ -z "${JOBS_SECRET:-}" ]; then
+            echo "APP_BASE_URL / JOBS_SECRET repo secrets are not set — skipping."
+            exit 0
+          fi
+          curl --fail-with-body -sS -X POST \
+            -H "x-jobs-secret: ${JOBS_SECRET}" \
+            "${APP_BASE_URL}/jobs/load-review"
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          JOBS_SECRET: ${{ secrets.JOBS_SECRET }}

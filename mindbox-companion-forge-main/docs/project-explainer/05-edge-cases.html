@@ -1,0 +1,82 @@
+<!-- 05: edge cases & resilience -->
+<h1><span class="num">5</span>Edge cases &amp; resilience</h1>
+<p class="lead">Real desks are messy: the Wi-Fi drops, someone trips over the USB cable, a sensor comes
+loose. MindBox is built to survive all of that — and to <b>show you</b> that it did.</p>
+
+<div class="gist">
+  <b>In one line:</b>
+  <span>Nothing is lost when things go wrong: the session keeps running, the data is saved locally, and it
+  all syncs the moment things recover — with a visible trail so you can prove it.</span>
+</div>
+
+<h2>5.1 What happens if the internet drops?</h2>
+<div class="plain">
+  <span class="tag">In plain English</span>
+  The box doesn't need the internet to do its job. If the Wi-Fi falls mid-session, <b>the timer keeps
+  counting</b> (it runs on a hardware clock, not on the network), the session data is <b>saved to the box's
+  own flash memory</b>, and the box quietly retries the connection every 15 seconds. When Wi-Fi returns, the
+  saved session <b>uploads automatically</b> — nothing is lost.
+</div>
+<div class="cards">
+  <div class="card"><h4>During the outage</h4><p>Session runs normally on screen. Finished sessions queue up in on-device storage. The box retries Wi-Fi every 15s.</p></div>
+  <div class="card"><h4>When it comes back</h4><p>Queued sessions upload oldest-first. If the clock hadn't synced yet, the times are corrected from internet time (NTP).</p></div>
+  <div class="card"><h4>No duplicates</h4><p>Each session has a unique id, so re-sending after a flaky connection never creates a double.</p></div>
+</div>
+<div class="tryit">
+  <span class="tag">What to look for</span>
+  Kill the hotspot mid-session → the screen &amp; timer keep going. Type Serial <code>q</code> → the session
+  shows as <b>queued</b>. Turn Wi-Fi back on → within a minute it appears on the website with the correct
+  times. The <code>/device</code> online dot goes grey after ~90s of silence, then green again on reconnect.
+</div>
+
+<h2>5.2 The full resilience table</h2>
+<table>
+  <tr><th>When this goes wrong…</th><th>What the box does</th><th>What to look for</th></tr>
+  <tr>
+    <td><b>Wi-Fi / internet drops</b></td>
+    <td>Timer keeps running (hardware clock); sessions buffer to flash; retries every 15s; auto-syncs on return.</td>
+    <td>Screen keeps counting; Serial <code>q</code> = queued; appears online after reconnect.</td>
+  </tr>
+  <tr>
+    <td><b>Power cut mid-session</b></td>
+    <td>A checkpoint is saved to non-volatile memory on every start/pause/resume.</td>
+    <td>On reboot: the reset reason + a <b>"Resume session?"</b> prompt.</td>
+  </tr>
+  <tr>
+    <td><b>A sensor fails / unplugs</b></td>
+    <td>Keeps the last good value; clamps out impossible readings; a real fault flips to an ERROR state.</td>
+    <td>Red <b>Fault</b> row on <code>/device</code>; the status badge turns "danger".</td>
+  </tr>
+  <tr>
+    <td><b>Sensor bus locks up (I2C)</b></td>
+    <td>The presence sensor is a "canary" — pinged every 2s; if the bus jams, the box auto-recovers it (pulses the clock line); if it can't, it shows ERROR.</td>
+    <td>Recovers silently; ERROR screen only if truly stuck.</td>
+  </tr>
+  <tr>
+    <td><b>Weak USB supply (brownout)</b></td>
+    <td>The Wi-Fi power spike can sag a weak 5V rail. We cap the radio's power to soften it; the honest real fix is a stronger supply.</td>
+    <td>Boot screen shows reset reason <b>"brownout"</b> — so a power sag is never mistaken for a code crash.</td>
+  </tr>
+  <tr>
+    <td><b>Clock not set yet (offline boot)</b></td>
+    <td>Offline sessions are stamped with a placeholder time, then corrected from internet time once online.</td>
+    <td>Times look right on the website after the first sync.</td>
+  </tr>
+  <tr>
+    <td><b>Unauthorized data / wrong secret</b></td>
+    <td>Every upload must carry the shared secret header; anything else is refused.</td>
+    <td>A request without the secret returns <b>401</b>; with it, the real data.</td>
+  </tr>
+  <tr>
+    <td><b>Slow / half-open server call</b></td>
+    <td>Network work runs on the second core with a watchdog; a stalled call can't freeze the UI or the timer.</td>
+    <td>Screen stays smooth even while the box struggles to reach the server.</td>
+  </tr>
+</table>
+
+<div class="key">
+  <span class="tag">The design principle</span>
+  Every failure has a <b>graceful fallback</b> and a <b>visible signal</b>. The box never silently loses
+  data, and it always tells you (on screen or on the site) what went wrong — which is exactly what you want
+  to be able to demonstrate.
+</div>

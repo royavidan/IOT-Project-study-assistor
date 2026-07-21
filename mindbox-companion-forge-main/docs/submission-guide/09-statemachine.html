@@ -1,0 +1,127 @@
+<!-- Chapter 9: state machine & data flow -->
+<h1>9. מכונת המצבים וזרימת הנתונים</h1>
+
+<div class="lead">
+  המכשיר בנוי כ<b>מכונת מצבים (FSM)</b> של 16 מצבים. הלב הוא מחזור חיי הסשן; סביבו מצבים לצימוד,
+  שחזור, אג'נדה, שיעורי בית, שגיאה ודיאגנוסטיקה. כל <code>tick</code> קורא קלט → מריץ את ה-FSM →
+  מצייר → מפרסם טלמטריה.
+</div>
+
+<h2>9.1 המצבים</h2>
+<p>
+  16 המצבים (<code>types.h</code>):
+  <code class="ltr"
+    >ST_BOOTING, ST_IDLE, ST_RUNNING, ST_PAUSED, ST_COMPLETE, ST_LOGGING, ST_ERROR, ST_PAIRING,
+    ST_DIAG, ST_RESUME, ST_CYCLE_OFFER, ST_WIFI_SETUP, ST_AGENDA, ST_AUTOSTART, ST_MESSAGE,
+    ST_HOMEWORK</code
+  >. הדיספאצ'ר הוא ה-switch הגדול ב-<code>StateMachine::tick()</code>.
+</p>
+<div class="diagram">
+  <svg
+    width="660"
+    height="240"
+    viewBox="0 0 660 240"
+    xmlns="http://www.w3.org/2000/svg"
+    font-family="Segoe UI, Arial"
+    font-size="10.5"
+  >
+    <rect x="20" y="100" width="80" height="34" rx="6" fill="#eef1f6" stroke="#16213e" />
+    <text x="60" y="121" text-anchor="middle">BOOTING</text>
+    <rect x="140" y="100" width="80" height="34" rx="6" fill="#fff" stroke="#16213e" />
+    <text x="180" y="121" text-anchor="middle">IDLE</text>
+    <rect x="270" y="100" width="90" height="34" rx="6" fill="#e5352b" opacity="0.85" />
+    <text x="315" y="121" text-anchor="middle" fill="#fff">RUNNING</text>
+    <rect x="270" y="45" width="90" height="34" rx="6" fill="#fff" stroke="#16213e" />
+    <text x="315" y="66" text-anchor="middle">PAUSED</text>
+    <rect x="410" y="100" width="90" height="34" rx="6" fill="#0f3460" opacity="0.85" />
+    <text x="455" y="121" text-anchor="middle" fill="#fff">COMPLETE</text>
+    <rect x="540" y="100" width="100" height="34" rx="6" fill="#eaf7ef" stroke="#2e9b4f" />
+    <text x="590" y="121" text-anchor="middle">HOMEWORK</text>
+    <rect x="140" y="170" width="80" height="34" rx="6" fill="#fff8e6" stroke="#f0a000" />
+    <text x="180" y="191" text-anchor="middle">RESUME</text>
+    <rect x="410" y="170" width="90" height="34" rx="6" fill="#fdeceb" stroke="#e5352b" />
+    <text x="455" y="191" text-anchor="middle">ERROR</text>
+
+    <path d="M100 117 H 138" stroke="#555" stroke-width="2" marker-end="url(#s)" />
+    <path d="M220 117 H 268" stroke="#e5352b" stroke-width="2" marker-end="url(#s2)" />
+    <text x="244" y="110" text-anchor="middle" font-size="9" fill="#e5352b">start</text>
+    <path d="M315 100 V 81" stroke="#555" stroke-width="2" marker-end="url(#s)" />
+    <path d="M330 81 V 100" stroke="#555" stroke-width="2" marker-end="url(#s)" />
+    <text x="360" y="92" text-anchor="middle" font-size="9">pause/resume</text>
+    <path d="M360 117 H 408" stroke="#555" stroke-width="2" marker-end="url(#s)" />
+    <text x="384" y="110" text-anchor="middle" font-size="9">done</text>
+    <path d="M500 117 H 538" stroke="#2e9b4f" stroke-width="2" marker-end="url(#s3)" />
+    <path
+      d="M455 100 V 55 H 230"
+      stroke="#555"
+      stroke-width="1.5"
+      stroke-dasharray="4 3"
+      marker-end="url(#s)"
+    />
+    <text x="330" y="48" text-anchor="middle" font-size="9" fill="#777">→ IDLE</text>
+    <path
+      d="M100 125 Q 120 190 138 187"
+      stroke="#f0a000"
+      stroke-width="1.5"
+      stroke-dasharray="4 3"
+      marker-end="url(#s4)"
+    />
+    <text x="95" y="165" text-anchor="middle" font-size="9" fill="#c07f00">checkpoint</text>
+    <defs>
+      <marker id="s" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#555" />
+      </marker>
+      <marker id="s2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#e5352b" />
+      </marker>
+      <marker id="s3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#2e9b4f" />
+      </marker>
+      <marker id="s4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#f0a000" />
+      </marker>
+    </defs>
+  </svg>
+</div>
+
+<h2>9.2 מחזור חיי סשן</h2>
+<p>
+  <b>Boot:</b> טעינת <code>DeviceConfig</code> מ-NVS; אם קיים checkpoint ⇒ <code>ST_RESUME</code>,
+  אחרת ⇒ <code>ST_IDLE</code> (offline-first: תמיד עולה לתפריט שמיש). <b>Start:</b>
+  <code>startSessionMode(MODE_WORK)</code> ⇒ <code>Session::start()</code> חומש את הטיימר של 10ms,
+  שומר checkpoint, מנגן צליל, ונכנס ל-<code>ST_RUNNING</code>. <b>Running:</b> מעקב הפרעות סביבתיות,
+  coaching מסתגל, טיפול בנוכחות/היעדרות (עם auto-pause אופציונלי), ורישום דגימות. בסיום ⇒
+  <code>onTimerComplete()</code> ⇒ שמירה + לוגיקת מחזור פומודורו ⇒ <code>ST_COMPLETE</code> ⇒
+  <code>ST_IDLE</code> או <code>ST_HOMEWORK</code>.
+  <span class="src">StateMachine.cpp L355-372, L545-576</span>
+</p>
+
+<h2>9.3 מה נאסף ונשלח</h2>
+<p>
+  בתוך סשן נרשמת דגימה <code class="ltr">Sample{ t, fle, noise, tempC, lightLux }</code> כל
+  <code>SAMPLE_PERIOD_MS</code> (WORK=60s, coaching=30s, break=120s; מקס' 120 דגימות). ה-<b
+    >Focus Load Estimate (FLE)</b
+  >
+  הוא שקלול של התקדמות, רעש, שונות-אור ונוכחות. במקביל, snapshot חי נדחף למשימת הרשת ~1Hz ובכל
+  מעבר-מצב (<code>publishTelemetry()</code> → <code>TelemetrySnap</code>): מצב, mode, זמן נותר, FLE,
+  סוללה, JSON תקינות-חיישנים, ואופציונלית טמפ'/לחות/אור/רעש.
+  <span class="src">Session.cpp L55-69 · StateMachine.cpp L236-264 · config.h L147-149,170</span>
+</p>
+
+<h2>9.4 צימוד ופקודות מרחוק</h2>
+<p>
+  <b>צימוד:</b> <code>enterPairing()</code> מייצר קוד 6-ספרתי (<code>esp_random()%1000000</code>),
+  שולח <code>POST /ingest/pairing</code>, ומצב <code>ST_PAIRING</code> מושך config כל 3s עד
+  ש-<code>paired:true</code>. <b>Downlink:</b> <code>syncDownlink()</code> מפרסר JOSN שטוח ומחיל
+  הגדרות (ערכת צבעים, זמני פומודורו לפי <code>timingRev</code>, מצב מבחן/DND, סטריק, שיעורי בית)
+  ופקודות מרחוק (<code>CMD_START/END/RING/MESSAGE</code>). <b>Sign-out:</b>
+  <code>signOutAccount()</code> שולח <code>/ingest/unpair</code> + guard של 90s נגד
+  <code>paired:true</code> ישן שבדרך.
+  <span class="src">StateMachine.cpp L301-334, L657-696 · Cloud.cpp L538-663</span>
+</p>
+
+<div class="proof">
+  <b>איך מוכיחים את זרימת הנתונים:</b> מסיימים סשן ⇒ בעמוד <code>/session/$id</code> באתר מופיעים
+  גרפי ה-FLE והרעש דקה-בדקה + ספירת ההפרעות — הנתונים שנאספו הרגע. פקודה מרחוק ("Ring") מדגימה את
+  הכיוון ההפוך (פרק 10).
+</div>

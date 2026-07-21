@@ -1,0 +1,49 @@
+<!-- 03: the focus-load number -->
+<h1><span class="num">3</span>The Focus-Load number</h1>
+<p class="lead">Behind all the sensors sits one small, honest formula that folds everything into a single
+0–100 score you can read at a glance.</p>
+
+<div class="gist">
+  <b>In one line:</b>
+  <span>The <b>Focus Load Estimate (FLE)</b> mixes how far you are into the session, how noisy the room is,
+  how much the light flickers, and whether you're at the desk — an <b>estimate</b>, not a brain reading.</span>
+</div>
+
+<div class="plain">
+  <span class="tag">In plain English</span>
+  It's like a "conditions" score — the way a weather app turns temperature, wind, and humidity into one
+  "feels like" number. <b>Low</b> = calm, easy conditions. <b>High</b> = the environment is working against you.
+</div>
+
+<h2>3.1 The formula</h2>
+<pre>FLE = round( 100 × ( 0.30·progress + 0.30·noise + 0.20·lightVariance + 0.20·presence ) )</pre>
+<p>Each input is squeezed to 0–1 first. The weights are the four ingredients' share of the 100 points:</p>
+<div class="cards">
+  <div class="card"><h4>Progress · 30</h4><p>How far into the session (elapsed ÷ target) — a gentle fatigue proxy.</p></div>
+  <div class="card"><h4>Noise · 30</h4><p>Room loudness from the mic (0 = library, 1 = loud).</p></div>
+  <div class="card"><h4>Light variance · 20</h4><p>How much the light flickers (steady = calm, jumpy = higher).</p></div>
+  <div class="card"><h4>Presence · 20</h4><p>Are you at the desk (count capped at 5, then scaled).</p></div>
+</div>
+<p class="small">Source of truth: <span class="src">focus_load.h</span> — the same formula runs on the device, the simulator, and the website (drift-guarded), so the number is identical everywhere.</p>
+
+<h2>3.2 What the numbers feel like</h2>
+<table>
+  <tr><th>Situation</th><th>FLE</th></tr>
+  <tr><td>Fresh, quiet, at the desk</td><td><b>20</b></td></tr>
+  <tr><td>Mid-session, moderate noise, present</td><td><b>52</b></td></tr>
+  <tr><td>…then you leave the desk</td><td><b>32</b> (−20)</td></tr>
+  <tr><td>Late, loud, flickering light, present</td><td><b>90</b></td></tr>
+</table>
+<p class="small">Rules of thumb: a loud room adds up to <b>+30</b>; leaving the desk removes <b>−20</b>; every 0.1 of extra noise ≈ <b>+3</b>.</p>
+
+<div class="key">
+  <span class="tag">Adaptive coaching</span>
+  When the score climbs to <b>75</b>, the box steers you toward a break (a shorter work interval),
+  rate-limited to once every 5 minutes so it never nags.
+</div>
+
+<div class="tryit">
+  <span class="tag">See it live</span>
+  Watch the number on the screen (or Serial <code>m</code>): <b>clap</b> and it jumps (noise ↑); <b>walk away</b>
+  and it drops ~20 (presence ↓) — matching the rules above.
+</div>

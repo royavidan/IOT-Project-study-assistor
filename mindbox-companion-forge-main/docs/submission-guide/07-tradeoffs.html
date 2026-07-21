@@ -1,0 +1,159 @@
+<!-- Chapter 7: trade-offs & shared resources -->
+<h1>7. Trade-offs ומשאבים משותפים</h1>
+
+<div class="lead">
+  כל פרויקט חומרה אמיתי הוא סדרת פשרות. הפרק הזה מרכז את ההחלטות שקיבלנו במודע — הבולטת שבהן היא ש<b
+    >לחצן ציר האנקודר וחיישן הטמפרטורה DHT11 חולקים פין GPIO אחד (IO21)</b
+  >
+  — ומסביר בדיוק מה חולק מה, למה זה בטוח חשמלית, ואיך התוכנה מונעת התנגשות.
+</div>
+
+<h2>7.1 השיתוף המרכזי: IO21 = כפתור האנקודר + טמפרטורה</h2>
+<p>
+  כמו שראינו בפרק 2, הלוח חושף רק 4 פינים (IO2, IO3, IO14, IO21). חיברנו חמישה חיישנים, אז
+  <b>IO21 מוקצה פעמיים</b>: קו ה-DATA של ה-DHT11 (<code>PIN_DHT11=21</code>) <b>וגם</b> לחצן ציר
+  האנקודר (<code>PIN_BUTTON=21</code>). <span class="src">config.h L117, L122</span>
+</p>
+
+<h3>מה בדיוק חולק — ומה לא</h3>
+<div class="note">
+  <b>חולק:</b> רק ה<b>פין הדיגיטלי הפיזי</b>. <b>לא</b> חולק: פסיקה (interrupt), ולא טיימר. סיבוב
+  האנקודר (CLK=IO2, DT=IO14) הוא מונחה-פסיקות על פינים <b>נפרדים לגמרי</b> — <b>אין</b> התנגשות בין
+  ה-ISR של הסיבוב לבין ה-timing של ה-1-wire של ה-DHT.
+</div>
+<div class="diagram">
+  <svg
+    width="640"
+    height="180"
+    viewBox="0 0 640 180"
+    xmlns="http://www.w3.org/2000/svg"
+    font-family="Segoe UI, Arial"
+    font-size="11"
+  >
+    <!-- rotation pins -->
+    <rect x="20" y="20" width="180" height="46" rx="6" fill="#eef1f6" stroke="#0f3460" />
+    <text x="110" y="40" text-anchor="middle" font-weight="bold">סיבוב אנקודר</text>
+    <text x="110" y="57" text-anchor="middle" font-size="10">IO2 (CLK) · IO14 (DT) — ISR נפרד</text>
+    <!-- IO21 shared -->
+    <rect
+      x="230"
+      y="70"
+      width="180"
+      height="90"
+      rx="8"
+      fill="#fdeceb"
+      stroke="#e5352b"
+      stroke-width="2"
+    />
+    <text x="320" y="92" text-anchor="middle" font-weight="bold" fill="#8b1e16">IO21 (משותף)</text>
+    <text x="320" y="112" text-anchor="middle" font-size="10">DHT11 DATA (bit-bang)</text>
+    <text x="320" y="128" text-anchor="middle" font-size="10">+</text>
+    <text x="320" y="144" text-anchor="middle" font-size="10">כפתור ציר (polled, active-low)</text>
+    <!-- pullup -->
+    <rect x="450" y="70" width="170" height="90" rx="8" fill="#eaf7ef" stroke="#2e9b4f" />
+    <text x="535" y="96" text-anchor="middle" font-weight="bold" fill="#2e6b3f">
+      Pull-up 4.7k–10k
+    </text>
+    <text x="535" y="116" text-anchor="middle" font-size="10">מחזיק את הקו HIGH במנוחה</text>
+    <text x="535" y="134" text-anchor="middle" font-size="10">= מה שהכפתור active-low</text>
+    <text x="535" y="149" text-anchor="middle" font-size="10">צריך ממילא</text>
+    <path d="M410 115 H 448" stroke="#2e9b4f" stroke-width="2" marker-end="url(#p)" />
+    <defs>
+      <marker id="p" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#2e9b4f" />
+      </marker>
+    </defs>
+  </svg>
+</div>
+
+<h3>למה זה בטוח חשמלית</h3>
+<p>
+  ה-DHT11 דורש <b>pull-up של 4.7k–10k ל-3V3</b> על קו ה-DATA. ה-pull-up הזה מחזיק את IO21
+  <b>גבוה במנוחה</b> — וזה <b>בדיוק</b> מה שכפתור active-low ב-<code>INPUT_PULLUP</code> צריך. שני
+  השימושים "מסכימים" על מצב-המנוחה של הקו, אז הם דרים בכפיפה אחת בלי רכיב נוסף.
+  <span class="src">config.h L117 · Inputs.cpp L58-59</span>
+</p>
+
+<h3>למה אין התנגשות בתוכנה</h3>
+<p>
+  לחצן הציר <b>לא</b> נקרא דרך ספריית האנקודר (<code>PIN_ENC_SW=-1</code>) — הפונקציה שלה עושה
+  busy-wait של ~330ms ותוקעת את הלולאה. במקום זה הוא <b>נדגם תוכנתית</b> ב-<code
+    >pollSideButton</code
+  >
+  עם <code>digitalRead()</code>, וה-DHT11 נקרא ב-<b>bit-bang</b>. שניהם polled/bit-banged, ואף פעם
+  לא רצים בו-זמנית. וכדי לסגור את הפינה האחרונה: כש<b>מחזיקים</b> את הכפתור (הקו נמשך LOW), קריאת
+  DHT הייתה נכשלת <i>וגם</i> מבלבלת את החיישן — אז הקוד פשוט <b>מדלג</b> על הקריאה ושומר את הערך
+  האחרון:
+</p>
+<pre>
+// Sensors.cpp — refreshDht()
+// IO21 shared with the encoder SW; a held line would fail the DHT read.
+if (digitalRead(PIN_DHT11) == LOW) return s_tempOk;   // keep last value</pre
+>
+<p>
+  ה-tick הרקעי (כל 2s) אף פעם לא חוסם ולא עושה retry; רק הנתיב הא-סינכרוני לפי-דרישה עושה retry עם
+  השהיית 60ms. כך <b>קצב דגימת הכפתור לעולם לא נפגע מקריאת DHT</b>.
+  <span class="src">Sensors.cpp L54-62</span>
+</p>
+<div class="note">
+  <b>נקודה יפה להצגה:</b> בקושחה ה<b>קלאסית</b> (הלוח הישן) האנקודר והטמפרטורה <b>לא</b> חולקים פין
+  — שם CLK=18/DT=19/SW=23 וה-DHT על 26, כולם נפרדים. השיתוף הוא
+  <b>תוצאה ייחודית של לוח ה-S3</b> שחושף רק 4 פינים. זה ממחיש שהפשרה נבעה מאילוץ חומרתי אמיתי, לא
+  מבחירה שרירותית. <span class="src">MindBox - hardware/MindBox/config.h L22-24,35</span>
+</div>
+
+<h2>7.2 באס I2C יחיד: מגע + ToF (+ קודק) על master אחד</h2>
+<p>
+  FT6336 (0x38), VL53L1X (0x29) — ובזמן boot גם ES8311 (0x18) — כולם על
+  <b>Arduino <code>Wire</code> יחיד</b> (SDA=16, SCL=15). הם <b>מסתדרים בתור</b> (serialize) כי
+  שניהם נקראים רק מלולאת ליבה 1 — אין master שני ואין החלפת-פדים. <b>למה זה חשוב:</b> הגישה הקודמת
+  (שני masters עם pad-swap) <b>הרגה את המגע</b>. הקודק נכתב רק ב-boot ב-soft-I2C לפני שהמגע תופס את
+  הבאס, ואז משוחרר; בזמן ריצה השמע הוא I2S בלבד.
+  <span class="src">config.h L31, L76-92 · Sensors.cpp L7-9</span>
+</p>
+
+<h2>7.3 פשרות נוספות שקיבלנו במודע</h2>
+<table>
+  <tr>
+    <th>הפשרה</th>
+    <th>ויתרנו על</th>
+    <th>קיבלנו</th>
+  </tr>
+  <tr>
+    <td>Sprite ב-<b>8bpp</b> (RGB332)</td>
+    <td>עומק צבע (256 במקום 65K)</td>
+    <td>~75KB RAM פנוי ל-Wi-Fi — יציבות מול קריסות OOM (פרק 5)</td>
+  </tr>
+  <tr>
+    <td>Sprite ב-<b>RAM פנימי</b> ולא PSRAM</td>
+    <td>קצת מה-RAM הפנימי היקר</td>
+    <td>רנדור מהיר פי ~10 (PSRAM sprite איטי)</td>
+  </tr>
+  <tr>
+    <td><b>TX power</b> מוגבל ל-8.5dBm</td>
+    <td>מעט טווח Wi-Fi</td>
+    <td>ריכוך קפיצת הזרם ב-association — פחות brownout על ספק חלש (פרק 8)</td>
+  </tr>
+  <tr>
+    <td><b>Modem-sleep כבוי</b></td>
+    <td>מעט זרם ממוצע גבוה יותר</td>
+    <td>קישור יציב; HTTP תקופתי לא נתקע ולא מפיל WDT</td>
+  </tr>
+  <tr>
+    <td><b>HTTP רגיל</b> (<code>CLOUD_USE_TLS=0</code>)</td>
+    <td>הצפנת TLS</td>
+    <td>build קל יותר, פחות זיכרון/CPU; האימות נשען על <code>x-device-secret</code></td>
+  </tr>
+  <tr>
+    <td>מגע = <b>קליק, לא בורר-מיקום</b></td>
+    <td>נגיעה מדויקת בשורה ספציפית</td>
+    <td>אמינות — כיול לא-מדויק כבר לא נוחת על השורה הלא-נכונה (פרק 3)</td>
+  </tr>
+</table>
+
+<div class="proof">
+  <b>איך מוכיחים את שיתוף IO21 חי:</b> (א) מסובבים את האנקודר — הסמן זז (סיבוב על IO2/IO14). (ב)
+  לוחצים על ציר האנקודר — בחירה/חזרה (הכפתור על IO21). (ג) נושפים על ה-DHT11 — הטמפ' עולה (DHT על
+  IO21). כל השלושה עובדים <b>מאותו רכיב פיזי</b> בלי להתנגש. Serial <code>b</code> (button live
+  test) מראה את מצב הכפתור הגולמי; Serial <code>m</code> מראה את הטמפ' — שניהם על IO21.
+</div>

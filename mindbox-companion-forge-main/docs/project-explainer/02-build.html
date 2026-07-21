@@ -1,0 +1,62 @@
+<!-- 02: how it's built (hardware + firmware) -->
+<h1><span class="num">2</span>How it's built</h1>
+<p class="lead">A dual-core ESP32-S3 touchscreen board with a handful of everyday sensors — plus a few
+smart software decisions that keep it fast and reliable.</p>
+
+<div class="gist">
+  <b>In one line:</b>
+  <span>Sensors on a 4-pin-only board (so two of them <b>share a pin</b>), driven by <b>two processor
+  cores</b> — one keeps the screen smooth, the other handles the slow internet in the background.</span>
+</div>
+
+<h2>2.1 The sensors</h2>
+<table>
+  <tr><th>Part</th><th>What it's for</th><th>Talks over</th></tr>
+  <tr><td>ILI9341 touchscreen</td><td>timer, status, menus (tap &amp; swipe)</td><td>SPI</td></tr>
+  <tr><td>FT6336 touch</td><td>reads your finger</td><td>I2C</td></tr>
+  <tr><td>VL53L1X ToF</td><td>are you at the desk? (laser distance)</td><td>I2C</td></tr>
+  <tr><td>ES8311 mic</td><td>room noise level</td><td>I2S</td></tr>
+  <tr><td>Speaker + amp</td><td>chimes &amp; "ring my device"</td><td>I2S</td></tr>
+  <tr><td>KY-040 encoder</td><td>set duration (turn) + button (press)</td><td>digital</td></tr>
+  <tr><td>DHT11</td><td>temperature &amp; humidity</td><td>1-wire</td></tr>
+  <tr><td>KY-018 light</td><td>brightness → auto-dims the screen</td><td>analog</td></tr>
+</table>
+<p class="small"><b>On:</b> <span class="pill on">touch</span><span class="pill on">presence</span><span class="pill on">mic</span><span class="pill on">speaker</span><span class="pill on">light</span><span class="pill on">temp</span><span class="pill on">Wi-Fi</span> &nbsp;
+<b>Replaced by the screen + speaker:</b> <span class="pill off">LED ring</span><span class="pill off">vibration</span><span class="pill off">physical toggle</span></p>
+
+<h2>2.2 The clever bit: two sensors on one pin</h2>
+<p>The board breaks out only <b>four</b> spare pins, so <b>IO21 does double duty</b>: it's both the
+encoder's push-button <i>and</i> the DHT11 temperature sensor's data line.</p>
+<div class="key">
+  <span class="tag">Key idea</span>
+  The button and the temperature sensor <b>share one pin</b> — safe because the DHT11's pull-up holds the
+  line "high" (just what the button needs), and the firmware simply <b>skips a temperature read while the
+  button is pressed</b>. The knob's <i>rotation</i> is on different pins, so it never clashes.
+  <span class="src">config.h:117, config.h:122</span>
+</div>
+
+<h2>2.3 Two cores keep it smooth</h2>
+<div class="plain">
+  <span class="tag">In plain English</span>
+  One worker (<b>Core 1</b>) keeps the screen, touch, and sensors responsive. A second worker
+  (<b>Core 0</b>) handles slow Wi-Fi and audio in the background. A separate <b>hardware timer</b> counts
+  the session down — so even a slow 18-second internet call never freezes the screen or loses a second.
+</div>
+
+<h2>2.4 Why the screen never freezes</h2>
+<p>Only Core 1 draws — into one off-screen image that's pushed to the display in a single fast copy. Because
+there's a single writer, there's <b>no tearing and no need for locks</b>. The image is kept small (8-bit
+colour) to leave memory free for Wi-Fi.</p>
+
+<h2>2.5 The session is a state machine</h2>
+<p>The box moves through clear states — the human flow is:</p>
+<pre>BOOTING → IDLE ⇄ RUNNING ⇄ PAUSED → COMPLETE → (HOMEWORK) → IDLE
+                   ↑                                     ↓
+                RESUME  ←— (power cut, restored)     ERROR (hardware fault)</pre>
+
+<div class="tryit">
+  <span class="tag">See it live</span>
+  Turn the knob (menu moves), press it (selects), breathe on the sensor (temperature rises) — three things
+  through one shared pin, no conflict. And drop the Wi-Fi mid-session: the screen and timer keep going without
+  a stutter (that's Core 0 taking the hit, not Core 1).
+</div>

@@ -1,0 +1,193 @@
+<!-- Chapter 2: board, pin map, buses, capability flags, conflicts -->
+<h1>2. החומרה: הלוח, מפת הפינים והבאסים</h1>
+
+<h2>2.1 הלוח</h2>
+<p>
+  <b>LCDWIKI ES3C28P/ES3N28P</b> — לוח ESP32-S3 עם מסך 2.8" מובנה: ILI9341 בגודל 240×320 על SPI, מגע
+  קיבולי <b>FT6336</b> על I2C, קודק שמע <b>ES8311</b> (מיקרופון MEMS דיגיטלי + DAC לרמקול) ומגבר
+  <b>FM8002E</b>. הגדרות Arduino: ESP32S3 Dev Module, USB CDC On Boot=Enabled, Flash 16MB, Partition
+  "Huge APP (3MB)", <b>PSRAM="OPI PSRAM"</b>. רוב ה-GPIO תפוסים ע"י המסך/שמע/SD — הלוח חושף לחיווט
+  חיצוני רק ארבעה פינים: <code>IO2, IO3, IO14, IO21</code>, ולכן כל תכנון החיישנים נבנה סביב האילוץ
+  הזה (ראו 2.4).
+</p>
+
+<h2>2.2 מפת פינים מלאה (המקור: <code>src/config.h</code>)</h2>
+<table>
+  <tr>
+    <th class="ltr">Pin</th>
+    <th>תפקיד</th>
+    <th>באס/סוג</th>
+    <th>הערות</th>
+  </tr>
+  <tr>
+    <td class="ltr">IO12 / IO11 / IO13</td>
+    <td>מסך SCLK / MOSI / MISO</td>
+    <td class="ltr">SPI2, 40MHz write</td>
+    <td>DMA אוטומטי; דחיפת פריים מלא ~30ms</td>
+  </tr>
+  <tr>
+    <td class="ltr">IO10 / IO46</td>
+    <td>מסך CS / DC</td>
+    <td class="ltr">SPI2</td>
+    <td>RST קשור ל-EN של הלוח</td>
+  </tr>
+  <tr>
+    <td class="ltr">IO45</td>
+    <td>תאורת מסך אחורית</td>
+    <td class="ltr">PWM (Light_PWM, 12kHz, ch 7)</td>
+    <td>0–100% ממופה ל-PWM 10–255 — לעולם לא כבוי לגמרי</td>
+  </tr>
+  <tr>
+    <td class="ltr">IO16 / IO15</td>
+    <td>SDA / SCL</td>
+    <td class="ltr">I2C (Wire, 400kHz)</td>
+    <td>
+      <b>באס משותף</b>: מגע FT6336 (0x38) + ToF VL53L1X (0x29) + קודק ES8311 (0x18, soft-I2C בזמן
+      boot בלבד)
+    </td>
+  </tr>
+  <tr>
+    <td class="ltr">IO17 / IO18</td>
+    <td>מגע INT / RST</td>
+    <td class="ltr">GPIO</td>
+    <td>RST מקבל פולס ב-<code>Panel::begin</code></td>
+  </tr>
+  <tr>
+    <td class="ltr">IO4 / IO5 / IO7</td>
+    <td>שמע MCLK / BCLK / LRCK</td>
+    <td class="ltr">I2S_NUM_0, master</td>
+    <td>16kHz, 16-bit mono, full-duplex</td>
+  </tr>
+  <tr>
+    <td class="ltr">IO8 / IO6</td>
+    <td>שמע DOUT (רמקול) / DIN (מיקרופון)</td>
+    <td class="ltr">I2S</td>
+    <td>TX+RX יחד כדי ש-MCLK ימשיך להזין את ה-ADC</td>
+  </tr>
+  <tr>
+    <td class="ltr">IO1</td>
+    <td>הפעלת מגבר (AMP_EN)</td>
+    <td class="ltr">GPIO, active-low</td>
+    <td>המגבר נדלק רק בזמן צליל</td>
+  </tr>
+  <tr>
+    <td class="ltr">IO21</td>
+    <td>DHT11 DATA <b>וגם</b> כפתור צד</td>
+    <td class="ltr">1-wire + GPIO</td>
+    <td><b>פין כפול-שימוש</b> — ראו 2.4; חובה pull-up ‏4.7k–10k ל-3V3</td>
+  </tr>
+  <tr>
+    <td class="ltr">IO3</td>
+    <td>חיישן אור KY-018 AO</td>
+    <td class="ltr">ADC1, 12-bit</td>
+    <td>ערך גולמי הפוך (עולה בחושך) — מנורמל בקוד</td>
+  </tr>
+  <tr>
+    <td class="ltr">IO2 / IO14</td>
+    <td>אנקודר סיבובי CLK / DT</td>
+    <td class="ltr">GPIO</td>
+    <td>KY-040; לחצן הציר מחווט ל-IO21 (נתיב הכפתור)</td>
+  </tr>
+  <tr>
+    <td class="ltr">IO0</td>
+    <td>כפתור BOOT</td>
+    <td class="ltr">GPIO</td>
+    <td>החלפת ערכת נושא / כיול מגע מחדש</td>
+  </tr>
+</table>
+
+<p class="small">
+  פינים רשומים אך לא פעילים (placeholders): <code>PIN_HAPTIC 48</code> (=SD_D2 — מנוע רטט הוסר,
+  <code>HAS_HAPTIC 0</code>), <code>PIN_LED_RING 39</code> (=SD_D0),
+  <code>PIN_BATTERY_ADC 6</code> (=I2S_DIN; סוללה אמיתית = IO9), <code>PIN_MIC 2</code> (מיקרופון
+  אנלוגי ישן — הוצא משימוש לטובת ה-I2S).
+</p>
+
+<h2>2.3 טבלת יכולות — מה מחווט ופעיל היום (<code>config.h:19–38</code>)</h2>
+<table>
+  <tr>
+    <th class="ltr">Flag</th>
+    <th>ערך</th>
+    <th>משמעות</th>
+  </tr>
+  <tr>
+    <td class="ltr">USE_TOUCH</td>
+    <td>1</td>
+    <td>ממשק מגע FT6336 מלא (כולל כיול 4 פינות שנשמר ב-NVS)</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_I2S_MIC</td>
+    <td><b>1</b></td>
+    <td>מיקרופון MEMS דיגיטלי דרך ES8311 — המיקרופון היחיד בלוח</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_SPEAKER</td>
+    <td><b>1</b></td>
+    <td>רמקול דרך ES8311 DAC + מגבר FM8002E</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_PRESENCE</td>
+    <td><b>1</b></td>
+    <td>חיישן מרחק VL53L1X (זיהוי נוכחות מול המכשיר)</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_LIGHT</td>
+    <td>1</td>
+    <td>פוטורזיסטור KY-018 (לוקס + תנודתיות תאורה)</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_TEMP</td>
+    <td>1</td>
+    <td>DHT11 — טמפרטורה + לחות</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_ENCODER</td>
+    <td>1</td>
+    <td>אנקודר סיבובי KY-040</td>
+  </tr>
+  <tr>
+    <td class="ltr">ENABLE_WIFI / ENABLE_CLOUD</td>
+    <td>1 / 1</td>
+    <td>WiFi + NTP + סנכרון ענן מלא</td>
+  </tr>
+  <tr>
+    <td class="ltr">HAS_HAPTIC / HAS_LED_RING / HAS_BATTERY / HAS_MIC</td>
+    <td>0</td>
+    <td>רטט הוסר; טבעת LED לא מחווטת; סוללה stub; מיקרופון אנלוגי הוצא משימוש</td>
+  </tr>
+</table>
+
+<h2>2.4 שלושת אילוצי החיווט המרכזיים (ולמה הם החלטות הנדסיות)</h2>
+
+<h3>א. באס I2C אחד, שלושה התקנים, master אחד</h3>
+<p>
+  המגע (0x38), ה-ToF (0x29) והקודק (0x18) חולקים את <code>IO16/IO15</code>. ניסיון מוקדם להריץ שני
+  I2C masters (LovyanGFX פנימי + Wire) גרם לקריסת המגע; הפתרון הסופי:
+  <b>דרייבר מגע custom שקורא FT6336 ישירות דרך Wire</b> (רגיסטרים 0x02–0x06), כך שכל ההתקנים על
+  master יחיד. הקודק מתוכנת פעם אחת ב-boot דרך soft-I2C (bit-bang ~125kHz) <b>לפני</b> ש-LovyanGFX
+  תופס את הפינים, ואז משוחרר. בנוסף קיים <b>I2C watchdog</b>: בדיקת ACK ל-ToF כל 2 שניות; שני כשלים
+  רצופים מפעילים ריקברי (9 פולסים + STOP + re-init).
+</p>
+
+<h3>ב. IO21 — פין אחד, שני תפקידים</h3>
+<p>
+  ה-DHT11 וכפתור הצד חולקים את IO21. זה עובד כי: (1) ה-pull-up של ה-DHT מחזיק את הקו HIGH, בדיוק מה
+  שכפתור active-low צריך במנוחה; (2) הקושחה <b>מדלגת על קריאת DHT כשהכפתור לחוץ</b> (<code
+    >Sensors.cpp</code
+  >
+  — בדיקת <code>digitalRead LOW</code> לפני קריאה), כך ששני השימושים לא מתנגשים.
+</p>
+
+<h3>ג. ארבעה פינים חופשיים בלבד</h3>
+<p>
+  הלוח חושף רק את IO2/IO3/IO14/IO21 — ולכן כל חיישן חיצוני "מתחרה" על פינים: האנקודר קיבל את
+  IO2/IO14, האור את IO3, וה-DHT את IO21 (במשותף עם הכפתור). ה-ToF עבר לבאס המגע הקיים במקום לצרוך
+  זוג פינים. IO14 הוא גם ADC2 — לא שמיש כ-ADC לצד WiFi פעיל, עוד שיקול במיפוי.
+</p>
+
+<div class="note">
+  <b>אזהרת דוקומנטציה ישנה:</b> בקבצים היסטוריים בעץ יש מידע מיושן —
+  <code>docs/HARDWARE.md</code> מתאר את לוח ה-ESP32 הקלאסי (לא ה-S3), ו-<code>docs/WIRING.md</code>
+  עדיין מתעד מיקרופון אנלוגי על IO2 ו"אין קוד שמע" — שניהם הוחלפו (המיקרופון היום I2S דרך הקודק,
+  והשמע פעיל במלואו). המסמך הזה + <code>src/config.h</code> הם המקור העדכני.
+</div>

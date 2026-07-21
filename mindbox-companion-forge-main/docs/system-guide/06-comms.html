@@ -1,0 +1,219 @@
+<!-- Chapter 6: communication protocol -->
+<h1>6. פרוטוקול התקשורת מכשיר ↔ שרת</h1>
+
+<h2>6.1 עקרון התכן: המכשיר תמיד יוזם</h2>
+<p>
+  אין WebSocket ואין push — המכשיר הוא צד היוזם היחיד (polling). זה תכנון מכוון: (1) עמיד
+  ל-NAT/רשתות סטודנטים; (2) אין חיבור פתוח שנשבר (נלחמנו בקריסות lwip/pbuf עד שעברנו ל-keep-alive
+  מבוקר); (3) המכשיר מתפקד גם offline ומסנכרן כשחוזר. המחיר — שיהוי של עד דקה בפקודות מרחוק — מוצג
+  בכנות ב-UI ("commands can take up to 60 seconds").
+</p>
+
+<h2>6.2 Uplink — מה המכשיר שולח</h2>
+<h3>סשן (בסיום; JSON נבנה ב-<code>Payload.cpp</code>)</h3>
+<pre>
+[ { "deviceId", "profileId":"A", "sessionId":"&lt;uuid&gt;", "clientSeq",
+    "startedAt"/"endedAt" (ISO-8601 UTC), "targetDurationSec", "actualFocusSec",
+    "mode", "status", "breaks", "presenceInterruptions", "awayMs",
+    "env": { "noiseAvg", "noisePeak", "tempC", "lightLux" },
+    "focusLoadSamples": [ { "t", "value" }, ... ],   // עד 120 דגימות
+    "focusLoadAvg",
+    "envSamples":  [ { "t", "noise", "tempC", "lightLux" }, ... ] } ]</pre
+>
+<p class="small">
+  ‏idempotent: העלאה חוזרת של אותו sessionId מעדכנת במקום לשכפל (upsert על device_id+id).
+</p>
+
+<h3>טלמטריה (כל 30 שניות + במעברי מצב)</h3>
+<pre>
+{ "deviceId", "ts", "state": "work|break|paused|idle", "batteryPct", "wifiRssi",
+  "sensorHealth": { "tof":"ok", "mic":"ok", "light":"ok", "temp":"ok" },
+  "firmwareVersion": "0.2.0-s3",
+  "tempC": 24.5, "humidityPct": 48, "lightLux": 420, "noiseDb": 38 }   // רק כשחיישן קיים ותקין</pre
+>
+
+<h2>6.3 Downlink — ‏GET /ingest/config (כל 60 שניות)</h2>
+<p>
+  תשובת JSON שטוחה אחת עם <b>32 שדות</b> שמכסה את כל שליטת האתר במכשיר. הפירוק בקושחה נעשה בפרסר
+  ידני (ללא ספריית JSON — חיסכון בזיכרון), ולכן לרשימות יש קידוד קומפקטי משלנו:
+</p>
+<table>
+  <tr>
+    <th>קבוצה</th>
+    <th>שדות</th>
+    <th>הערות</th>
+  </tr>
+  <tr>
+    <td>הגדרות ליבה</td>
+    <td class="ltr">
+      paired, showTimer, hapticsEnabled, adaptiveCoaching, nudgesEnabled, quietStartMin/EndMin,
+      dailyGoalMin, todayFocusSec, ownerDisplayName, ownerEmail, tzOffsetMin
+    </td>
+    <td>מיושמות בכל poll בזמן צימוד</td>
+  </tr>
+  <tr>
+    <td>לו"ז</td>
+    <td class="ltr">agendaStr, weekStr</td>
+    <td>
+      ‏"start|end|kind|title;…"‎ להיום (≤12) ו-‏"day|start|end|kind|title;…"‎ לימים ‎+1..+6‎ (≤36);
+      כותרות מחוטאות ו-≤23 בתים
+    </td>
+  </tr>
+  <tr>
+    <td>סאונד (בבעלות האתר)</td>
+    <td class="ltr">soundEnabled, soundLevel, chimeMask, autoStartEnabled</td>
+    <td>נאכפים בכל poll</td>
+  </tr>
+  <tr>
+    <td>ממשק</td>
+    <td class="ltr">themeId, focusMin, breakMin, timingRev</td>
+    <td>ערכת צבעים; זמני פומודורו ב-adopt-once-per-revision (עריכה מקומית שורדת)</td>
+  </tr>
+  <tr>
+    <td>מצבים ונתונים</td>
+    <td class="ltr">examMode, nextExamDays, nextExamTitle, streakDays, weekFocusMin, hwStr</td>
+    <td>DND במבחן; סטריק וסטטיסטיקה; 3 מטלות למסך שיעורי הבית</td>
+  </tr>
+  <tr>
+    <td>פקודות מרחוק</td>
+    <td class="ltr">cmdId, cmdType, cmdArg, cmdText</td>
+    <td>פקודה אחת לכל poll — ראו 6.4</td>
+  </tr>
+</table>
+
+<h2>6.4 פרוטוקול הפקודות מרחוק — אמינות מעל polling</h2>
+<div class="diagram">
+  <svg
+    width="680"
+    height="215"
+    viewBox="0 0 680 215"
+    xmlns="http://www.w3.org/2000/svg"
+    font-family="Segoe UI, Arial"
+    font-size="11"
+  >
+    <line x1="90" y1="30" x2="90" y2="205" stroke="#888" stroke-dasharray="4 3" />
+    <line x1="340" y1="30" x2="340" y2="205" stroke="#888" stroke-dasharray="4 3" />
+    <line x1="590" y1="30" x2="590" y2="205" stroke="#888" stroke-dasharray="4 3" />
+    <text x="90" y="20" text-anchor="middle" font-weight="bold">Web /device</text>
+    <text x="340" y="20" text-anchor="middle" font-weight="bold">Server (device_commands)</text>
+    <text x="590" y="20" text-anchor="middle" font-weight="bold">MindBox</text>
+
+    <path d="M95 50 H 335" stroke="#0f6ec4" stroke-width="2" marker-end="url(#c1)" />
+    <text x="215" y="44" text-anchor="middle">sendDeviceCommand → INSERT (Queued)</text>
+
+    <path d="M585 85 H 345" stroke="#2e9b4f" stroke-width="2" marker-end="url(#c2)" />
+    <text x="465" y="79" text-anchor="middle">GET /config (poll)</text>
+    <path d="M345 110 H 585" stroke="#2e9b4f" stroke-width="2" marker-end="url(#c3)" />
+    <text x="465" y="104" text-anchor="middle">cmdId=12 … (served_at, "Sent")</text>
+
+    <path d="M585 145 H 345" stroke="#e5352b" stroke-width="2" marker-end="url(#c4)" />
+    <text x="465" y="139" text-anchor="middle">GET /config?ack=12 (מיידי)</text>
+    <path d="M345 170 H 585" stroke="#2e9b4f" stroke-width="2" marker-end="url(#c5)" />
+    <text x="465" y="164" text-anchor="middle">delivered_at ("Done") + הפקודה הבאה</text>
+
+    <path d="M335 195 H 95" stroke="#0f6ec4" stroke-width="2" marker-end="url(#c6)" />
+    <text x="215" y="189" text-anchor="middle">‏UI (רענון 5s): Queued→Sent→Done</text>
+
+    <defs>
+      <marker id="c1" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#0f6ec4" />
+      </marker>
+      <marker id="c2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#2e9b4f" />
+      </marker>
+      <marker id="c3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#2e9b4f" />
+      </marker>
+      <marker id="c4" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#e5352b" />
+      </marker>
+      <marker id="c5" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#2e9b4f" />
+      </marker>
+      <marker id="c6" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 z" fill="#0f6ec4" />
+      </marker>
+    </defs>
+  </svg>
+</div>
+<table>
+  <tr>
+    <th>מנגנון</th>
+    <th>ערך</th>
+    <th>מה הוא פותר</th>
+  </tr>
+  <tr>
+    <td>פקודה אחת לכל תשובה + FIFO קפדני</td>
+    <td>—</td>
+    <td>סדר ביצוע מובטח; פקודה חדשה לא עוקפת ישנה שלא נמסרה</td>
+  </tr>
+  <tr>
+    <td>Ack ב-poll הבא + re-poll מיידי</td>
+    <td class="ltr">&amp;ack=&lt;id&gt;</td>
+    <td>אישור מסירה; צרור פקודות מתנקז בקצב ~1/שנייה</td>
+  </tr>
+  <tr>
+    <td>הגשה חוזרת של פקודה ללא ack</td>
+    <td>אחרי 75 שניות</td>
+    <td>אובדן תשובה ברשת; דדופ במכשיר לפי cmdId אחרון</td>
+  </tr>
+  <tr>
+    <td>תפוגה</td>
+    <td>10 דקות</td>
+    <td>פקודה ישנה לא "תרדוף" מכשיר שחזר לרשת</td>
+  </tr>
+  <tr>
+    <td>ניקוי ב-unpair + סינון לפי בעלים</td>
+    <td>—</td>
+    <td>פקודות של בעלים קודם לעולם לא מגיעות לבעלים חדש</td>
+  </tr>
+  <tr>
+    <td>לחץ-חוזר (backpressure)</td>
+    <td>≥5 ממתינות ⇒ דחייה</td>
+    <td>מכשיר כבוי לא צובר תור אינסופי</td>
+  </tr>
+</table>
+
+<h2>6.5 קצבים, timeouts ועמידות רשת</h2>
+<table>
+  <tr>
+    <th>קבוע</th>
+    <th>ערך</th>
+    <th>הערה</th>
+  </tr>
+  <tr>
+    <td>Poll קונפיגורציה</td>
+    <td class="ltr">60s (paired) / 5s (unpaired) / 3s (pairing)</td>
+    <td>מהיר כשמחכים לצימוד</td>
+  </tr>
+  <tr>
+    <td>טלמטריה</td>
+    <td class="ltr">30s + on-transition (מרווח מינימלי 3s)</td>
+    <td>גם keep-alive לחיבור</td>
+  </tr>
+  <tr>
+    <td>HTTP timeouts</td>
+    <td class="ltr">connect 1.5s / total 3s</td>
+    <td>בקשה תקועה לא מקפיאה את המשימה</td>
+  </tr>
+  <tr>
+    <td>Backoff אחרי כשל</td>
+    <td class="ltr">30s (רשת) · 5s→5m מעריכי (תור העלאות)</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>Keep-alive</td>
+    <td class="ltr">HTTPClient יחיד, setReuse(true)</td>
+    <td>הפתרון לקריסות ‏lwip pbuf שאובחנו בפיתוח</td>
+  </tr>
+  <tr>
+    <td>NTP</td>
+    <td class="ltr">pool.ntp.org, sync כל 12h</td>
+    <td>‏UTC פנימי; ‏tzOffsetMin מהשרת לתצוגה מקומית</td>
+  </tr>
+  <tr>
+    <td>גודל תשובה מקסימלי</td>
+    <td class="ltr">HTTP_MAX_BODY 8192</td>
+    <td>מוגדל פעמיים ככל שה-downlink גדל (4096→6144→8192)</td>
+  </tr>
+</table>

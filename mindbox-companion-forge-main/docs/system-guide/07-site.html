@@ -1,0 +1,114 @@
+<!-- Chapter 7: site side, briefly -->
+<h1>7. צד האתר: איך כל נתון נקלט, נשמר ומוצג</h1>
+
+<h2>7.1 שני נתיבי דאטה, נקודת כניסה אחת</h2>
+<p>
+  <code>src/server.ts</code> הוא ה-fetch entry: בקשות <code>/ingest/*</code> (מהמכשיר) ו-<code
+    >/jobs/*</code
+  >
+  (cron) מפוצלות <b>לפני</b> ראוטר האפליקציה — מאומתות ב-shared secret וכותבות דרך service-role
+  (עוקף RLS, עם בדיקת בעלות מחדש בקוד). כל השאר עובר דרך TanStack Start: סשן משתמש, Row-Level
+  Security (כל משתמש רואה רק את השורות שלו), ו-CSRF guard על כל בקשה שאינה GET.
+</p>
+
+<h2>7.2 מפה: נתון מהמכשיר → טבלה → מסך</h2>
+<table>
+  <tr>
+    <th>נתון</th>
+    <th>טבלה</th>
+    <th>איפה מוצג</th>
+    <th>קצב רענון UI</th>
+  </tr>
+  <tr>
+    <td>מצב/סוללה/WiFi/תקינות חיישנים</td>
+    <td class="ltr">device_status</td>
+    <td>‏/device (סטטוס + StateBadge), דשבורד</td>
+    <td class="ltr">10s</td>
+  </tr>
+  <tr>
+    <td>טמפ'/לחות/אור/רעש חיים + גרסת קושחה</td>
+    <td class="ltr">device_status</td>
+    <td>‏/device — "Room right now" + FW</td>
+    <td class="ltr">10s</td>
+  </tr>
+  <tr>
+    <td>חיווי Online/Last-seen</td>
+    <td class="ltr">device_status.updated_at</td>
+    <td>‏/device — נגזר בצד לקוח (סף 90s = ‏3× פעימה)</td>
+    <td class="ltr">10s + tick 15s</td>
+  </tr>
+  <tr>
+    <td>סשן מלא</td>
+    <td class="ltr">sessions</td>
+    <td>דשבורד, היסטוריה, ‏/progress, ‏insights</td>
+    <td>לפי ניווט</td>
+  </tr>
+  <tr>
+    <td>דגימות דקה-בדקה (FLE + סביבה)</td>
+    <td class="ltr">focus_load_samples · env_samples</td>
+    <td>‏/session/$id — שני גרפי recharts (עומס+רעש; טמפ'+אור)</td>
+    <td>בכניסה לעמוד</td>
+  </tr>
+  <tr>
+    <td>קוד צימוד</td>
+    <td class="ltr">device_pairing_codes</td>
+    <td>‏/device — טופס OTP ‏6 ספרות (+deep-link ‏?code=)</td>
+    <td>—</td>
+  </tr>
+  <tr>
+    <td>עדכון שיעורי בית מהמכשיר</td>
+    <td class="ltr">homework_assignments.progress_pct</td>
+    <td>‏/assignments (קנבן)</td>
+    <td>ברענון הבא</td>
+  </tr>
+  <tr>
+    <td>פקודות מרחוק (סטטוס)</td>
+    <td class="ltr">device_commands</td>
+    <td>‏/device — ‏Remote control: ‏Queued→Sent→Done/Expired</td>
+    <td class="ltr">5s</td>
+  </tr>
+  <tr>
+    <td>צימוד/ניתוק</td>
+    <td class="ltr">devices.owner_user_id</td>
+    <td>‏/device — כרטיס "Your MindBox"</td>
+    <td class="ltr">5s</td>
+  </tr>
+</table>
+
+<h2>7.3 ומה חוזר למכשיר (מקורות ה-downlink)</h2>
+<table>
+  <tr>
+    <th>שדה downlink</th>
+    <th>מקור באתר</th>
+  </tr>
+  <tr>
+    <td class="ltr">agendaStr / weekStr / examMode</td>
+    <td>‏<code>schedule_events</code> מורחבים ל-14 יום ביום-מקומי של המשתמש (יומן + מתכנן ה-AI)</td>
+  </tr>
+  <tr>
+    <td class="ltr">streakDays / weekFocusMin / todayFocusSec</td>
+    <td>שאילתת <code>sessions</code> אחת (חלון 45 יום)</td>
+  </tr>
+  <tr>
+    <td class="ltr">hwStr</td>
+    <td>‏3 מטלות pending הקרובות מ-<code>homework_assignments</code></td>
+  </tr>
+  <tr>
+    <td class="ltr">sound/theme/timing/exam ועוד</td>
+    <td>‏<code>user_settings</code> — כרטיס "MindBox device" ב-Settings</td>
+  </tr>
+  <tr>
+    <td class="ltr">cmdId…cmdText</td>
+    <td>‏<code>device_commands</code> — כרטיס Remote control</td>
+  </tr>
+</table>
+
+<h2>7.4 סימולטור — הדגמת הצד השרתי בלי חומרה</h2>
+<p>
+  <code>scripts/simulator.ts</code> מדבר את אותו פרוטוקול HTTP בדיוק כמו הקושחה (אותם routes, אותו
+  secret) — כלי הבדיקה המרכזי של האינטגרציה וגם רשת ביטחון לדמו. הרשימה המלאה בנספח; העיקריים:
+  <code>--config</code> (מציג את ה-downlink המפוענח כפי שהמכשיר רואה),
+  <code>--send-command / --ack</code> (מדמים את מחזור הפקודות),
+  <code>--sensor-fault / --low-battery</code> (מדגימים את נתיב ההתראות),
+  <code>--no-env</code> (מוכיח תאימות-לאחור של הסכמה).
+</p>
